@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-display: var(--font-grotesk), "Space Grotesk", system-ui, sans-serif;
+
+  --color-coal: #0b0a08;
+  --color-coal-2: #100e0b;
+  --color-panel: #171410;
+  --color-panel-2: #1e1a14;
+  --color-panel-3: #26211a;
+  --color-line: #2b251b;
+  --color-line-2: #3a3226;
+  --color-cream: #f5efe3;
+  --color-sand: #a89a85;
+  --color-faint: #6e6355;
+  --color-brand: #f59e0b;
+  --color-brand-2: #fb923c;
+  --color-glow: #fbbf24;
+
+  --shadow-ticket: 0 24px 60px -24px rgb(0 0 0 / 0.6);
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-flicker: flicker 3.2s ease-in-out infinite;
+
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    92% { opacity: 1; }
+    93% { opacity: 0.6; }
+    94% { opacity: 1; }
+    97% { opacity: 0.75; }
+    98% { opacity: 1; }
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-coal);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(245 158 11 / 0.85);
+  color: #1c1206;
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3226 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3a3226;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Util */
+.font-display {
+  font-family: var(--font-display);
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.glass {
+  background: linear-gradient(160deg, rgb(30 26 20 / 0.82), rgb(16 14 11 / 0.9));
+  backdrop-filter: blur(14px);
+}
+.btn-press {
+  transition: transform 120ms ease, filter 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+.btn-press:active {
+  transform: scale(0.965);
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.24'/%3E%3C/svg%3E");
+}
+.text-glow {
+  text-shadow: 0 0 24px rgb(245 158 11 / 0.35);
+}
+
+/* Recharts dark polish */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.input-dark {
+  @apply w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-sm text-cream placeholder:text-faint outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/15 transition;
+}
