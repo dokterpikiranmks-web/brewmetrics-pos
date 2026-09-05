@@ -275,10 +275,9 @@ export default function VoidAuthModal({
               </button>
             </div>
 
-            {/* Catatan Bantuan Role */}
-            <p className="mt-3 text-center text-[10px] text-faint leading-relaxed">
-              Petunjuk Demo: Gunakan PIN Manager <strong className="text-sand">2468</strong> (Rizky) atau Owner{" "}
-              <strong className="text-sand">1234</strong> (Ayu). PIN Kasir (1111/3333) akan otomatis ditolak.
+            {/* Catatan Otorisasi Supervisor */}
+            <p className="mt-3 text-center text-[11px] text-faint leading-relaxed">
+              Masukkan PIN Supervisor (Manager atau Owner) yang terdaftar untuk mengotorisasi pembatalan pesanan.
             </p>
           </motion.div>
         </div>

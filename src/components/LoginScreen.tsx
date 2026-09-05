@@ -8,14 +8,8 @@ import {
   Coffee, Delete, Zap, Boxes, BrainCircuit, Fingerprint, Loader2,
   TrendingUp, Wifi, BadgeCheck,
 } from "lucide-react";
-import { HOME_BY_ROLE, ROLE_LABEL } from "@/lib/nav";
-import type { Role, SessionUser } from "@/lib/types";
-
-const STAFF: { name: string; role: Role; pin: string; hint: string }[] = [
-  { name: "Ayu Paramita", role: "owner", pin: "1234", hint: "1234" },
-  { name: "Rizky Ramadhan", role: "manager", pin: "2468", hint: "2468" },
-  { name: "Sinta Maharani", role: "cashier", pin: "1111", hint: "1111" },
-];
+import { HOME_BY_ROLE } from "@/lib/nav";
+import type { SessionUser } from "@/lib/types";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -286,25 +280,6 @@ export default function LoginScreen() {
             </button>
           </div>
 
-          {/* Demo access chips */}
-          <div className="rounded-2xl border border-line bg-panel/60 p-3">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-faint px-1.5 mb-2">Akses demo — ketuk untuk masuk cepat</p>
-            <div className="grid grid-cols-3 gap-2">
-              {STAFF.map((s) => (
-                <button
-                  key={s.pin}
-                  onClick={() => {
-                    setPin(s.pin);
-                    setTimeout(() => submit(s.pin), 150);
-                  }}
-                  className="btn-press rounded-xl border border-line-2/60 bg-coal px-2 py-2.5 text-left hover:border-brand/40 group"
-                >
-                  <p className="text-[11px] font-semibold text-cream truncate group-hover:text-brand transition-colors">{ROLE_LABEL[s.role]}</p>
-                  <p className="text-[10px] text-faint tabular font-display">PIN {s.hint}</p>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <p className="text-center text-[11px] text-faint mt-6">
             BrewMetrics v2.4 — build lisensi <span className="text-sand font-semibold">PERPETUAL</span>

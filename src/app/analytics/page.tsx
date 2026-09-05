@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Wallet, ReceiptText, PiggyBank, BanknoteArrowDown,
   BanknoteArrowUp, TriangleAlert, MessageCircleWarning, RefreshCcw, X, Loader2,
-  CircleDollarSign, Radio, RotateCcw, ArrowDownToLine, ArrowUpFromLine,
+  CircleDollarSign, Radio, ArrowDownToLine, ArrowUpFromLine,
   Scale, CheckCircle2, ShieldAlert, FileSpreadsheet,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -26,7 +26,6 @@ export default function AnalyticsPage() {
   const [cashOpen, setCashOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [resetting, setResetting] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
   const showToast = (msg: string) => {
@@ -65,22 +64,6 @@ export default function AnalyticsPage() {
     ];
     return `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
   }, [summary]);
-
-  const resetDemo = async () => {
-    if (!confirm("Reset seluruh data demo (transaksi, stok, kas) ke kondisi awal?")) return;
-    setResetting(true);
-    try {
-      const res = await fetch("/api/admin/reseed", { method: "POST" });
-      if (res.ok) {
-        showToast("Data demo berhasil di-reset.");
-        load();
-      } else {
-        showToast("Reset hanya bisa dilakukan oleh Owner.");
-      }
-    } finally {
-      setResetting(false);
-    }
-  };
 
   return (
     <AppShell allowedRoles={["owner", "manager"]}>
@@ -133,14 +116,6 @@ export default function AnalyticsPage() {
               title="Muat ulang"
             >
               <RefreshCcw className="size-4" />
-            </button>
-            <button
-              onClick={resetDemo}
-              disabled={resetting}
-              className="btn-press grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-panel text-faint hover:text-red-400 hover:border-red-400/30 disabled:opacity-50 shrink-0"
-              title="Reset data demo"
-            >
-              {resetting ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
             </button>
           </div>
         </div>

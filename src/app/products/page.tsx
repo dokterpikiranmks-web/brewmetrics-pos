@@ -36,10 +36,7 @@ export default function ProductsPage() {
 
   // Simulator State
   const [simPrice, setSimPrice] = useState<number>(28000);
-  const [simItems, setSimItems] = useState<{ ingId: number; qty: number }[]>([
-    { ingId: 1, qty: 18 },
-    { ingId: 2, qty: 140 },
-  ]);
+  const [simItems, setSimItems] = useState<{ ingId: number; qty: number }[]>([]);
 
   const showToast = (msg: string, kind: "ok" | "warn" = "ok") => {
     setToast({ msg, kind });
@@ -730,8 +727,9 @@ export default function ProductsPage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={() => setSimItems((prev) => [...prev, { ingId: ingredients[0]?.id ?? 1, qty: 10 }])}
-                    className="btn-press flex items-center gap-1 rounded-xl border border-line bg-coal px-3 py-1.5 text-xs font-semibold text-sand hover:text-cream"
+                    onClick={() => ingredients[0] && setSimItems((prev) => [...prev, { ingId: ingredients[0].id, qty: 10 }])}
+                    disabled={ingredients.length === 0}
+                    className="btn-press flex items-center gap-1 rounded-xl border border-line bg-coal px-3 py-1.5 text-xs font-semibold text-sand hover:text-cream disabled:opacity-40"
                   >
                     <Plus className="size-3.5" />
                     <span>Tambah Bahan</span>
@@ -739,64 +737,86 @@ export default function ProductsPage() {
                 </div>
 
                 <div className="space-y-2.5">
-                  {simItems.map((item, idx) => {
-                    const ing = ingredients.find((i) => i.id === item.ingId) ?? ingredients[0];
-                    const subCost = (item.qty || 0) * (ing?.costPerUnit || 0);
-
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-2.5 rounded-2xl border border-line bg-coal p-3"
-                      >
-                        <select
-                          value={item.ingId}
-                          onChange={(e) =>
-                            setSimItems((prev) =>
-                              prev.map((it, i) => (i === idx ? { ...it, ingId: Number(e.target.value) } : it))
-                            )
-                          }
-                          className="input-dark text-xs flex-1"
-                        >
-                          {ingredients.map((ig) => (
-                            <option key={ig.id} value={ig.id}>
-                              {ig.name} ({formatIDR(ig.costPerUnit)}/{ig.unit})
-                            </option>
-                          ))}
-                        </select>
-
-                        <div className="flex items-center gap-1.5 rounded-xl border border-line bg-panel px-3 py-1.5 w-36">
-                          <input
-                            type="number"
-                            min={0.1}
-                            step={0.1}
-                            value={item.qty}
-                            onChange={(e) =>
-                              setSimItems((prev) =>
-                                prev.map((it, i) => (i === idx ? { ...it, qty: Number(e.target.value) } : it))
-                              )
-                            }
-                            className="w-full bg-transparent text-xs font-bold tabular outline-none text-cream"
-                          />
-                          <span className="text-xs text-sand font-semibold">{ing?.unit}</span>
-                        </div>
-
-                        <div className="w-28 text-right font-display text-xs font-bold tabular text-sand">
-                          {formatIDR(subCost)}
-                        </div>
-
+                  {simItems.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-line rounded-2xl bg-coal/40 p-4">
+                      <p className="text-xs text-sand font-medium">Belum ada bahan baku di simulator.</p>
+                      <p className="text-[11px] text-faint mt-1">
+                        {ingredients.length === 0
+                          ? "Tambahkan master bahan baku terlebih dahulu di menu Inventory."
+                          : "Pilih bahan baku untuk mulai menyusun racikan dan menghitung estimasi HPP."}
+                      </p>
+                      {ingredients.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setSimItems((prev) => prev.filter((_, i) => i !== idx))}
-                          className="btn-press grid size-8 place-items-center rounded-xl text-faint hover:text-red-400 hover:bg-panel"
+                          onClick={() => setSimItems([{ ingId: ingredients[0].id, qty: 10 }])}
+                          className="btn-press mt-3 inline-flex items-center gap-1 rounded-xl bg-brand/10 border border-brand/30 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20"
                         >
-                          <Trash2 className="size-3.5" />
+                          <Plus className="size-3.5" />
+                          <span>Pilih Bahan Pertama</span>
                         </button>
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  ) : (
+                    simItems.map((item, idx) => {
+                      const ing = ingredients.find((i) => i.id === item.ingId) ?? ingredients[0];
+                      const subCost = (item.qty || 0) * (ing?.costPerUnit || 0);
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2.5 rounded-2xl border border-line bg-coal p-3"
+                        >
+                          <select
+                            value={item.ingId}
+                            onChange={(e) =>
+                              setSimItems((prev) =>
+                                prev.map((it, i) => (i === idx ? { ...it, ingId: Number(e.target.value) } : it))
+                              )
+                            }
+                            className="input-dark text-xs flex-1"
+                          >
+                            {ingredients.map((ig) => (
+                              <option key={ig.id} value={ig.id}>
+                                {ig.name} ({formatIDR(ig.costPerUnit)}/{ig.unit})
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="flex items-center gap-1.5 rounded-xl border border-line bg-panel px-3 py-1.5 w-36">
+                            <input
+                              type="number"
+                              min={0.1}
+                              step={0.1}
+                              value={item.qty}
+                              onChange={(e) =>
+                                setSimItems((prev) =>
+                                  prev.map((it, i) => (i === idx ? { ...it, qty: Number(e.target.value) } : it))
+                                )
+                              }
+                              className="w-full bg-transparent text-xs font-bold tabular outline-none text-cream"
+                            />
+                            <span className="text-xs text-sand font-semibold">{ing?.unit}</span>
+                          </div>
+
+                          <div className="w-28 text-right font-display text-xs font-bold tabular text-sand">
+                            {formatIDR(subCost)}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSimItems((prev) => prev.filter((_, i) => i !== idx))}
+                            className="btn-press grid size-8 place-items-center rounded-xl text-faint hover:text-red-400 hover:bg-panel"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
+
 
             {/* Panel Hasil Simulasi Real-Time */}
             {(() => {
