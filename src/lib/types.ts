@@ -8,6 +8,14 @@ export interface SessionUser {
   role: Role;
 }
 
+export interface StaffUserDto {
+  id: number;
+  name: string;
+  role: Role;
+  active: boolean;
+  createdAt: string;
+}
+
 export interface CatalogDto {
   categories: { id: number; name: string; icon: string }[];
   products: {
@@ -18,6 +26,7 @@ export interface CatalogDto {
     price: number;
     color: string;
     icon: string;
+    imageUrl?: string | null;
   }[];
   variants: { id: number; productId: number; name: string; priceDelta: number }[];
   modifiers: { id: number; name: string; price: number }[];
@@ -46,11 +55,26 @@ export interface OrderReceiptItem {
   modifiers: { name: string; price: number }[];
 }
 
+export interface StoreSettingDto {
+  id: number;
+  cafeName: string;
+  logoUrl: string | null;
+  address: string;
+  phone: string;
+  taxPercentage: number;
+  serviceChargePercentage: number;
+  receiptFooterMessage: string;
+  updatedAt?: string;
+}
+
 export interface OrderReceipt {
   id: number;
   orderNumber: string;
   paymentMethod: "cash" | "qris" | "debit";
   subtotal: number;
+  tax?: number;
+  serviceCharge?: number;
+  total?: number;
   tendered: number | null;
   change: number | null;
   itemCount: number;
@@ -59,6 +83,7 @@ export interface OrderReceipt {
   cashierName: string;
   createdAt: string;
   items: OrderReceiptItem[];
+  storeSettings?: StoreSettingDto | null;
 }
 
 export interface TodayOrderDto {
@@ -98,6 +123,54 @@ export interface ForecastItem {
   severity: "critical" | "warning";
 }
 
+export interface ShiftReportDto {
+  id: number;
+  cashierId: number | null;
+  cashierName: string;
+  openedAt: string;
+  closedAt: string;
+  expectedCash: number;
+  actualCash: number;
+  variance: number;
+  totalOrders: number;
+  cashOrders: number;
+  qrisTotal: number;
+  debitTotal: number;
+  note: string;
+  createdAt: string;
+}
+
+export type MenuQuadrant = "star" | "plowhorse" | "puzzle" | "dog";
+
+export interface MenuEngineeringItem {
+  id: number;
+  name: string;
+  categoryName: string;
+  imageUrl?: string | null;
+  price: number;
+  hpp: number;
+  unitMargin: number;
+  marginPct: number;
+  totalQty: number;
+  totalRevenue: number;
+  totalProfit: number;
+  quadrant: MenuQuadrant;
+}
+
+export interface MenuEngineeringSummary {
+  avgVolume: number;
+  avgMargin: number;
+  avgMarginPct: number;
+  totalMenuItems: number;
+  counts: {
+    star: number;
+    plowhorse: number;
+    puzzle: number;
+    dog: number;
+  };
+  items: MenuEngineeringItem[];
+}
+
 export interface AnalyticsSummary {
   today: {
     revenue: number;
@@ -118,5 +191,8 @@ export interface AnalyticsSummary {
   forecast: ForecastItem[];
   inventoryHealth: { ok: number; low: number; out: number; totalValue: number };
   recentOrders: TodayOrderDto[];
+  latestShiftReport?: ShiftReportDto | null;
+  recentShifts?: ShiftReportDto[];
+  menuEngineering?: MenuEngineeringSummary;
   generatedAt: string;
 }

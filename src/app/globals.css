@@ -116,3 +116,56 @@ body {
 .input-dark {
   @apply w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-sm text-cream placeholder:text-faint outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/15 transition;
 }
+
+/* ==========================================================================
+   PRINT STYLES FOR THERMAL RECEIPT (58mm / 80mm)
+   ========================================================================== */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Sembunyikan seluruh UI layar saat mencetak */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Hanya tampilkan komponen struk thermal */
+  .thermal-receipt,
+  .thermal-receipt * {
+    visibility: visible !important;
+  }
+
+  .thermal-receipt {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 72mm !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 3mm 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    z-index: 999999 !important;
+  }
+}
+
+@media screen {
+  .thermal-receipt {
+    display: none !important;
+  }
+}
+

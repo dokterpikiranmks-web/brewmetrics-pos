@@ -5,13 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Coffee, MonitorSmartphone, Boxes, ChartSpline, LogOut, Loader2, CircleUserRound,
+  Coffee, MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, LogOut, Loader2, CircleUserRound,
 } from "lucide-react";
 import { NAV_TABS, ROLE_ACCENT, ROLE_LABEL } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { formatDateID } from "@/lib/format";
 
-const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline };
+const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings };
 
 function LiveClock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -53,7 +53,23 @@ export default function AppShell({
           router.replace("/");
           return;
         }
+        // Proteksi RBAC Client-Side: Jika cashier mencoba akses halaman terlarang, paksa redirect ke /pos
+        if (
+          d.user.role === "cashier" &&
+          (pathname.startsWith("/inventory") ||
+            pathname.startsWith("/analytics") ||
+            pathname.startsWith("/settings") ||
+            pathname.startsWith("/products"))
+        ) {
+          router.replace("/pos");
+          return;
+        }
+
         if (!allowedRoles.includes(d.user.role)) {
+          if (d.user.role === "cashier") {
+            router.replace("/pos");
+            return;
+          }
           const fallback = NAV_TABS.find((t) => t.roles.includes(d.user!.role));
           router.replace(fallback?.href ?? "/");
           return;
@@ -66,9 +82,16 @@ export default function AppShell({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname]);
 
-  const tabs = useMemo(() => (user ? NAV_TABS.filter((t) => t.roles.includes(user.role)) : []), [user]);
+  // Baca state role dari sesi user saat ini: Jika role adalah 'cashier', sembunyikan tombol navigasi Inventory, Analytics, dan Settings
+  const tabs = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "cashier") {
+      return NAV_TABS.filter((t) => t.href === "/pos");
+    }
+    return NAV_TABS.filter((t) => t.roles.includes(user.role));
+  }, [user]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -91,10 +114,10 @@ export default function AppShell({
   return (
     <div className="min-h-dvh flex flex-col bg-coal">
       <header className="sticky top-0 z-40 border-b border-line bg-coal-2/85 backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-4 lg:px-6 h-[68px]">
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            <div className="grid size-9 place-items-center rounded-xl bg-brand text-coal shadow-[0_0_28px_-8px] shadow-brand/70">
-              <Coffee className="size-5" strokeWidth={2.5} />
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 lg:px-6 h-[60px] sm:h-[68px]">
+          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <div className="grid size-8 sm:size-9 place-items-center rounded-xl bg-brand text-coal shadow-[0_0_24px_-8px] sm:shadow-[0_0_28px_-8px] shadow-brand/70">
+              <Coffee className="size-4 sm:size-5" strokeWidth={2.5} />
             </div>
             <div className="leading-none hidden md:block">
               <p className="font-display text-[15px] font-bold tracking-tight">
@@ -104,7 +127,7 @@ export default function AppShell({
             </div>
           </Link>
 
-          <nav className="flex items-center gap-1.5 mx-auto">
+          <nav className="flex items-center gap-1 sm:gap-1.5 mx-auto">
             {tabs.map((tab) => {
               const Icon = TAB_ICONS[tab.icon];
               const active = pathname.startsWith(tab.href);
@@ -112,7 +135,7 @@ export default function AppShell({
                 <Link
                   key={tab.href}
                   href={tab.href}
-                  className={`relative flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold transition-colors ${
+                  className={`relative flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 text-xs sm:text-[13px] font-semibold transition-colors ${
                     active ? "text-coal" : "text-sand hover:text-cream hover:bg-panel-2"
                   }`}
                 >
@@ -123,19 +146,19 @@ export default function AppShell({
                       transition={{ type: "spring", stiffness: 400, damping: 32 }}
                     />
                   )}
-                  <Icon className="size-4 relative z-10" strokeWidth={2.2} />
+                  <Icon className="size-3.5 sm:size-4 relative z-10" strokeWidth={2.2} />
                   <span className="relative z-10 hidden sm:inline">{tab.label}</span>
                 </Link>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <LiveClock />
             <div className="h-8 w-px bg-line hidden sm:block" />
-            <div className="flex items-center gap-2.5">
-              <div className="grid size-9 place-items-center rounded-full border border-line-2 bg-panel">
-                <CircleUserRound className="size-5 text-brand" strokeWidth={1.8} />
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="grid size-8 sm:size-9 place-items-center rounded-full border border-line-2 bg-panel">
+                <CircleUserRound className="size-4 sm:size-5 text-brand" strokeWidth={1.8} />
               </div>
               <div className="leading-tight hidden lg:block">
                 <p className="text-[13px] font-semibold text-cream">{user.name}</p>
@@ -147,9 +170,9 @@ export default function AppShell({
             <button
               onClick={logout}
               title="Keluar / ganti shift"
-              className="btn-press grid size-9 place-items-center rounded-xl border border-line bg-panel text-faint hover:text-red-400 hover:border-red-400/30"
+              className="btn-press grid size-8 sm:size-9 place-items-center rounded-xl border border-line bg-panel text-faint hover:text-red-400 hover:border-red-400/30"
             >
-              <LogOut className="size-4" />
+              <LogOut className="size-3.5 sm:size-4" />
             </button>
           </div>
         </div>

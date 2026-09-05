@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   users, categories, products, variants, modifiers, ingredients,
   recipeItems, modifierIngredients, orders, orderItems, cashMovements,
+  storeSettings,
 } from "@/db/schema";
 import { sql } from "drizzle-orm";
 
@@ -19,13 +20,93 @@ function mulberry32(seed: number) {
 
 let seedPromise: Promise<void> | null = null;
 
+export async function ensureShiftReportsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS shift_reports (
+        id serial PRIMARY KEY,
+        cashier_id integer REFERENCES users(id),
+        cashier_name text NOT NULL DEFAULT '',
+        opened_at timestamp with time zone NOT NULL DEFAULT now(),
+        closed_at timestamp with time zone NOT NULL DEFAULT now(),
+        expected_cash integer NOT NULL,
+        actual_cash integer NOT NULL,
+        variance integer NOT NULL,
+        total_orders integer NOT NULL DEFAULT 0,
+        cash_orders integer NOT NULL DEFAULT 0,
+        qris_total integer NOT NULL DEFAULT 0,
+        debit_total integer NOT NULL DEFAULT 0,
+        note text NOT NULL DEFAULT '',
+        created_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+    `);
+  } catch (err) {
+    console.error("ensureShiftReportsTable error:", err);
+  }
+}
+
+export async function ensureProductsHppColumn() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS hpp integer NOT NULL DEFAULT 0;
+    `);
+  } catch (err) {
+    console.error("ensureProductsHppColumn error:", err);
+  }
+}
+
+export async function ensureStoreSettingsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS store_settings (
+        id serial PRIMARY KEY,
+        cafe_name text NOT NULL DEFAULT 'BREWMETRICS Specialty Coffee',
+        logo_url text NOT NULL DEFAULT '',
+        address text NOT NULL DEFAULT 'Jl. Metro Tanjung Bunga No. 8, Makassar',
+        phone text NOT NULL DEFAULT '0812-4455-6677',
+        tax_percentage double precision NOT NULL DEFAULT 10,
+        service_charge_percentage double precision NOT NULL DEFAULT 0,
+        receipt_footer_message text NOT NULL DEFAULT 'Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee',
+        updated_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+    `);
+
+    await db.execute(sql`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax integer NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_charge integer NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS total integer NOT NULL DEFAULT 0;
+    `);
+
+    const existing = await db.select({ id: storeSettings.id }).from(storeSettings).limit(1);
+    if (existing.length === 0) {
+      await db.insert(storeSettings).values({
+        id: 1,
+        cafeName: "BREWMETRICS Specialty Coffee",
+        logoUrl: "",
+        address: "Jl. Metro Tanjung Bunga No. 8, Makassar",
+        phone: "0812-4455-6677",
+        taxPercentage: 10,
+        serviceChargePercentage: 0,
+        receiptFooterMessage: "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee",
+      });
+    }
+  } catch (err) {
+    console.error("ensureStoreSettingsTable error:", err);
+  }
+}
+
 /** Idempotent — hanya seed ketika tabel users masih kosong. force=true me-reset seluruh data demo. */
 export function ensureSeeded(force = false): Promise<void> {
   if (force) {
     seedPromise = null;
   }
   if (!seedPromise) {
-    seedPromise = runSeed(force).catch((e) => {
+    seedPromise = (async () => {
+      await ensureShiftReportsTable();
+      await ensureProductsHppColumn();
+      await ensureStoreSettingsTable();
+      await runSeed(force);
+    })().catch((e) => {
       seedPromise = null;
       throw e;
     });
@@ -38,7 +119,7 @@ async function runSeed(force: boolean) {
   if (existing.length > 0 && !force) return;
 
   if (force) {
-    await db.execute(sql`TRUNCATE TABLE order_items, orders, cash_movements, recipe_items, modifier_ingredients, variants, products, modifiers, ingredients, categories, users RESTART IDENTITY CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE shift_reports, order_items, orders, cash_movements, recipe_items, modifier_ingredients, variants, products, modifiers, ingredients, categories, users RESTART IDENTITY CASCADE`);
   }
 
   /* ---------------------------------- USERS --------------------------------- */

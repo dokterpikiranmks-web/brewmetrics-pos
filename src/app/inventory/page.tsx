@@ -114,9 +114,9 @@ export default function InventoryPage() {
 
   return (
     <AppShell allowedRoles={["manager", "owner"]}>
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-5 max-w-[1500px] w-full mx-auto">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 max-w-[1500px] w-full mx-auto">
         {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.28em] text-faint font-bold mb-1">Dynamic Inventory</p>
             <h1 className="font-display text-2xl lg:text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -127,34 +127,34 @@ export default function InventoryPage() {
                 </span>
               )}
             </h1>
-            <p className="text-sm text-sand mt-1.5">
+            <p className="text-xs sm:text-sm text-sand mt-1">
               Setiap gelas terjual memotong bahan baku per gram/ml secara real-time.
             </p>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             {critical.length > 0 && (
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noreferrer"
-                className="btn-press flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-4 py-2.5 text-[13px] font-bold text-emerald-300 hover:bg-emerald-400/20"
+                className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-emerald-300 hover:bg-emerald-400/20"
               >
-                <MessageCircleWarning className="size-4" />
-                Broadcast WhatsApp Owner
+                <MessageCircleWarning className="size-4 shrink-0" />
+                <span className="whitespace-nowrap">Broadcast WA Owner</span>
               </a>
             )}
             <button
               onClick={() => setModal({ type: "add" })}
-              className="btn-press flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[13px] font-bold text-coal shadow-[0_12px_30px_-12px] shadow-brand/70 hover:brightness-110"
+              className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl bg-brand px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-coal shadow-[0_12px_30px_-12px] shadow-brand/70 hover:brightness-110"
             >
-              <PackagePlus className="size-4" />
-              Tambah Bahan
+              <PackagePlus className="size-4 shrink-0" />
+              <span className="whitespace-nowrap">Tambah Bahan</span>
             </button>
           </div>
         </div>
 
         {/* Stat strip */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3">
           <StatCard label="Nilai Stok Aktif" value={formatIDR(stats.value, true)} icon={Wallet} cls="text-brand" />
           <StatCard label="Bahan Aman" value={String(stats.ok)} icon={CircleCheck} cls="text-emerald-400" />
           <StatCard label="Menipis" value={String(stats.low)} icon={CircleAlert} cls="text-amber-400" />
@@ -163,8 +163,8 @@ export default function InventoryPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-xl border border-line bg-panel p-1 gap-1">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+          <div className="flex rounded-xl border border-line bg-panel p-1 gap-1 overflow-x-auto no-scrollbar">
             {(
               [
                 ["all", "Semua"],
@@ -404,7 +404,8 @@ function InventoryModal({
 }) {
   const [qty, setQty] = useState("");
   const [threshold, setThreshold] = useState("");
-  const [cost, setCost] = useState("");
+  const [packagePrice, setPackagePrice] = useState("");
+  const [packageQty, setPackageQty] = useState("");
   const [name, setName] = useState("");
   const [unit, setUnit] = useState<"g" | "ml" | "pcs">("g");
   const [recordExpense, setRecordExpense] = useState(true);
@@ -415,13 +416,53 @@ function InventoryModal({
     setQty("");
     setName(ing?.name ?? "");
     setThreshold(ing ? String(ing.lowThreshold) : "");
-    setCost(ing ? String(ing.costPerUnit) : "");
-    setUnit(ing?.unit ?? "g");
+    const curUnit = ing?.unit ?? "g";
+    setUnit(curUnit);
     setRecordExpense(true);
+
+    if (modal.type === "edit" && ing) {
+      const defaultPackQty = curUnit === "pcs" ? 1 : 1000;
+      setPackageQty(String(defaultPackQty));
+      setPackagePrice(
+        ing.costPerUnit > 0 ? String(Math.round(ing.costPerUnit * defaultPackQty)) : ""
+      );
+    } else if (modal.type === "add") {
+      setPackageQty("1000");
+      setPackagePrice("");
+    } else if (modal.type === "restock" && ing) {
+      const defaultPackQty = curUnit === "pcs" ? 1 : 1000;
+      setPackageQty(String(defaultPackQty));
+      setPackagePrice(
+        ing.costPerUnit > 0 ? String(Math.round(ing.costPerUnit * defaultPackQty)) : ""
+      );
+    }
   }, [modal]);
 
   const ing = modal?.ing;
-  const expenseEst = modal?.type === "restock" && ing ? (Number(qty) || 0) * ing.costPerUnit : 0;
+  const activeUnit = modal?.type === "restock" || modal?.type === "edit" ? (ing?.unit ?? unit) : unit;
+  const unitLabel = activeUnit === "g" ? "gram" : activeUnit === "ml" ? "ml" : "pcs";
+
+  // Kalkulasi HPP per unit otomatis: Harga Beli Kemasan / Isi Kemasan
+  const calculatedCostPerUnit = useMemo(() => {
+    const p = Number(packagePrice) || 0;
+    const q = Number(packageQty) || 0;
+    if (p <= 0 || q <= 0) return 0;
+    return Math.round((p / q) * 100) / 100;
+  }, [packagePrice, packageQty]);
+
+  const expenseEst =
+    modal?.type === "restock" && ing
+      ? (Number(qty) || 0) * (calculatedCostPerUnit > 0 ? calculatedCostPerUnit : ing.costPerUnit)
+      : 0;
+
+  const handleUnitSelect = (newUnit: "g" | "ml" | "pcs") => {
+    setUnit(newUnit);
+    if (newUnit === "pcs") {
+      if (packageQty === "1000" || packageQty === "") setPackageQty("1");
+    } else {
+      if (packageQty === "1" || packageQty === "") setPackageQty("1000");
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -430,7 +471,7 @@ function InventoryModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 grid place-items-center bg-coal/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-coal/70 backdrop-blur-sm p-4 overflow-y-auto"
           onClick={onClose}
         >
           <motion.div
@@ -439,14 +480,14 @@ function InventoryModal({
             exit={{ y: 40, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-3xl border border-line-2 bg-panel-2 shadow-ticket p-6"
+            className="w-full max-w-md rounded-3xl border border-line-2 bg-panel-2 shadow-ticket p-6 my-auto"
           >
             <div className="flex items-start justify-between mb-5">
               <div>
                 <p className="font-display text-lg font-bold">
                   {modal.type === "restock" && "Restock Bahan"}
-                  {modal.type === "edit" && "Edit Bahan"}
-                  {modal.type === "add" && "Bahan Baru"}
+                  {modal.type === "edit" && "Edit Bahan & HPP"}
+                  {modal.type === "add" && "Bahan Baru & Kalkulator HPP"}
                 </p>
                 {ing && <p className="text-xs text-faint mt-1">{ing.name} — sisa {formatQty(ing.stockQty, ing.unit)}</p>}
               </div>
@@ -468,12 +509,13 @@ function InventoryModal({
               )}
 
               {modal.type === "add" && (
-                <Field label="Satuan">
+                <Field label="Satuan Pemakaian">
                   <div className="grid grid-cols-3 gap-2">
                     {(["g", "ml", "pcs"] as const).map((u) => (
                       <button
                         key={u}
-                        onClick={() => setUnit(u)}
+                        type="button"
+                        onClick={() => handleUnitSelect(u)}
                         className={`btn-press rounded-xl border py-2.5 text-sm font-bold ${
                           unit === u ? "border-brand bg-brand/15 text-brand" : "border-line bg-coal text-sand"
                         }`}
@@ -505,13 +547,80 @@ function InventoryModal({
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={`Ambang menipis (${ing?.unit ?? unit})`}>
-                  <input value={threshold} onChange={(e) => setThreshold(e.target.value)} type="number" min={0} className="input-dark tabular" placeholder="0" />
-                </Field>
-                <Field label="HPP per unit (Rp)">
-                  <input value={cost} onChange={(e) => setCost(e.target.value)} type="number" min={0} className="input-dark tabular" placeholder="0" />
-                </Field>
+              <Field label={`Ambang Batas Menipis (${activeUnit})`}>
+                <input
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  type="number"
+                  min={0}
+                  className="input-dark tabular"
+                  placeholder="cth: 200"
+                />
+              </Field>
+
+              {/* Kalkulator HPP Otomatis Dua Input: Harga Beli Kemasan & Isi/Berat Kemasan */}
+              <div className="rounded-2xl border border-brand/40 bg-coal p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-brand">
+                    Kalkulator HPP Bahan Baku
+                  </span>
+                  <span className="text-[10px] text-faint">
+                    Harga Beli ÷ Isi Kemasan
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Field label="Harga Beli per Kemasan (Rp)">
+                    <div className="flex items-center gap-1.5 rounded-xl border border-line-2 bg-panel px-3 py-2 focus-within:border-brand/60">
+                      <span className="text-xs text-faint font-semibold">Rp</span>
+                      <input
+                        value={packagePrice}
+                        onChange={(e) => setPackagePrice(e.target.value)}
+                        type="number"
+                        min={0}
+                        className="w-full bg-transparent text-xs font-bold tabular outline-none text-cream"
+                        placeholder="cth: 150000"
+                      />
+                    </div>
+                  </Field>
+
+                  <Field label={`Isi/Berat per Kemasan (${activeUnit})`}>
+                    <div className="flex items-center gap-1.5 rounded-xl border border-line-2 bg-panel px-3 py-2 focus-within:border-brand/60">
+                      <input
+                        value={packageQty}
+                        onChange={(e) => setPackageQty(e.target.value)}
+                        type="number"
+                        min={0.01}
+                        step="any"
+                        className="w-full bg-transparent text-xs font-bold tabular outline-none text-cream"
+                        placeholder={activeUnit === "pcs" ? "1" : "1000"}
+                      />
+                      <span className="text-[11px] font-semibold text-sand">{activeUnit}</span>
+                    </div>
+                  </Field>
+                </div>
+
+                {/* Hasil Kalkulasi HPP Real-Time di Layar */}
+                <div className="flex items-center justify-between rounded-xl border border-brand/30 bg-brand/10 px-3.5 py-2.5">
+                  <div>
+                    <span className="block text-[10px] text-faint uppercase font-bold tracking-wider">
+                      HPP Terhitung (Disimpan ke DB)
+                    </span>
+                    <span className="block text-xs font-semibold text-cream">
+                      Biaya per {unitLabel}:
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display text-lg font-bold tabular text-brand text-glow">
+                      {formatIDR(calculatedCostPerUnit)} <span className="text-[11px] font-normal text-sand">/{activeUnit}</span>
+                    </p>
+                    <p className="text-[9.5px] text-faint">
+                      {packagePrice && packageQty
+                        ? `${formatIDR(Number(packagePrice) || 0)} ÷ ${packageQty} ${activeUnit}`
+                        : "Otomatis dihitung"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {modal.type === "restock" && (
@@ -535,14 +644,20 @@ function InventoryModal({
                 disabled={saving}
                 onClick={() => {
                   if (modal.type === "add") {
-                    onAdd({ name, unit, stockQty: Number(qty) || 0, lowThreshold: Number(threshold) || 0, costPerUnit: Number(cost) || 0 });
+                    onAdd({
+                      name,
+                      unit,
+                      stockQty: Number(qty) || 0,
+                      lowThreshold: Number(threshold) || 0,
+                      costPerUnit: calculatedCostPerUnit,
+                    });
                   } else if (modal.type === "restock" && ing) {
                     onPatch(ing.id, {
                       mode: "restock",
                       qty: Number(qty),
                       recordExpense,
                       expenseAmount: Math.round(expenseEst),
-                      costPerUnit: cost !== "" ? Number(cost) : undefined,
+                      costPerUnit: calculatedCostPerUnit > 0 ? calculatedCostPerUnit : undefined,
                     });
                   } else if (modal.type === "edit" && ing) {
                     onPatch(ing.id, {
@@ -550,11 +665,11 @@ function InventoryModal({
                       qty: qty !== "" ? Number(qty) : undefined,
                       name: name || undefined,
                       lowThreshold: threshold !== "" ? Number(threshold) : undefined,
-                      costPerUnit: cost !== "" ? Number(cost) : undefined,
+                      costPerUnit: calculatedCostPerUnit,
                     });
                   }
                 }}
-                className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 font-display text-sm font-bold text-coal hover:brightness-110 disabled:opacity-50"
+                className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 font-display text-sm font-bold text-coal hover:brightness-110 disabled:opacity-50 shadow-md shadow-brand/40"
               >
                 {saving && <Loader2 className="size-4 animate-spin" />}
                 Simpan Perubahan

@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 /* ---------------------------------- USERS ---------------------------------- */
 
@@ -41,8 +42,10 @@ export const products = pgTable(
     name: text("name").notNull(),
     tagline: text("tagline").notNull().default(""),
     price: integer("price").notNull(), // IDR (base price)
+    hpp: integer("hpp").notNull().default(0), // IDR (server-calculated from BOM recipe)
     color: text("color").notNull().default("#F59E0B"),
     icon: text("icon").notNull().default("Coffee"),
+    imageUrl: text("image_url").default(""),
     isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [index("products_category_idx").on(t.categoryId)]
@@ -122,6 +125,9 @@ export const orders = pgTable(
       .notNull()
       .default("cash"),
     subtotal: integer("subtotal").notNull().default(0),
+    tax: integer("tax").notNull().default(0),
+    serviceCharge: integer("service_charge").notNull().default(0),
+    total: integer("total").notNull().default(0),
     hpp: integer("hpp").notNull().default(0),
     profit: integer("profit").notNull().default(0),
     tendered: integer("tendered"),
@@ -171,6 +177,138 @@ export const cashMovements = pgTable(
   (t) => [index("cash_created_idx").on(t.createdAt)]
 );
 
+/* ------------------------------ SHIFT REPORTS ------------------------------ */
+
+export const shiftReports = pgTable(
+  "shift_reports",
+  {
+    id: serial("id").primaryKey(),
+    cashierId: integer("cashier_id").references(() => users.id),
+    cashierName: text("cashier_name").notNull().default(""),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+    expectedCash: integer("expected_cash").notNull(),
+    actualCash: integer("actual_cash").notNull(),
+    variance: integer("variance").notNull(), // actualCash - expectedCash
+    totalOrders: integer("total_orders").notNull().default(0),
+    cashOrders: integer("cash_orders").notNull().default(0),
+    qrisTotal: integer("qris_total").notNull().default(0),
+    debitTotal: integer("debit_total").notNull().default(0),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("shift_reports_created_idx").on(t.createdAt),
+    index("shift_reports_cashier_idx").on(t.cashierId),
+  ]
+);
+
+/* ----------------------------- STORE SETTINGS ------------------------------ */
+
+export const storeSettings = pgTable("store_settings", {
+  id: serial("id").primaryKey(),
+  cafeName: text("cafe_name").notNull().default("BREWMETRICS Specialty Coffee"),
+  logoUrl: text("logo_url").notNull().default(""),
+  address: text("address").notNull().default("Jl. Metro Tanjung Bunga No. 8, Makassar"),
+  phone: text("phone").notNull().default("0812-4455-6677"),
+  taxPercentage: doublePrecision("tax_percentage").notNull().default(10), // Pajak PB1/Restoran (e.g. 10%)
+  serviceChargePercentage: doublePrecision("service_charge_percentage").notNull().default(0), // Service Charge (e.g. 0%)
+  receiptFooterMessage: text("receipt_footer_message")
+    .notNull()
+    .default("Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* -------------------------------- RELATIONS -------------------------------- */
+
+export const usersRelations = relations(users, ({ many }) => ({
+  orders: many(orders),
+  shiftReports: many(shiftReports),
+}));
+
+export const categoriesRelations = relations(categories, ({ many }) => ({
+  products: many(products),
+}));
+
+export const productsRelations = relations(products, ({ one, many }) => ({
+  category: one(categories, {
+    fields: [products.categoryId],
+    references: [categories.id],
+  }),
+  variants: many(variants),
+  recipeItems: many(recipeItems),
+  orderItems: many(orderItems),
+}));
+
+export const variantsRelations = relations(variants, ({ one, many }) => ({
+  product: one(products, {
+    fields: [variants.productId],
+    references: [products.id],
+  }),
+  recipeItems: many(recipeItems),
+}));
+
+export const modifiersRelations = relations(modifiers, ({ many }) => ({
+  modifierIngredients: many(modifierIngredients),
+}));
+
+export const ingredientsRelations = relations(ingredients, ({ many }) => ({
+  recipeItems: many(recipeItems),
+  modifierIngredients: many(modifierIngredients),
+}));
+
+export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
+  product: one(products, {
+    fields: [recipeItems.productId],
+    references: [products.id],
+  }),
+  variant: one(variants, {
+    fields: [recipeItems.variantId],
+    references: [variants.id],
+  }),
+  ingredient: one(ingredients, {
+    fields: [recipeItems.ingredientId],
+    references: [ingredients.id],
+  }),
+}));
+
+export const modifierIngredientsRelations = relations(modifierIngredients, ({ one }) => ({
+  modifier: one(modifiers, {
+    fields: [modifierIngredients.modifierId],
+    references: [modifiers.id],
+  }),
+  ingredient: one(ingredients, {
+    fields: [modifierIngredients.ingredientId],
+    references: [ingredients.id],
+  }),
+}));
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  cashier: one(users, {
+    fields: [orders.cashierId],
+    references: [users.id],
+  }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  product: one(products, {
+    fields: [orderItems.productId],
+    references: [products.id],
+  }),
+}));
+
+export const shiftReportsRelations = relations(shiftReports, ({ one }) => ({
+  cashier: one(users, {
+    fields: [shiftReports.cashierId],
+    references: [users.id],
+  }),
+}));
+
 /* --------------------------------- TYPES ----------------------------------- */
 
 export type User = typeof users.$inferSelect;
@@ -184,3 +322,6 @@ export type ModifierIngredient = typeof modifierIngredients.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type CashMovement = typeof cashMovements.$inferSelect;
+export type ShiftReport = typeof shiftReports.$inferSelect;
+export type StoreSetting = typeof storeSettings.$inferSelect;
+

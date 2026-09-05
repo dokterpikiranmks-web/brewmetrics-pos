@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Banknote, QrCode, CreditCard, X, Loader2, Check, Printer, CloudOff, ArrowRight,
+  Banknote, QrCode, CreditCard, X, Loader2, Check, CheckCircle2,
+  Printer, CloudOff, ArrowRight, Plus, Sparkles,
 } from "lucide-react";
 import type { OrderReceipt } from "@/lib/types";
 import { formatIDR, formatTime } from "@/lib/format";
+import ReceiptPrint from "./ReceiptPrint";
 
 type Method = "cash" | "qris" | "debit";
 
@@ -33,17 +35,57 @@ export default function PaymentModal({
 }) {
   const [method, setMethod] = useState<Method>("cash");
   const [tendered, setTendered] = useState<number>(total);
-  const [phase, setPhase] = useState<"pay" | "loading" | "success">("pay");
-  const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<OrderReceipt | null>(null);
 
+  const prevOpenRef = useRef(false);
+
+  // Inisialisasi state HANYA saat modal pertama kali dibuka (transisi open: false -> true)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setMethod("cash");
       setTendered(total);
-      setPhase("pay");
-      setReceipt(null);
+      setIsLoading(false);
+      setIsSuccess(false);
+      setCompletedOrder(null);
     }
+    prevOpenRef.current = open;
   }, [open, total]);
+
+  // Tombol "Pesanan Baru": Mengosongkan keranjang belanja dan menutup modal
+  const handleNewOrder = () => {
+    setIsSuccess(false);
+    setCompletedOrder(null);
+    onDone(); // Kosongkan keranjang (setLines([]))
+    onClose(); // Tutup modal
+  };
+
+  // Menutup modal via backdrop / tombol X
+  const handleClose = () => {
+    if (isSuccess) {
+      onDone(); // Jika sudah sukses, tutup modal sekaligus kosongkan keranjang
+    }
+    onClose();
+  };
+
+  // Keyboard shortcut: Enter = Pesanan Baru (saat sukses), P = Cetak Struk
+  useEffect(() => {
+    if (!open || !isSuccess) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleNewOrder();
+      } else if (e.key.toLowerCase() === "p" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        window.print();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, isSuccess]);
 
   const change = Math.max(0, tendered - total);
   const insufficient = method === "cash" && tendered < total;
@@ -53,15 +95,19 @@ export default function PaymentModal({
     return base.sort((a, b) => a - b).slice(0, 5);
   }, [total]);
 
-  const confirm = async () => {
-    setPhase("loading");
-    const r = await onSubmit(method, method === "cash" ? tendered : total);
-    if (r) {
-      setReceipt(r);
-      setPhase("success");
-      if (navigator.vibrate) navigator.vibrate(40);
+  const handleConfirm = async () => {
+    setIsLoading(true);
+    const result = await onSubmit(method, method === "cash" ? tendered : total);
+    if (result) {
+      // Simpan data transaksi dan aktifkan modal Transaksi Berhasil
+      setCompletedOrder(result);
+      setIsSuccess(true);
+      setIsLoading(false);
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
     } else {
-      setPhase("pay");
+      setIsLoading(false);
     }
   };
 
@@ -72,32 +118,41 @@ export default function PaymentModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 grid place-items-center bg-coal/75 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-coal/75 backdrop-blur-sm p-4 overflow-y-auto"
         >
           <motion.div
             initial={{ y: 40, scale: 0.96, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.96, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="w-full max-w-lg rounded-3xl border border-line-2 bg-panel-2 shadow-ticket overflow-hidden"
+            className={`w-full ${
+              isSuccess ? "max-w-md" : "max-w-lg"
+            } rounded-3xl border border-line-2 bg-panel-2 shadow-ticket overflow-hidden`}
           >
-            {phase !== "success" ? (
+            {/* ===================================================================
+                1. TAMPILAN PILIH PEMBAYARAN (SEBELUM KONFIRMASI)
+               =================================================================== */}
+            {!isSuccess ? (
               <>
                 <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
                   <div>
-                    <p className="font-display text-lg font-bold">Pembayaran</p>
+                    <p className="font-display text-lg font-bold">Pilih Pembayaran</p>
                     <p className="text-[11px] text-faint mt-0.5 flex items-center gap-1.5">
                       {offline && (
                         <span className="inline-flex items-center gap-1 text-amber-400">
                           <CloudOff className="size-3" /> Mode offline — akan tersinkron
                         </span>
                       )}
-                      {!offline && "Pilih metode & konfirmasi"}
+                      {!offline && "Pilih metode bayar pelanggan"}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="font-display text-2xl font-bold tabular text-brand text-glow">{formatIDR(total)}</p>
-                    <button onClick={onClose} className="btn-press grid size-9 place-items-center rounded-xl border border-line bg-coal text-faint hover:text-cream">
+                    <button
+                      type="button"
+                      onClick={handleClose}
+                      className="btn-press grid size-9 place-items-center rounded-xl border border-line bg-coal text-faint hover:text-cream"
+                    >
                       <X className="size-4" />
                     </button>
                   </div>
@@ -110,6 +165,7 @@ export default function PaymentModal({
                       return (
                         <button
                           key={m.id}
+                          type="button"
                           onClick={() => setMethod(m.id)}
                           className={`btn-press rounded-2xl border p-3.5 text-left transition-colors ${
                             active ? "border-brand bg-brand/12" : "border-line bg-coal hover:border-line-2"
@@ -129,6 +185,7 @@ export default function PaymentModal({
                         {quickCash.map((v) => (
                           <button
                             key={v}
+                            type="button"
                             onClick={() => setTendered(v)}
                             className={`btn-press rounded-full border px-4 py-2 text-xs font-bold tabular transition-colors ${
                               tendered === v
@@ -191,13 +248,14 @@ export default function PaymentModal({
                   )}
 
                   <button
-                    onClick={confirm}
-                    disabled={insufficient || phase === "loading"}
+                    type="button"
+                    onClick={handleConfirm}
+                    disabled={insufficient || isLoading}
                     className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 font-display text-[15px] font-bold text-coal shadow-[0_16px_44px_-14px] shadow-brand/70 hover:brightness-110 disabled:opacity-40"
                   >
-                    {phase === "loading" ? (
+                    {isLoading ? (
                       <>
-                        <Loader2 className="size-5 animate-spin" /> Memproses…
+                        <Loader2 className="size-5 animate-spin" /> Memproses Pembayaran…
                       </>
                     ) : (
                       <>
@@ -208,57 +266,133 @@ export default function PaymentModal({
                 </div>
               </>
             ) : (
-              <div className="p-7 text-center">
+              /* ===================================================================
+                 2. TAMPILAN MODAL TRANSAKSI BERHASIL (SUCCESS STATE)
+                 Hanya muncul jika isSuccess === true & API database mengembalikan 200
+                 =================================================================== */
+              <div className="p-6 sm:p-7 text-center">
+                {/* Ikon Animasi Sukses */}
                 <motion.div
                   initial={{ scale: 0.4, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", stiffness: 260, damping: 16 }}
-                  className="mx-auto mb-5 grid size-20 place-items-center rounded-full bg-emerald-400/15 border border-emerald-400/40"
+                  className="mx-auto mb-3.5 grid size-16 place-items-center rounded-full bg-emerald-400/15 border border-emerald-400/40"
                 >
-                  <div className="grid size-12 place-items-center rounded-full bg-emerald-400 text-coal shadow-[0_0_40px_-8px] shadow-emerald-400/70">
-                    <Check className="size-7" strokeWidth={3} />
+                  <div className="grid size-10 place-items-center rounded-full bg-emerald-400 text-coal shadow-[0_0_32px_-6px] shadow-emerald-400/70">
+                    <Check className="size-6" strokeWidth={3} />
                   </div>
                 </motion.div>
 
-                <p className="text-[11px] uppercase tracking-[0.24em] text-faint mb-1">Transaksi Berhasil</p>
-                <p className="font-display text-3xl font-bold tabular text-cream">{receipt?.orderNumber}</p>
-                <p className="text-xs text-faint mt-1.5">
-                  {receipt && formatTime(receipt.createdAt)} • Kasir {receipt?.cashierName.split(" ")[0]} • Stok bahan telah terpotong otomatis
+                {/* Badge Status Lunas & Judul Sukses */}
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold tracking-wider uppercase mb-1.5">
+                  <CheckCircle2 className="size-4" />
+                  <span>Pembayaran Berhasil</span>
+                </div>
+
+                <p className="font-display text-2xl sm:text-3xl font-bold tabular text-cream tracking-tight">
+                  {completedOrder?.orderNumber}
                 </p>
 
-                {method === "cash" && receipt && (
-                  <div className="mx-auto mt-5 max-w-xs rounded-2xl border border-line bg-coal p-4">
-                    <div className="flex justify-between text-xs text-faint mb-2">
-                      <span>Tunai</span>
-                      <span className="tabular text-sand">{formatIDR(receipt.tendered ?? 0)}</span>
+                <p className="text-xs text-faint mt-1">
+                  {completedOrder && formatTime(completedOrder.createdAt)} • Kasir{" "}
+                  {completedOrder?.cashierName.split(" ")[0]} •{" "}
+                  <span className="uppercase font-bold text-sand">
+                    {completedOrder?.paymentMethod === "cash"
+                      ? "Tunai"
+                      : completedOrder?.paymentMethod === "qris"
+                        ? "QRIS"
+                        : "Debit"}
+                  </span>
+                </p>
+
+                {/* Kartu Ringkasan Pembayaran & Kembalian */}
+                <div className="mx-auto mt-4 rounded-2xl border border-line bg-coal p-4 text-left space-y-3 text-xs">
+                  {completedOrder?.paymentMethod === "cash" && (
+                    <div className="pb-3 border-b border-line space-y-1.5">
+                      <div className="flex justify-between text-faint">
+                        <span>Uang Diterima</span>
+                        <span className="tabular font-medium text-sand">{formatIDR(completedOrder.tendered ?? 0)}</span>
+                      </div>
+                      <div className="flex justify-between items-baseline pt-1">
+                        <span className="font-bold text-cream">Uang Kembalian</span>
+                        <span className="font-display text-3xl font-extrabold tabular text-emerald-400 text-glow">
+                          {formatIDR(completedOrder.change ?? 0)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-cream">Kembalian</span>
-                      <span className="font-display text-2xl font-bold tabular text-emerald-400">
-                        {formatIDR(receipt.change ?? 0)}
+                  )}
+
+                  <div className="space-y-1.5 text-faint">
+                    <div className="flex justify-between">
+                      <span>Metode Pembayaran</span>
+                      <span className="font-semibold text-sand uppercase">
+                        {completedOrder?.paymentMethod === "cash"
+                          ? "Tunai"
+                          : completedOrder?.paymentMethod === "qris"
+                            ? "QRIS"
+                            : "Debit"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Total Menu ({completedOrder?.itemCount ?? 0} item)</span>
+                      <span className="tabular text-sand">{formatIDR(completedOrder?.subtotal ?? total)}</span>
+                    </div>
+
+                    {(completedOrder?.serviceCharge ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Biaya Layanan</span>
+                        <span className="tabular text-sand">{formatIDR(completedOrder?.serviceCharge ?? 0)}</span>
+                      </div>
+                    )}
+
+                    {(completedOrder?.tax ?? 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Pajak Restoran (PB1)</span>
+                        <span className="tabular text-sand">{formatIDR(completedOrder?.tax ?? 0)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between pt-2 border-t border-line/60 font-bold text-cream">
+                      <span>Total Tagihan</span>
+                      <span className="font-display text-base tabular text-brand">
+                        {formatIDR(completedOrder?.total ?? completedOrder?.subtotal ?? total)}
                       </span>
                     </div>
                   </div>
-                )}
+                </div>
 
-                <div className="mt-6 grid grid-cols-[1fr_auto] gap-2.5">
+                {/* Notifikasi info pemotongan stok & tombol cetak manual */}
+                <p className="mt-3 text-[11px] text-faint flex items-center justify-center gap-1.5">
+                  <Sparkles className="size-3 text-brand shrink-0" />
+                  <span>Stok bahan terpotong otomatis. Klik Cetak Struk bila diperlukan pelanggan.</span>
+                </p>
+
+                {/* Tombol Aksi: Cetak Struk & Pesanan Baru */}
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
-                    onClick={() => {
-                      onDone();
-                      onClose();
-                    }}
-                    className="btn-press rounded-2xl bg-brand py-3.5 font-display text-sm font-bold text-coal hover:brightness-110"
-                  >
-                    Transaksi Baru
-                  </button>
-                  <button
+                    type="button"
                     onClick={() => window.print()}
-                    className="btn-press grid w-12 place-items-center rounded-2xl border border-line bg-coal text-sand hover:text-cream"
-                    title="Cetak struk"
+                    className="btn-press flex items-center justify-center gap-2 rounded-2xl border border-line-2 bg-coal py-3.5 px-4 font-display text-sm font-bold text-sand hover:text-cream hover:border-brand/40 shadow-sm"
+                    title="Cetak ulang struk thermal (P)"
                   >
-                    <Printer className="size-4.5" />
+                    <Printer className="size-4.5 text-brand" />
+                    <span>Cetak Struk (P)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNewOrder}
+                    className="btn-press flex items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 px-4 font-display text-sm font-bold text-coal shadow-[0_12px_28px_-8px] shadow-brand/70 hover:brightness-110"
+                    title="Mulai pesanan baru dan kosongkan keranjang (Enter)"
+                  >
+                    <Plus className="size-4.5" strokeWidth={2.5} />
+                    <span>Pesanan Baru</span>
                   </button>
                 </div>
+
+                {/* Elemen cetak thermal struk lunas (Hanya muncul pada window.print()) */}
+                {completedOrder && <ReceiptPrint receipt={completedOrder} />}
               </div>
             )}
           </motion.div>

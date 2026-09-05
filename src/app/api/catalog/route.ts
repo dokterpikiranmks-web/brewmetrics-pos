@@ -23,7 +23,7 @@ export async function GET() {
     categories: cats.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
     products: prods.map((p) => ({
       id: p.id, categoryId: p.categoryId, name: p.name, tagline: p.tagline,
-      price: p.price, color: p.color, icon: p.icon,
+      price: p.price, color: p.color, icon: p.icon, imageUrl: p.imageUrl ?? "",
     })),
     variants: vars.map((v) => ({ id: v.id, productId: v.productId, name: v.name, priceDelta: v.priceDelta })),
     modifiers: mods.map((m) => ({ id: m.id, name: m.name, price: m.price })),

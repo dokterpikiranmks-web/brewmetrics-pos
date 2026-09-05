@@ -6,9 +6,13 @@ import {
   TrendingUp, TrendingDown, Wallet, ReceiptText, PiggyBank, BanknoteArrowDown,
   BanknoteArrowUp, TriangleAlert, MessageCircleWarning, RefreshCcw, X, Loader2,
   CircleDollarSign, Radio, RotateCcw, ArrowDownToLine, ArrowUpFromLine,
+  Scale, CheckCircle2, ShieldAlert, FileSpreadsheet,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { RevenueChart, HourlyChart, TopProducts, PaymentDonut } from "@/components/analytics/Charts";
+import ExportReportModal from "@/components/analytics/ExportReportModal";
+import MenuEngineeringMatrix from "@/components/analytics/MenuEngineeringMatrix";
+import CashMovementModal from "@/components/cash/CashMovementModal";
 import type { AnalyticsSummary, ForecastItem } from "@/lib/types";
 import { formatIDR, formatQty, formatTime } from "@/lib/format";
 
@@ -20,6 +24,7 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [movements, setMovements] = useState<CashMovementDto[]>([]);
   const [cashOpen, setCashOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
@@ -79,9 +84,9 @@ export default function AnalyticsPage() {
 
   return (
     <AppShell allowedRoles={["owner", "manager"]}>
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-5 max-w-[1500px] w-full mx-auto">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 max-w-[1500px] w-full mx-auto">
         {/* ------------------------------ HEADER ------------------------------ */}
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.28em] text-faint font-bold mb-1 flex items-center gap-2">
               Owner Cockpit
@@ -90,34 +95,41 @@ export default function AnalyticsPage() {
               </span>
             </p>
             <h1 className="font-display text-2xl lg:text-3xl font-bold tracking-tight">Analitik &amp; Arus Kas</h1>
-            <p className="text-sm text-sand mt-1.5">
+            <p className="text-xs sm:text-sm text-sand mt-1">
               {summary
                 ? `Diperbarui ${lastSync ? formatTime(lastSync) : ""} — margin kotor hari ini ${summary.today.margin}%`
                 : "Memuat angka real-time…"}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             {waHref && (
               <a
                 href={waHref}
                 target="_blank"
                 rel="noreferrer"
-                className="btn-press flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-4 py-2.5 text-[13px] font-bold text-emerald-300 hover:bg-emerald-400/20"
+                className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-emerald-300 hover:bg-emerald-400/20"
               >
-                <MessageCircleWarning className="size-4" />
-                WA Alert ({summary?.forecast.length})
+                <MessageCircleWarning className="size-4 shrink-0" />
+                <span className="whitespace-nowrap">WA Alert ({summary?.forecast.length})</span>
               </a>
             )}
             <button
-              onClick={() => setCashOpen(true)}
-              className="btn-press flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[13px] font-bold text-coal shadow-[0_12px_30px_-12px] shadow-brand/70 hover:brightness-110"
+              onClick={() => setExportOpen(true)}
+              className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-emerald-300 hover:bg-emerald-500/20"
             >
-              <CircleDollarSign className="size-4" />
-              Catat Kas
+              <FileSpreadsheet className="size-4 shrink-0" />
+              <span className="whitespace-nowrap">Ekspor Excel</span>
+            </button>
+            <button
+              onClick={() => setCashOpen(true)}
+              className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl bg-brand px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-coal shadow-[0_12px_30px_-12px] shadow-brand/70 hover:brightness-110"
+            >
+              <CircleDollarSign className="size-4 shrink-0" />
+              <span className="whitespace-nowrap">Catat Kas</span>
             </button>
             <button
               onClick={load}
-              className="btn-press grid size-10 place-items-center rounded-xl border border-line bg-panel text-sand hover:text-cream"
+              className="btn-press grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-panel text-sand hover:text-cream shrink-0"
               title="Muat ulang"
             >
               <RefreshCcw className="size-4" />
@@ -125,7 +137,7 @@ export default function AnalyticsPage() {
             <button
               onClick={resetDemo}
               disabled={resetting}
-              className="btn-press grid size-10 place-items-center rounded-xl border border-line bg-panel text-faint hover:text-red-400 hover:border-red-400/30 disabled:opacity-50"
+              className="btn-press grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-panel text-faint hover:text-red-400 hover:border-red-400/30 disabled:opacity-50 shrink-0"
               title="Reset data demo"
             >
               {resetting ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
@@ -134,15 +146,122 @@ export default function AnalyticsPage() {
         </div>
 
         {!summary ? (
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <div className="grid gap-2.5 sm:gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="h-28 rounded-2xl border border-line bg-panel animate-pulse-soft" style={{ animationDelay: `${i * 80}ms` }} />
             ))}
           </div>
         ) : (
           <>
+            {/* ----------------- NOTIFIKASI SELISIH TUTUP SHIFT (VARIANCE) ----------------- */}
+            {summary.latestShiftReport && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg ${
+                  summary.latestShiftReport.variance === 0
+                    ? "border-emerald-500/30 bg-emerald-950/25 text-emerald-300"
+                    : summary.latestShiftReport.variance < 0
+                      ? "border-red-500/40 bg-red-950/35 text-red-200 shadow-red-500/10"
+                      : "border-amber-500/40 bg-amber-950/35 text-amber-200"
+                }`}
+              >
+                <div className="flex items-start gap-3.5">
+                  <div
+                    className={`grid size-10 place-items-center rounded-xl shrink-0 mt-0.5 ${
+                      summary.latestShiftReport.variance === 0
+                        ? "border border-emerald-400/40 bg-emerald-400/15 text-emerald-400"
+                        : summary.latestShiftReport.variance < 0
+                          ? "border border-red-400/40 bg-red-400/15 text-red-400 shadow-[0_0_16px_-2px] shadow-red-500/40 animate-pulse"
+                          : "border border-amber-400/40 bg-amber-400/15 text-amber-400"
+                    }`}
+                  >
+                    {summary.latestShiftReport.variance === 0 ? (
+                      <CheckCircle2 className="size-5" />
+                    ) : summary.latestShiftReport.variance < 0 ? (
+                      <ShieldAlert className="size-5" />
+                    ) : (
+                      <TriangleAlert className="size-5" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                          summary.latestShiftReport.variance === 0
+                            ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-300"
+                            : summary.latestShiftReport.variance < 0
+                              ? "border-red-400/40 bg-red-400/10 text-red-300"
+                              : "border-amber-400/40 bg-amber-400/10 text-amber-300"
+                        }`}
+                      >
+                        {summary.latestShiftReport.variance === 0
+                          ? "Tutup Shift: Kas Pas"
+                          : summary.latestShiftReport.variance < 0
+                            ? "Peringatan: Selisih Kurang (Shortage)"
+                            : "Perhatian: Selisih Lebih (Overage)"}
+                      </span>
+                      <span className="text-xs text-faint">
+                        {formatTime(summary.latestShiftReport.closedAt)} • Kasir:{" "}
+                        <strong className="text-cream">{summary.latestShiftReport.cashierName}</strong>
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm font-semibold mt-1">
+                      {summary.latestShiftReport.variance === 0 ? (
+                        <span>
+                          Shift terakhir ditutup seimbang (Fisik laci = Hitungan sistem:{" "}
+                          <strong>{formatIDR(summary.latestShiftReport.actualCash)}</strong>).
+                        </span>
+                      ) : summary.latestShiftReport.variance < 0 ? (
+                        <span>
+                          Terdapat kekurangan fisik sebesar{" "}
+                          <strong className="text-red-300 font-display text-sm sm:text-base">
+                            {formatIDR(Math.abs(summary.latestShiftReport.variance))}
+                          </strong>{" "}
+                          (Ekspektasi Sistem: {formatIDR(summary.latestShiftReport.expectedCash)}, Fisik di Laci:{" "}
+                          {formatIDR(summary.latestShiftReport.actualCash)}).
+                        </span>
+                      ) : (
+                        <span>
+                          Terdapat kelebihan fisik sebesar{" "}
+                          <strong className="text-amber-300 font-display text-sm sm:text-base">
+                            +{formatIDR(summary.latestShiftReport.variance)}
+                          </strong>{" "}
+                          (Ekspektasi Sistem: {formatIDR(summary.latestShiftReport.expectedCash)}, Fisik di Laci:{" "}
+                          {formatIDR(summary.latestShiftReport.actualCash)}).
+                        </span>
+                      )}
+                    </p>
+                    {summary.latestShiftReport.note && (
+                      <p className="text-[11px] text-faint mt-0.5 italic">
+                        Catatan kasir: &quot;{summary.latestShiftReport.note}&quot;
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="sm:text-right shrink-0">
+                  <span className="text-[10px] uppercase tracking-wider text-faint font-bold block">
+                    Status Selisih
+                  </span>
+                  <span
+                    className={`font-display text-lg font-bold tabular ${
+                      summary.latestShiftReport.variance === 0
+                        ? "text-emerald-400"
+                        : summary.latestShiftReport.variance < 0
+                          ? "text-red-400"
+                          : "text-amber-300"
+                    }`}
+                  >
+                    {summary.latestShiftReport.variance > 0 ? "+" : ""}
+                    {formatIDR(summary.latestShiftReport.variance)}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
             {/* ------------------------------- KPI ------------------------------- */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-3">
               <Kpi
                 icon={Wallet}
                 label="Pendapatan Hari Ini"
@@ -208,6 +327,9 @@ export default function AnalyticsPage() {
                 <ForecastList items={summary.forecast} />
               </Card>
             </div>
+
+            {/* ----------------- MENU ENGINEERING MATRIX (30 HARI) ----------------- */}
+            <MenuEngineeringMatrix data={summary.menuEngineering} />
 
             {/* ----------------------------- GRID ROW ---------------------------- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -278,19 +400,89 @@ export default function AnalyticsPage() {
                 )}
               </div>
             </Card>
+
+            {/* ------------------------- AUDIT TUTUP SHIFT ------------------------- */}
+            <Card
+              title="Audit Tutup Shift (Blind Z-Report)"
+              subtitle="Rekap perbandingan uang fisik laci kasir vs hitungan sistem"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                {(summary.recentShifts ?? []).map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex flex-col justify-between rounded-xl border border-line bg-coal p-3.5 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Scale className="size-4 text-brand" />
+                        <span className="font-semibold text-cream">Z-Report #{s.id}</span>
+                      </div>
+                      <span
+                        className={`font-display font-bold px-2 py-0.5 rounded-md text-[11px] ${
+                          s.variance === 0
+                            ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
+                            : s.variance < 0
+                              ? "bg-red-400/10 text-red-400 border border-red-400/30"
+                              : "bg-amber-400/10 text-amber-400 border border-amber-400/30"
+                        }`}
+                      >
+                        {s.variance > 0 ? "+" : ""}
+                        {formatIDR(s.variance)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11.5px] border-y border-line/60 py-2">
+                      <div>
+                        <span className="text-faint block text-[10px]">Uang Fisik Kasir:</span>
+                        <span className="font-semibold tabular text-cream">{formatIDR(s.actualCash)}</span>
+                      </div>
+                      <div>
+                        <span className="text-faint block text-[10px]">Sistem (Expected):</span>
+                        <span className="font-semibold tabular text-sand">{formatIDR(s.expectedCash)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-faint">
+                      <span>
+                        Kasir: <strong className="text-cream">{s.cashierName}</strong>
+                      </span>
+                      <span>
+                        {new Date(s.closedAt).toLocaleDateString("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                        })}{" "}
+                        {formatTime(s.closedAt)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {(!summary.recentShifts || summary.recentShifts.length === 0) && (
+                  <p className="text-sm text-faint py-6 md:col-span-2 xl:col-span-3 text-center">
+                    Belum ada riwayat tutup shift (Z-Report).
+                  </p>
+                )}
+              </div>
+            </Card>
           </>
         )}
       </div>
 
-      <CashModal
+      <CashMovementModal
         open={cashOpen}
         onClose={() => setCashOpen(false)}
         onSaved={() => {
           setCashOpen(false);
-          showToast("Catatan kas tersimpan.");
           load();
         }}
-        onError={(msg) => showToast(msg)}
+        onSuccessToast={(msg) => showToast(msg)}
+        onErrorToast={(msg) => showToast(msg)}
+      />
+
+      <ExportReportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        onSuccessToast={(msg) => showToast(msg)}
+        onErrorToast={(msg) => showToast(msg)}
       />
 
       <AnimatePresence>
@@ -426,124 +618,5 @@ function HealthPill({ count, cls, label }: { count: number; cls: string; label: 
       <span className="font-display text-sm font-bold tabular">{count}</span>
       <span className="text-[10px] text-faint">{label}</span>
     </span>
-  );
-}
-
-/* -------------------------------- CASH MODAL -------------------------------- */
-
-function CashModal({
-  open, onClose, onSaved, onError,
-}: {
-  open: boolean; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
-}) {
-  const [type, setType] = useState<"in" | "out">("out");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      setType("out");
-      setAmount("");
-      setNote("");
-    }
-  }, [open]);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/cash-movements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, amount: Number(amount), note }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        onError(data.error ?? "Gagal menyimpan.");
-        return;
-      }
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 grid place-items-center bg-coal/70 backdrop-blur-sm p-4"
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ y: 40, scale: 0.97 }}
-            animate={{ y: 0, scale: 1 }}
-            exit={{ y: 40, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-3xl border border-line-2 bg-panel-2 shadow-ticket p-6"
-          >
-            <div className="flex items-center justify-between mb-5">
-              <p className="font-display text-lg font-bold">Catat Kas</p>
-              <button onClick={onClose} className="btn-press grid size-8 place-items-center rounded-lg border border-line bg-coal text-faint hover:text-cream">
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setType("in")}
-                  className={`btn-press flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-bold ${
-                    type === "in" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-300" : "border-line bg-coal text-sand"
-                  }`}
-                >
-                  <ArrowDownToLine className="size-4" /> Kas Masuk
-                </button>
-                <button
-                  onClick={() => setType("out")}
-                  className={`btn-press flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-bold ${
-                    type === "out" ? "border-red-400/60 bg-red-400/10 text-red-300" : "border-line bg-coal text-sand"
-                  }`}
-                >
-                  <ArrowUpFromLine className="size-4" /> Kas Keluar
-                </button>
-              </div>
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-faint">Nominal (Rp)</span>
-                <input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  type="number"
-                  min={0}
-                  autoFocus
-                  placeholder="0"
-                  className="input-dark tabular font-display text-lg font-bold"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-faint">Catatan</span>
-                <input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="cth: Beli es batu & galon"
-                  className="input-dark"
-                />
-              </label>
-              <button
-                onClick={save}
-                disabled={saving || !amount}
-                className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 font-display text-sm font-bold text-coal hover:brightness-110 disabled:opacity-50"
-              >
-                {saving && <Loader2 className="size-4 animate-spin" />}
-                Simpan ke Buku Kas
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }

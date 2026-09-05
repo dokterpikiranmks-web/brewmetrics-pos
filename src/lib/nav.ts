@@ -21,12 +21,14 @@ export const HOME_BY_ROLE: Record<Role, string> = {
 export interface NavTab {
   href: string;
   label: string;
-  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline";
+  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline" | "UtensilsCrossed" | "Settings";
   roles: Role[];
 }
 
 export const NAV_TABS: NavTab[] = [
   { href: "/pos", label: "POS Terminal", icon: "MonitorSmartphone", roles: ["cashier", "manager", "owner"] },
+  { href: "/products", label: "Menu & Resep", icon: "UtensilsCrossed", roles: ["manager", "owner"] },
   { href: "/inventory", label: "Inventory Matrix", icon: "Boxes", roles: ["manager", "owner"] },
   { href: "/analytics", label: "Analytics", icon: "ChartSpline", roles: ["owner", "manager"] },
+  { href: "/settings", label: "Pengaturan", icon: "Settings", roles: ["owner", "manager"] },
 ];

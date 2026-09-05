@@ -23,7 +23,7 @@ export async function GET() {
     orderNumber: o.orderNumber,
     cashierName: o.cashierName,
     paymentMethod: o.paymentMethod,
-    total: o.subtotal,
+    total: o.total || (o.subtotal + (o.tax ?? 0) + (o.serviceCharge ?? 0)),
     itemCount: o.itemCount,
     createdAt: o.createdAt.toISOString(),
     isOfflineSync: o.isOfflineSync,

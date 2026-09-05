@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db";
-import { ingredients, orderItems, orders, products, variants, modifiers } from "@/db/schema";
+import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { buildRecipeIndex, hppPerUnit, mergeUsage, usageForLine } from "./recipes";
 import type { CreateOrderPayload, OrderReceipt, SessionUser } from "./types";
@@ -32,12 +32,18 @@ export async function nextOrderNumber(tx: Pick<typeof db, "execute">): Promise<s
 export async function getReceiptByOfflineId(offlineId: string): Promise<OrderReceipt | null> {
   const found = await db.query.orders.findFirst({ where: eq(orders.offlineId, offlineId) });
   if (!found) return null;
-  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, found.id));
+  const [items, settingsRow] = await Promise.all([
+    db.select().from(orderItems).where(eq(orderItems.orderId, found.id)),
+    db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),
+  ]);
   return {
     id: found.id,
     orderNumber: found.orderNumber,
-    paymentMethod: found.paymentMethod,
+    paymentMethod: found.paymentMethod as "cash" | "qris" | "debit",
     subtotal: found.subtotal,
+    tax: found.tax ?? 0,
+    serviceCharge: found.serviceCharge ?? 0,
+    total: found.total || (found.subtotal + (found.tax ?? 0) + (found.serviceCharge ?? 0)),
     tendered: found.tendered,
     change: found.change,
     itemCount: found.itemCount,
@@ -51,13 +57,26 @@ export async function getReceiptByOfflineId(offlineId: string): Promise<OrderRec
       qty: i.qty,
       unitPrice: i.unitPrice,
       totalPrice: i.totalPrice,
-      modifiers: i.modifiers,
+      modifiers: i.modifiers as { name: string; price: number }[],
     })),
+    storeSettings: settingsRow
+      ? {
+          id: settingsRow.id,
+          cafeName: settingsRow.cafeName,
+          logoUrl: settingsRow.logoUrl,
+          address: settingsRow.address,
+          phone: settingsRow.phone,
+          taxPercentage: settingsRow.taxPercentage,
+          serviceChargePercentage: settingsRow.serviceChargePercentage,
+          receiptFooterMessage: settingsRow.receiptFooterMessage,
+        }
+      : null,
   };
 }
 
 /**
  * Buat order: validasi harga dari server, hitung HPP dari resep,
+ * hitung pajak PB1 & service charge sesuai profil toko,
  * lalu potong stok bahan baku secara transaksional (offline-tolerant via offlineId).
  */
 export async function createOrder(payload: CreateOrderPayload, user: SessionUser): Promise<OrderReceipt> {
@@ -69,7 +88,14 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     throw new OrderError("Keranjang kosong.", 400, "EMPTY_CART");
   }
 
-  const index = await buildRecipeIndex();
+  const [index, settingsRow] = await Promise.all([
+    buildRecipeIndex(),
+    db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),
+  ]);
+
+  const taxPercentage = settingsRow?.taxPercentage ?? 10;
+  const serviceChargePercentage = settingsRow?.serviceChargePercentage ?? 0;
+
   const productIds = [...new Set(payload.lines.map((l) => l.productId))];
   const variantIds = [...new Set(payload.lines.map((l) => l.variantId).filter((v): v is number => v !== null))];
   const modifierIds = [...new Set(payload.lines.flatMap((l) => l.modifierIds))];
@@ -116,10 +142,14 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   });
 
   const subtotal = normalized.reduce((s, l) => s + l.totalPrice, 0);
+  const serviceCharge = Math.round((subtotal * Math.max(0, serviceChargePercentage)) / 100);
+  const tax = Math.round(((subtotal + serviceCharge) * Math.max(0, taxPercentage)) / 100);
+  const grandTotal = subtotal + serviceCharge + tax;
+
   const totalHpp = normalized.reduce((s, l) => s + l.hpp, 0);
   const itemCount = normalized.reduce((s, l) => s + l.qty, 0);
-  const tendered = payload.paymentMethod === "cash" ? Math.max(subtotal, Math.floor(payload.tendered ?? subtotal)) : subtotal;
-  const change = payload.paymentMethod === "cash" ? tendered - subtotal : 0;
+  const tendered = payload.paymentMethod === "cash" ? Math.max(grandTotal, Math.floor(payload.tendered ?? grandTotal)) : grandTotal;
+  const change = payload.paymentMethod === "cash" ? tendered - grandTotal : 0;
 
   // Total pemakaian bahan seluruh order
   const totalUsage = new Map<number, number>();
@@ -167,6 +197,9 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         status: "paid",
         paymentMethod: payload.paymentMethod,
         subtotal,
+        tax,
+        serviceCharge,
+        total: grandTotal,
         hpp: totalHpp,
         profit: subtotal - totalHpp,
         tendered,
@@ -196,8 +229,11 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   return {
     id: receipt.id,
     orderNumber: receipt.orderNumber,
-    paymentMethod: receipt.paymentMethod,
+    paymentMethod: receipt.paymentMethod as "cash" | "qris" | "debit",
     subtotal: receipt.subtotal,
+    tax: receipt.tax,
+    serviceCharge: receipt.serviceCharge,
+    total: receipt.total,
     tendered: receipt.tendered,
     change: receipt.change,
     itemCount: receipt.itemCount,
@@ -213,7 +249,17 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
       totalPrice: l.totalPrice,
       modifiers: l.mods,
     })),
+    storeSettings: settingsRow
+      ? {
+          id: settingsRow.id,
+          cafeName: settingsRow.cafeName,
+          logoUrl: settingsRow.logoUrl,
+          address: settingsRow.address,
+          phone: settingsRow.phone,
+          taxPercentage: settingsRow.taxPercentage,
+          serviceChargePercentage: settingsRow.serviceChargePercentage,
+          receiptFooterMessage: settingsRow.receiptFooterMessage,
+        }
+      : null,
   };
 }
-
-
