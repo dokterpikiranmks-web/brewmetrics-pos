@@ -14,7 +14,7 @@ export async function GET() {
   const rows = await db
     .select()
     .from(orders)
-    .where(and(eq(orders.status, "paid"), sql`${orders.createdAt} >= date_trunc('day', now())`))
+    .where(sql`${orders.createdAt} >= date_trunc('day', now())`)
     .orderBy(desc(orders.createdAt))
     .limit(60);
 
@@ -23,8 +23,13 @@ export async function GET() {
     orderNumber: o.orderNumber,
     cashierName: o.cashierName,
     paymentMethod: o.paymentMethod,
+    customerName: o.customerName ?? "Umum",
+    orderType: (o.orderType as any) ?? "dine-in",
+    tableNumber: o.tableNumber ?? "",
+    discountAmount: o.discountAmount ?? 0,
     total: o.total || (o.subtotal + (o.tax ?? 0) + (o.serviceCharge ?? 0)),
     itemCount: o.itemCount,
+    status: o.status as "paid" | "void",
     createdAt: o.createdAt.toISOString(),
     isOfflineSync: o.isOfflineSync,
   }));
@@ -37,7 +42,7 @@ export async function POST(req: Request) {
 
   try {
     const payload = (await req.json()) as CreateOrderPayload;
-    if (!["cash", "qris", "debit"].includes(payload.paymentMethod)) {
+    if (!["cash", "qris", "debit", "transfer"].includes(payload.paymentMethod)) {
       return Response.json({ error: "Metode pembayaran tidak valid." }, { status: 400 });
     }
     const receipt = await createOrder(payload, user);

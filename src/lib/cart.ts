@@ -1,4 +1,4 @@
-import type { CartLinePayload } from "./types";
+import type { CartLinePayload, DiscountType } from "./types";
 
 export interface CartLine {
   key: string;
@@ -35,33 +35,58 @@ export function cartCount(lines: CartLine[]): number {
 
 export interface OrderTotals {
   subtotal: number;
+  discountType: DiscountType | null;
+  discountValue: number;
+  discountAmount: number;
+  subtotalAfterDiscount: number;
   serviceCharge: number;
   tax: number;
   grandTotal: number;
 }
 
 /**
- * Kalkulasi Standar Pajak Restoran (PB1) & Biaya Layanan Kafe:
+ * Kalkulasi Standar Pajak Restoran (PB1) & Biaya Layanan Kafe dengan Diskon:
  * - Subtotal = total harga seluruh menu pesanan
- * - Service Charge = Subtotal * (serviceChargePercentage / 100)
- * - Pajak Restoran (PB1) = (Subtotal + Service Charge) * (taxPercentage / 100)
- * - Grand Total = Subtotal + Service Charge + Pajak Restoran
+ * - Diskon:
+ *   - Persentase: Subtotal * (discountValue / 100)
+ *   - Nominal Tetap: discountValue
+ * - Subtotal Setelah Diskon = max(0, Subtotal - Diskon)
+ * - Service Charge = Subtotal Setelah Diskon * (serviceChargePercentage / 100)
+ * - Pajak Restoran (PB1) = (Subtotal Setelah Diskon + Service Charge) * (taxPercentage / 100)
+ * - Grand Total = Subtotal Setelah Diskon + Service Charge + Pajak Restoran
  */
 export function calculateOrderTotals(
   subtotal: number,
   taxPercentage = 10,
-  serviceChargePercentage = 0
+  serviceChargePercentage = 0,
+  discountType?: DiscountType | null,
+  discountValue = 0
 ): OrderTotals {
   const safeSubtotal = Math.max(0, Math.round(subtotal));
-  const serviceCharge = Math.round((safeSubtotal * Math.max(0, serviceChargePercentage)) / 100);
-  const taxableBase = safeSubtotal + serviceCharge;
+
+  let discountAmount = 0;
+  if (discountType === "percentage") {
+    const pct = Math.max(0, Math.min(100, discountValue));
+    discountAmount = Math.min(safeSubtotal, Math.round((safeSubtotal * pct) / 100));
+  } else if (discountType === "fixed") {
+    discountAmount = Math.min(safeSubtotal, Math.max(0, Math.round(discountValue)));
+  }
+
+  const subtotalAfterDiscount = Math.max(0, safeSubtotal - discountAmount);
+  const serviceCharge = Math.round((subtotalAfterDiscount * Math.max(0, serviceChargePercentage)) / 100);
+  const taxableBase = subtotalAfterDiscount + serviceCharge;
   const tax = Math.round((taxableBase * Math.max(0, taxPercentage)) / 100);
-  const grandTotal = safeSubtotal + serviceCharge + tax;
+  const grandTotal = subtotalAfterDiscount + serviceCharge + tax;
 
   return {
     subtotal: safeSubtotal,
+    discountType: discountType ?? null,
+    discountValue,
+    discountAmount,
+    subtotalAfterDiscount,
     serviceCharge,
     tax,
     grandTotal,
   };
 }
+

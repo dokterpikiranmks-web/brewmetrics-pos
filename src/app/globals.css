@@ -121,11 +121,6 @@ body {
    PRINT STYLES FOR THERMAL RECEIPT (58mm / 80mm)
    ========================================================================== */
 @media print {
-  @page {
-    size: 80mm auto;
-    margin: 0;
-  }
-
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
@@ -151,15 +146,23 @@ body {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 72mm !important;
-    max-width: 100% !important;
     margin: 0 auto !important;
-    padding: 3mm 2mm !important;
+    padding: 2mm !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
     z-index: 999999 !important;
+  }
+
+  .thermal-receipt-58mm {
+    width: 48mm !important;
+    max-width: 200px !important;
+  }
+
+  .thermal-receipt-80mm {
+    width: 72mm !important;
+    max-width: 300px !important;
   }
 }
 

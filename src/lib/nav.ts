@@ -14,21 +14,34 @@ export const ROLE_ACCENT: Record<Role, string> = {
 
 export const HOME_BY_ROLE: Record<Role, string> = {
   cashier: "/pos",
-  manager: "/inventory",
+  manager: "/analytics",
   owner: "/analytics",
 };
 
 export interface NavTab {
   href: string;
   label: string;
-  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline" | "UtensilsCrossed" | "Settings";
+  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline" | "UtensilsCrossed" | "Settings" | "ReceiptText";
   roles: Role[];
+  isAction?: boolean;
+  actionKey?: string;
 }
 
 export const NAV_TABS: NavTab[] = [
-  { href: "/pos", label: "POS Terminal", icon: "MonitorSmartphone", roles: ["cashier", "manager", "owner"] },
-  { href: "/products", label: "Menu & Resep", icon: "UtensilsCrossed", roles: ["manager", "owner"] },
-  { href: "/inventory", label: "Inventory Matrix", icon: "Boxes", roles: ["manager", "owner"] },
+  // 1. Navigasi Owner & Manager: Analytics, Menu & Resep, Inventory Matrix, Pengaturan (Tanpa POS Terminal)
   { href: "/analytics", label: "Analytics", icon: "ChartSpline", roles: ["owner", "manager"] },
+  { href: "/products", label: "Menu & Resep", icon: "UtensilsCrossed", roles: ["owner", "manager"] },
+  { href: "/inventory", label: "Inventory Matrix", icon: "Boxes", roles: ["owner", "manager"] },
   { href: "/settings", label: "Pengaturan", icon: "Settings", roles: ["owner", "manager"] },
+
+  // 2. Navigasi Cashier: POS Terminal dan Riwayat Pesanan (Tanpa Akses Manajemen Kafe)
+  { href: "/pos", label: "POS Terminal", icon: "MonitorSmartphone", roles: ["cashier"] },
+  {
+    href: "/pos?tab=history",
+    label: "Riwayat Pesanan",
+    icon: "ReceiptText",
+    roles: ["cashier"],
+    isAction: true,
+    actionKey: "open-order-history",
+  },
 ];

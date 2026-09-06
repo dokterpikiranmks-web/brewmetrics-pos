@@ -27,6 +27,8 @@ export interface CatalogDto {
     color: string;
     icon: string;
     imageUrl?: string | null;
+    isBundle?: boolean;
+    bundleItems?: { productId: number; productName?: string; qty: number }[];
   }[];
   variants: { id: number; productId: number; name: string; priceDelta: number }[];
   modifiers: { id: number; name: string; price: number }[];
@@ -39,10 +41,22 @@ export interface CartLinePayload {
   modifierIds: number[];
 }
 
+export type OrderType = "dine-in" | "take-away";
+export type DiscountType = "percentage" | "fixed";
+export type PaymentMethod = "cash" | "qris" | "debit" | "transfer";
+
 export interface CreateOrderPayload {
   offlineId?: string;
-  paymentMethod: "cash" | "qris" | "debit";
+  paymentMethod: PaymentMethod;
   tendered?: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerId?: number;
+  orderType?: OrderType;
+  tableNumber?: string;
+  discountType?: DiscountType | null;
+  discountValue?: number;
+  paymentReference?: string;
   lines: CartLinePayload[];
 }
 
@@ -63,6 +77,8 @@ export interface StoreSettingDto {
   phone: string;
   taxPercentage: number;
   serviceChargePercentage: number;
+  printerPaperSize?: "58mm" | "80mm";
+  autoPrintReceipt?: boolean;
   receiptFooterMessage: string;
   updatedAt?: string;
 }
@@ -70,7 +86,16 @@ export interface StoreSettingDto {
 export interface OrderReceipt {
   id: number;
   orderNumber: string;
-  paymentMethod: "cash" | "qris" | "debit";
+  paymentMethod: PaymentMethod;
+  customerId?: number | null;
+  customerName?: string;
+  customerPhone?: string | null;
+  orderType?: OrderType;
+  tableNumber?: string | null;
+  discountType?: DiscountType | null;
+  discountValue?: number;
+  discountAmount?: number;
+  paymentReference?: string | null;
   subtotal: number;
   tax?: number;
   serviceCharge?: number;
@@ -91,10 +116,27 @@ export interface TodayOrderDto {
   orderNumber: string;
   cashierName: string;
   paymentMethod: string;
+  customerId?: number | null;
+  customerName?: string;
+  customerPhone?: string | null;
+  orderType?: OrderType;
+  tableNumber?: string | null;
+  discountAmount?: number;
   total: number;
   itemCount: number;
+  status?: "paid" | "void";
   createdAt: string;
   isOfflineSync: boolean;
+}
+
+export interface CustomerDto {
+  id: number;
+  name: string;
+  phone: string;
+  totalOrders: number;
+  totalSpend: number;
+  lastVisitAt: string;
+  createdAt: string;
 }
 
 export type StockStatus = "ok" | "low" | "out";

@@ -40,6 +40,8 @@ export async function GET() {
       phone: current.phone,
       taxPercentage: Number(current.taxPercentage),
       serviceChargePercentage: Number(current.serviceChargePercentage),
+      printerPaperSize: (current.printerPaperSize as "58mm" | "80mm") ?? "58mm",
+      autoPrintReceipt: current.autoPrintReceipt ?? true,
       receiptFooterMessage: current.receiptFooterMessage,
       updatedAt: current.updatedAt?.toISOString(),
     };
@@ -74,6 +76,8 @@ export async function PUT(req: Request) {
       0,
       Math.min(100, Number(body.serviceChargePercentage) || 0)
     );
+    const printerPaperSize = body.printerPaperSize === "80mm" ? "80mm" : "58mm";
+    const autoPrintReceipt = body.autoPrintReceipt !== false;
 
     const existing = await db.select({ id: storeSettings.id }).from(storeSettings).limit(1);
 
@@ -88,6 +92,8 @@ export async function PUT(req: Request) {
           phone,
           taxPercentage,
           serviceChargePercentage,
+          printerPaperSize,
+          autoPrintReceipt,
           receiptFooterMessage,
           updatedAt: new Date(),
         })
@@ -105,6 +111,8 @@ export async function PUT(req: Request) {
           phone,
           taxPercentage,
           serviceChargePercentage,
+          printerPaperSize,
+          autoPrintReceipt,
           receiptFooterMessage,
         })
         .returning();
@@ -119,6 +127,8 @@ export async function PUT(req: Request) {
       phone: updated.phone,
       taxPercentage: Number(updated.taxPercentage),
       serviceChargePercentage: Number(updated.serviceChargePercentage),
+      printerPaperSize: (updated.printerPaperSize as "58mm" | "80mm") ?? "58mm",
+      autoPrintReceipt: updated.autoPrintReceipt ?? true,
       receiptFooterMessage: updated.receiptFooterMessage,
       updatedAt: updated.updatedAt?.toISOString(),
     };

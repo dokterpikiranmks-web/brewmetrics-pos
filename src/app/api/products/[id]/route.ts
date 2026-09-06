@@ -6,6 +6,7 @@ import {
   ingredients,
   categories,
   orderItems,
+  bundleItems,
 } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
@@ -39,15 +40,18 @@ export async function GET(
       return Response.json({ error: "Produk tidak ditemukan." }, { status: 404 });
     }
 
-    const [allVariants, allRecipes, allIngredients, [cat]] = await Promise.all([
+    const [allVariants, allRecipes, allIngredients, [cat], allBundleItems, allProds] = await Promise.all([
       db.select().from(variants).where(eq(variants.productId, id)),
       db.select().from(recipeItems).where(eq(recipeItems.productId, id)),
       db.select().from(ingredients),
       db.select().from(categories).where(eq(categories.id, p.categoryId)).limit(1),
+      db.select().from(bundleItems).where(eq(bundleItems.bundleProductId, id)),
+      db.select().from(products),
     ]);
 
     const ingMap = new Map(allIngredients.map((i) => [i.id, i]));
     const varMap = new Map(allVariants.map((v) => [v.id, v.name]));
+    const prodMap = new Map(allProds.map((pr) => [pr.id, pr]));
 
     let calculatedHpp = 0;
     const recipeDetail = allRecipes.map((r) => {
@@ -80,6 +84,12 @@ export async function GET(
         icon: p.icon,
         imageUrl: p.imageUrl ?? "",
         isActive: p.isActive,
+        isBundle: p.isBundle ?? false,
+        bundleItems: allBundleItems.map((b) => ({
+          productId: b.subProductId,
+          productName: prodMap.get(b.subProductId)?.name ?? "Produk",
+          qty: b.qty,
+        })),
         variants: allVariants.map((v) => ({
           id: v.id,
           name: v.name,
@@ -118,6 +128,8 @@ export async function PUT(
       icon?: string;
       imageUrl?: string;
       isActive?: boolean;
+      isBundle?: boolean;
+      bundleItems?: { productId: number; qty: number }[];
       variants?: { id?: number; name: string; priceDelta: number }[];
       recipe?: {
         ingredientId: number;
@@ -146,6 +158,8 @@ export async function PUT(
     const imageUrl = (body.imageUrl ?? "").trim();
     const tagline = (body.tagline ?? "").trim();
     const isActive = body.isActive ?? true;
+    const isBundle = Boolean(body.isBundle);
+    const rawBundleItems = Array.isArray(body.bundleItems) ? body.bundleItems : [];
     const rawVariants = Array.isArray(body.variants) ? body.variants : [];
     const rawRecipe = Array.isArray(body.recipe) ? body.recipe : [];
 
@@ -173,31 +187,50 @@ export async function PUT(
 
     // 3. SERVER-SIDE HPP RE-CALCULATION & VALIDATION
     let serverCalculatedHpp = 0;
-    const ingIds = rawRecipe.map((r) => r.ingredientId);
 
-    if (ingIds.length > 0) {
-      const dbIngredients = await db
-        .select()
-        .from(ingredients)
-        .where(inArray(ingredients.id, ingIds));
+    if (isBundle) {
+      if (rawBundleItems.length === 0) {
+        return Response.json({ error: "Paket bundling harus memiliki minimal 1 produk penyusun." }, { status: 400 });
+      }
+      const subProdIds = rawBundleItems.map((b) => Number(b.productId)).filter(Boolean);
+      const subProds = await db.select().from(products).where(inArray(products.id, subProdIds));
+      const subMap = new Map(subProds.map((sp) => [sp.id, sp]));
 
-      const ingMap = new Map(dbIngredients.map((i) => [i.id, i]));
-
-      for (const item of rawRecipe) {
-        const ing = ingMap.get(item.ingredientId);
-        if (!ing) {
-          return Response.json(
-            { error: `Bahan baku dengan ID ${item.ingredientId} tidak ditemukan di database.` },
-            { status: 400 }
-          );
+      for (const item of rawBundleItems) {
+        const sp = subMap.get(Number(item.productId));
+        if (!sp) {
+          return Response.json({ error: `Sub-produk ID ${item.productId} tidak ditemukan.` }, { status: 400 });
         }
-        if (item.qty <= 0) {
-          return Response.json(
-            { error: `Takaran untuk bahan ${ing.name} harus lebih besar dari 0.` },
-            { status: 400 }
-          );
+        const qty = Math.max(1, Number(item.qty) || 1);
+        serverCalculatedHpp += sp.hpp * qty;
+      }
+    } else {
+      const ingIds = rawRecipe.map((r) => r.ingredientId);
+
+      if (ingIds.length > 0) {
+        const dbIngredients = await db
+          .select()
+          .from(ingredients)
+          .where(inArray(ingredients.id, ingIds));
+
+        const ingMap = new Map(dbIngredients.map((i) => [i.id, i]));
+
+        for (const item of rawRecipe) {
+          const ing = ingMap.get(item.ingredientId);
+          if (!ing) {
+            return Response.json(
+              { error: `Bahan baku dengan ID ${item.ingredientId} tidak ditemukan di database.` },
+              { status: 400 }
+            );
+          }
+          if (item.qty <= 0) {
+            return Response.json(
+              { error: `Takaran untuk bahan ${ing.name} harus lebih besar dari 0.` },
+              { status: 400 }
+            );
+          }
+          serverCalculatedHpp += item.qty * ing.costPerUnit;
         }
-        serverCalculatedHpp += item.qty * ing.costPerUnit;
       }
     }
 
@@ -218,15 +251,28 @@ export async function PUT(
           icon,
           imageUrl,
           isActive,
+          isBundle,
         })
         .where(eq(products.id, id))
         .returning();
 
-      // Hapus varian lama & masukkan varian baru
+      // Hapus bundleItems lama & masukkan bundleItems baru jika isBundle
+      await tx.delete(bundleItems).where(eq(bundleItems.bundleProductId, id));
+      if (isBundle && rawBundleItems.length > 0) {
+        await tx.insert(bundleItems).values(
+          rawBundleItems.map((b) => ({
+            bundleProductId: id,
+            subProductId: Number(b.productId),
+            qty: Math.max(1, Number(b.qty) || 1),
+          }))
+        );
+      }
+
+      // Hapus varian lama & masukkan varian baru jika bukan bundle
       await tx.delete(variants).where(eq(variants.productId, id));
 
       const variantMap = new Map<string, number>();
-      if (rawVariants.length > 0) {
+      if (!isBundle && rawVariants.length > 0) {
         const createdVariants = await tx
           .insert(variants)
           .values(
@@ -243,10 +289,10 @@ export async function PUT(
         }
       }
 
-      // Hapus resep lama & masukkan resep baru
+      // Hapus resep lama & masukkan resep baru jika bukan bundle
       await tx.delete(recipeItems).where(eq(recipeItems.productId, id));
 
-      if (rawRecipe.length > 0) {
+      if (!isBundle && rawRecipe.length > 0) {
         const recipeInserts = rawRecipe.map((r) => {
           let targetVariantId: number | null = null;
           if (r.variantName) {
@@ -318,8 +364,10 @@ export async function DELETE(
       });
     }
 
-    // Jika produk baru atau belum pernah dipesan, hapus resep, varian, dan produk secara permanen
+    // Jika produk baru atau belum pernah dipesan, hapus resep, varian, bundleItems, dan produk secara permanen
     await db.transaction(async (tx) => {
+      await tx.delete(bundleItems).where(eq(bundleItems.bundleProductId, id));
+      await tx.delete(bundleItems).where(eq(bundleItems.subProductId, id));
       await tx.delete(recipeItems).where(eq(recipeItems.productId, id));
       await tx.delete(variants).where(eq(variants.productId, id));
       await tx.delete(products).where(eq(products.id, id));

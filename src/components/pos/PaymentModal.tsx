@@ -3,25 +3,39 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Banknote, QrCode, CreditCard, X, Loader2, Check, CheckCircle2,
-  Printer, CloudOff, ArrowRight, Plus, Sparkles,
+  Banknote,
+  QrCode,
+  CreditCard,
+  Building2,
+  Copy,
+  Check,
+  CheckCircle2,
+  X,
+  Loader2,
+  Printer,
+  CloudOff,
+  ArrowRight,
+  Plus,
+  Sparkles,
 } from "lucide-react";
-import type { OrderReceipt } from "@/lib/types";
+import type { OrderReceipt, StoreSettingDto } from "@/lib/types";
 import { formatIDR, formatTime } from "@/lib/format";
 import ReceiptPrint from "./ReceiptPrint";
 
-type Method = "cash" | "qris" | "debit";
+export type Method = "cash" | "qris" | "debit" | "transfer";
 
 const METHODS: { id: Method; label: string; icon: typeof Banknote; desc: string }[] = [
   { id: "cash", label: "Tunai", icon: Banknote, desc: "Hitung kembalian otomatis" },
   { id: "qris", label: "QRIS", icon: QrCode, desc: "Scan & lunas instan" },
   { id: "debit", label: "Debit", icon: CreditCard, desc: "Gesek kartu EDC" },
+  { id: "transfer", label: "Transfer Bank", icon: Building2, desc: "BCA 1234-567-890" },
 ];
 
 export default function PaymentModal({
   open,
   total,
   offline,
+  storeSettings,
   onClose,
   onSubmit,
   onDone,
@@ -29,12 +43,15 @@ export default function PaymentModal({
   open: boolean;
   total: number;
   offline: boolean;
+  storeSettings?: StoreSettingDto | null;
   onClose: () => void;
-  onSubmit: (method: Method, tendered: number) => Promise<OrderReceipt | null>;
+  onSubmit: (method: Method, tendered: number, paymentReference?: string) => Promise<OrderReceipt | null>;
   onDone: () => void;
 }) {
   const [method, setMethod] = useState<Method>("cash");
   const [tendered, setTendered] = useState<number>(total);
+  const [paymentReference, setPaymentReference] = useState("");
+  const [copied, setCopied] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<OrderReceipt | null>(null);
@@ -46,6 +63,8 @@ export default function PaymentModal({
     if (open && !prevOpenRef.current) {
       setMethod("cash");
       setTendered(total);
+      setPaymentReference("");
+      setCopied(false);
       setIsLoading(false);
       setIsSuccess(false);
       setCompletedOrder(null);
@@ -53,10 +72,27 @@ export default function PaymentModal({
     prevOpenRef.current = open;
   }, [open, total]);
 
+  // Auto-print saat transaksi berhasil jika autoPrintReceipt aktif
+  useEffect(() => {
+    if (isSuccess && completedOrder) {
+      const autoPrint =
+        completedOrder.storeSettings?.autoPrintReceipt ??
+        storeSettings?.autoPrintReceipt ??
+        true;
+      if (autoPrint) {
+        const timer = setTimeout(() => {
+          window.print();
+        }, 350);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isSuccess, completedOrder, storeSettings]);
+
   // Tombol "Pesanan Baru": Mengosongkan keranjang belanja dan menutup modal
   const handleNewOrder = () => {
     setIsSuccess(false);
     setCompletedOrder(null);
+    setPaymentReference("");
     onDone(); // Kosongkan keranjang (setLines([]))
     onClose(); // Tutup modal
   };
@@ -67,6 +103,19 @@ export default function PaymentModal({
       onDone(); // Jika sudah sukses, tutup modal sekaligus kosongkan keranjang
     }
     onClose();
+  };
+
+  // Salin no rekening ke clipboard
+  const handleCopyAccount = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText("1234567890");
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      /* abaikan bila izin clipboard tidak tersedia */
+    }
   };
 
   // Keyboard shortcut: Enter = Pesanan Baru (saat sukses), P = Cetak Struk
@@ -97,7 +146,11 @@ export default function PaymentModal({
 
   const handleConfirm = async () => {
     setIsLoading(true);
-    const result = await onSubmit(method, method === "cash" ? tendered : total);
+    const result = await onSubmit(
+      method,
+      method === "cash" ? tendered : total,
+      method === "transfer" ? paymentReference.trim() : undefined
+    );
     if (result) {
       // Simpan data transaksi dan aktifkan modal Transaksi Berhasil
       setCompletedOrder(result);
@@ -159,7 +212,7 @@ export default function PaymentModal({
                 </div>
 
                 <div className="p-6 space-y-5">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {METHODS.map((m) => {
                       const active = method === m.id;
                       return (
@@ -167,18 +220,21 @@ export default function PaymentModal({
                           key={m.id}
                           type="button"
                           onClick={() => setMethod(m.id)}
-                          className={`btn-press rounded-2xl border p-3.5 text-left transition-colors ${
+                          className={`btn-press rounded-2xl border p-3 text-left transition-colors ${
                             active ? "border-brand bg-brand/12" : "border-line bg-coal hover:border-line-2"
                           }`}
                         >
                           <m.icon className={`size-5 mb-2 ${active ? "text-brand" : "text-sand"}`} />
-                          <p className={`text-[13px] font-bold ${active ? "text-brand" : "text-cream"}`}>{m.label}</p>
-                          <p className="text-[10px] text-faint mt-0.5 leading-tight">{m.desc}</p>
+                          <p className={`text-[13px] font-bold leading-tight ${active ? "text-brand" : "text-cream"}`}>
+                            {m.label}
+                          </p>
+                          <p className="text-[10px] text-faint mt-0.5 leading-tight truncate">{m.desc}</p>
                         </button>
                       );
                     })}
                   </div>
 
+                  {/* Cash / Tunai Panel */}
                   {method === "cash" && (
                     <div className="rounded-2xl border border-line bg-coal p-4 space-y-3.5">
                       <div className="flex flex-wrap gap-2">
@@ -221,6 +277,7 @@ export default function PaymentModal({
                     </div>
                   )}
 
+                  {/* QRIS Panel */}
                   {method === "qris" && (
                     <div className="rounded-2xl border border-line bg-coal p-4 flex items-center gap-4">
                       <div className="grid size-24 shrink-0 place-items-center rounded-xl bg-cream p-2">
@@ -235,6 +292,7 @@ export default function PaymentModal({
                     </div>
                   )}
 
+                  {/* Debit Panel */}
                   {method === "debit" && (
                     <div className="rounded-2xl border border-line bg-coal p-4 flex items-center gap-4">
                       <div className="grid size-14 shrink-0 place-items-center rounded-xl border border-line-2 bg-panel text-brand">
@@ -243,6 +301,53 @@ export default function PaymentModal({
                       <div>
                         <p className="text-sm font-semibold text-cream">Gesek / tap kartu di EDC</p>
                         <p className="text-xs text-faint mt-1">Nominal {formatIDR(total)} dikirim ke mesin EDC.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Transfer Bank Panel */}
+                  {method === "transfer" && (
+                    <div className="rounded-2xl border border-line bg-coal p-4 space-y-3.5">
+                      <div className="flex items-start justify-between gap-3 rounded-xl border border-line-2 bg-panel p-3.5">
+                        <div className="space-y-0.5">
+                          <span className="inline-block rounded-md bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-400 mb-1">
+                            Bank BCA
+                          </span>
+                          <p className="font-display text-base font-extrabold tracking-wider tabular text-cream">
+                            1234-567-890
+                          </p>
+                          <p className="text-[11px] text-faint">a/n BREWMETRICS Specialty Coffee</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyAccount}
+                          className="btn-press flex items-center gap-1.5 rounded-xl border border-line bg-coal px-3 py-2 text-xs font-semibold text-sand hover:text-cream hover:border-brand/40 shrink-0"
+                        >
+                          {copied ? (
+                            <>
+                              <Check className="size-3.5 text-emerald-400" />
+                              <span className="text-emerald-400">Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="size-3.5" />
+                              <span>Salin Rekening</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-faint block mb-1.5">
+                          Nomor Referensi / Catatan Pengirim (Opsional)
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentReference}
+                          onChange={(e) => setPaymentReference(e.target.value)}
+                          placeholder="Contoh: Ref# 8849 / Bpk Rudi"
+                          className="w-full rounded-xl border border-line bg-panel px-3.5 py-2.5 text-xs text-cream outline-none focus:border-brand/60 placeholder:text-faint/60"
+                        />
                       </div>
                     </div>
                   )}
@@ -301,7 +406,9 @@ export default function PaymentModal({
                       ? "Tunai"
                       : completedOrder?.paymentMethod === "qris"
                         ? "QRIS"
-                        : "Debit"}
+                        : completedOrder?.paymentMethod === "transfer"
+                          ? "Transfer Bank"
+                          : "Debit"}
                   </span>
                 </p>
 
@@ -324,20 +431,47 @@ export default function PaymentModal({
 
                   <div className="space-y-1.5 text-faint">
                     <div className="flex justify-between">
+                      <span>Pelanggan</span>
+                      <span className="font-semibold text-cream">
+                        {completedOrder?.customerName ?? "Umum"}{" "}
+                        <span className="text-[10px] text-faint font-normal uppercase">
+                          ({completedOrder?.orderType === "take-away" ? "Take Away" : "Dine In"}
+                          {completedOrder?.tableNumber ? ` • Meja ${completedOrder.tableNumber}` : ""})
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
                       <span>Metode Pembayaran</span>
                       <span className="font-semibold text-sand uppercase">
                         {completedOrder?.paymentMethod === "cash"
                           ? "Tunai"
                           : completedOrder?.paymentMethod === "qris"
                             ? "QRIS"
-                            : "Debit"}
+                            : completedOrder?.paymentMethod === "transfer"
+                              ? "Transfer Bank"
+                              : "Debit"}
                       </span>
                     </div>
+
+                    {completedOrder?.paymentReference && (
+                      <div className="flex justify-between text-sky-400/90">
+                        <span>Ref / Pengirim</span>
+                        <span className="font-medium truncate max-w-[180px]">{completedOrder.paymentReference}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between">
                       <span>Total Menu ({completedOrder?.itemCount ?? 0} item)</span>
                       <span className="tabular text-sand">{formatIDR(completedOrder?.subtotal ?? total)}</span>
                     </div>
+
+                    {(completedOrder?.discountAmount ?? 0) > 0 && (
+                      <div className="flex justify-between text-amber-400">
+                        <span>Diskon Transaksi</span>
+                        <span className="tabular font-medium">- {formatIDR(completedOrder?.discountAmount ?? 0)}</span>
+                      </div>
+                    )}
 
                     {(completedOrder?.serviceCharge ?? 0) > 0 && (
                       <div className="flex justify-between">
@@ -392,7 +526,9 @@ export default function PaymentModal({
                 </div>
 
                 {/* Elemen cetak thermal struk lunas (Hanya muncul pada window.print()) */}
-                {completedOrder && <ReceiptPrint receipt={completedOrder} />}
+                {completedOrder && (
+                  <ReceiptPrint receipt={completedOrder} storeSettings={storeSettings} />
+                )}
               </div>
             )}
           </motion.div>

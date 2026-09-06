@@ -46,6 +46,7 @@ export const products = pgTable(
     color: text("color").notNull().default("#F59E0B"),
     icon: text("icon").notNull().default("Coffee"),
     imageUrl: text("image_url").default(""),
+    isBundle: boolean("is_bundle").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [index("products_category_idx").on(t.categoryId)]
@@ -99,6 +100,21 @@ export const recipeItems = pgTable(
   (t) => [index("recipe_product_idx").on(t.productId)]
 );
 
+export const bundleItems = pgTable(
+  "bundle_items",
+  {
+    id: serial("id").primaryKey(),
+    bundleProductId: integer("bundle_product_id")
+      .notNull()
+      .references(() => products.id),
+    subProductId: integer("sub_product_id")
+      .notNull()
+      .references(() => products.id),
+    qty: integer("qty").notNull().default(1),
+  },
+  (t) => [index("bundle_items_bundle_idx").on(t.bundleProductId)]
+);
+
 export const modifierIngredients = pgTable("modifier_ingredients", {
   id: serial("id").primaryKey(),
   modifierId: integer("modifier_id")
@@ -110,6 +126,26 @@ export const modifierIngredients = pgTable("modifier_ingredients", {
   qty: doublePrecision("qty").notNull(),
 });
 
+/* -------------------------------- CUSTOMERS -------------------------------- */
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    totalOrders: integer("total_orders").notNull().default(0),
+    totalSpend: integer("total_spend").notNull().default(0),
+    lastVisitAt: timestamp("last_visit_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customers_phone_idx").on(t.phone),
+    index("customers_orders_idx").on(t.totalOrders),
+    index("customers_spend_idx").on(t.totalSpend),
+  ]
+);
+
 /* ---------------------------------- ORDERS --------------------------------- */
 
 export const orders = pgTable(
@@ -120,10 +156,21 @@ export const orders = pgTable(
     offlineId: text("offline_id"), // idempotency key for offline-synced orders
     cashierId: integer("cashier_id").references(() => users.id),
     cashierName: text("cashier_name").notNull().default(""),
+    customerId: integer("customer_id").references(() => customers.id),
+    customerPhone: text("customer_phone").default(""),
     status: text("status", { enum: ["paid", "void"] }).notNull().default("paid"),
-    paymentMethod: text("payment_method", { enum: ["cash", "qris", "debit"] })
+    paymentMethod: text("payment_method", { enum: ["cash", "qris", "debit", "transfer"] })
       .notNull()
       .default("cash"),
+    customerName: text("customer_name").notNull().default("Umum"),
+    orderType: text("order_type", { enum: ["dine-in", "take-away"] })
+      .notNull()
+      .default("dine-in"),
+    tableNumber: text("table_number").default(""),
+    discountType: text("discount_type", { enum: ["percentage", "fixed"] }),
+    discountValue: integer("discount_value").notNull().default(0),
+    discountAmount: integer("discount_amount").notNull().default(0),
+    paymentReference: text("payment_reference").default(""),
     subtotal: integer("subtotal").notNull().default(0),
     tax: integer("tax").notNull().default(0),
     serviceCharge: integer("service_charge").notNull().default(0),
@@ -213,6 +260,10 @@ export const storeSettings = pgTable("store_settings", {
   phone: text("phone").notNull().default("0812-4455-6677"),
   taxPercentage: doublePrecision("tax_percentage").notNull().default(10), // Pajak PB1/Restoran (e.g. 10%)
   serviceChargePercentage: doublePrecision("service_charge_percentage").notNull().default(0), // Service Charge (e.g. 0%)
+  printerPaperSize: text("printer_paper_size", { enum: ["58mm", "80mm"] })
+    .notNull()
+    .default("58mm"),
+  autoPrintReceipt: boolean("auto_print_receipt").notNull().default(true),
   receiptFooterMessage: text("receipt_footer_message")
     .notNull()
     .default("Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"),
@@ -283,10 +334,31 @@ export const modifierIngredientsRelations = relations(modifierIngredients, ({ on
   }),
 }));
 
+export const customersRelations = relations(customers, ({ many }) => ({
+  orders: many(orders),
+}));
+
+export const bundleItemsRelations = relations(bundleItems, ({ one }) => ({
+  bundleProduct: one(products, {
+    fields: [bundleItems.bundleProductId],
+    references: [products.id],
+    relationName: "bundle_parent",
+  }),
+  subProduct: one(products, {
+    fields: [bundleItems.subProductId],
+    references: [products.id],
+    relationName: "bundle_sub",
+  }),
+}));
+
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   cashier: one(users, {
     fields: [orders.cashierId],
     references: [users.id],
+  }),
+  customer: one(customers, {
+    fields: [orders.customerId],
+    references: [customers.id],
   }),
   items: many(orderItems),
 }));
@@ -318,7 +390,9 @@ export type Variant = typeof variants.$inferSelect;
 export type Modifier = typeof modifiers.$inferSelect;
 export type Ingredient = typeof ingredients.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
+export type BundleItem = typeof bundleItems.$inferSelect;
 export type ModifierIngredient = typeof modifierIngredients.$inferSelect;
+export type Customer = typeof customers.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type CashMovement = typeof cashMovements.$inferSelect;

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Search, LayoutGrid } from "lucide-react";
+import { Search, LayoutGrid, History, Sparkles } from "lucide-react";
 import type { CatalogDto } from "@/lib/types";
 import { formatIDR } from "@/lib/format";
 import { productIcon, categoryIcon } from "./icons";
@@ -12,9 +12,11 @@ type Product = CatalogDto["products"][number];
 export default function CatalogPane({
   catalog,
   onPick,
+  onOpenHistory,
 }: {
   catalog: CatalogDto;
   onPick: (product: Product) => void;
+  onOpenHistory?: () => void;
 }) {
   const [activeCat, setActiveCat] = useState<number | "all">("all");
   const [query, setQuery] = useState("");
@@ -56,7 +58,7 @@ export default function CatalogPane({
 
       {/* ---------------------------- PRODUCT GRID ---------------------------- */}
       <section className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="px-3 sm:px-4 lg:px-5 pt-3 md:pt-4 pb-2.5 md:pb-3 flex items-center gap-2 sm:gap-3">
+        <div className="px-3 sm:px-4 lg:px-5 pt-3 md:pt-4 pb-2.5 md:pb-3 flex items-center justify-between gap-2 sm:gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-faint" />
             <input
@@ -66,9 +68,24 @@ export default function CatalogPane({
               className="w-full rounded-xl border border-line bg-panel py-2 pl-9 pr-3.5 text-xs sm:text-sm text-cream placeholder:text-faint outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/15 transition"
             />
           </div>
-          <p className="text-xs text-faint hidden sm:block">
-            <span className="font-display font-semibold text-sand tabular">{filtered.length}</span> menu aktif
-          </p>
+
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-faint hidden lg:block">
+              <span className="font-display font-semibold text-sand tabular">{filtered.length}</span> menu aktif
+            </p>
+
+            {onOpenHistory && (
+              <button
+                type="button"
+                onClick={onOpenHistory}
+                className="btn-press flex items-center gap-1.5 rounded-xl border border-line bg-panel px-3 py-2 text-xs font-bold text-sand hover:text-cream hover:border-brand/40 hover:bg-coal transition shrink-0"
+                title="Lihat riwayat pesanan hari ini"
+              >
+                <History className="size-4 text-brand" />
+                <span className="hidden sm:inline">Riwayat Pesanan</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* pb-28 pada layar HP agar produk paling bawah tidak tertutup Bottom Bar struk */}
@@ -90,6 +107,13 @@ export default function CatalogPane({
                     className="absolute -right-6 -top-8 size-28 rounded-full blur-2xl opacity-[0.13] transition-opacity group-hover:opacity-30"
                     style={{ backgroundColor: p.color }}
                   />
+
+                  {p.isBundle && (
+                    <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.5 text-[8.5px] font-extrabold text-brand uppercase tracking-wider">
+                      <Sparkles className="size-2.5" />
+                      <span>Paket</span>
+                    </span>
+                  )}
                   {p.imageUrl ? (
                     <div className="mb-2 sm:mb-3 size-10 sm:size-12 rounded-xl overflow-hidden border border-line-2/60 relative shrink-0 bg-coal">
                       <img

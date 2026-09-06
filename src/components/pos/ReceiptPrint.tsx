@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { CartLine } from "@/lib/cart";
-import type { OrderReceipt, StoreSettingDto } from "@/lib/types";
+import type { OrderReceipt, StoreSettingDto, OrderType, DiscountType } from "@/lib/types";
 import { formatIDR } from "@/lib/format";
 
 export interface ReceiptPrintProps {
@@ -12,13 +12,21 @@ export interface ReceiptPrintProps {
   lines?: CartLine[];
   receipt?: OrderReceipt | null;
   storeSettings?: StoreSettingDto | null;
+  customerName?: string;
+  customerPhone?: string;
+  orderType?: OrderType;
+  tableNumber?: string;
   subtotal?: number;
+  discountType?: DiscountType;
+  discountValue?: number;
+  discountAmount?: number;
   serviceCharge?: number;
   tax?: number;
   total?: number;
   paymentMethod?: string;
   tendered?: number;
   change?: number;
+  paymentReference?: string;
 }
 
 export default function ReceiptPrint({
@@ -28,13 +36,21 @@ export default function ReceiptPrint({
   lines = [],
   receipt,
   storeSettings,
+  customerName = "Umum",
+  customerPhone = "",
+  orderType = "dine-in",
+  tableNumber = "",
   subtotal,
+  discountType,
+  discountValue,
+  discountAmount,
   serviceCharge,
   tax,
   total,
   paymentMethod,
   tendered,
   change,
+  paymentReference,
 }: ReceiptPrintProps) {
   // Jika ada data receipt resmi dari transaksi tersimpan, prioritaskan data tersebut
   const isFinalReceipt = Boolean(receipt);
@@ -44,6 +60,8 @@ export default function ReceiptPrint({
   const cafeName = settings?.cafeName ?? "BREWMETRICS Specialty Coffee";
   const address = settings?.address ?? "Jl. Pengayoman No. 12, Panakkukang, Makassar";
   const phone = settings?.phone ?? "0812-3456-7890";
+  const paperSize = settings?.printerPaperSize ?? "58mm";
+  const is58mm = paperSize === "58mm";
   const taxPct = settings?.taxPercentage ?? 10;
   const servicePct = settings?.serviceChargePercentage ?? 0;
   const footerMessage =
@@ -56,6 +74,10 @@ export default function ReceiptPrint({
     `DRAFT-${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`;
 
   const displayCashier = receipt?.cashierName ?? cashierName;
+  const displayCustomer = receipt?.customerName ?? customerName;
+  const displayCustomerPhone = receipt?.customerPhone ?? customerPhone;
+  const displayOrderType = receipt?.orderType ?? orderType;
+  const displayTable = receipt?.tableNumber ?? tableNumber;
 
   const displayDate = receipt
     ? new Date(receipt.createdAt)
@@ -96,63 +118,112 @@ export default function ReceiptPrint({
 
   const calculatedSubtotal = displayItems.reduce((s, it) => s + it.totalPrice, 0);
   const displaySubtotal = receipt?.subtotal ?? subtotal ?? calculatedSubtotal;
+  const displayDiscount = receipt?.discountAmount ?? discountAmount ?? 0;
+  const subtotalAfterDiscount = Math.max(0, displaySubtotal - displayDiscount);
+
   const displayServiceCharge =
     receipt?.serviceCharge ??
     serviceCharge ??
-    Math.round((displaySubtotal * Math.max(0, servicePct)) / 100);
+    Math.round((subtotalAfterDiscount * Math.max(0, servicePct)) / 100);
+
   const displayTax =
     receipt?.tax ??
     tax ??
-    Math.round(((displaySubtotal + displayServiceCharge) * Math.max(0, taxPct)) / 100);
+    Math.round(((subtotalAfterDiscount + displayServiceCharge) * Math.max(0, taxPct)) / 100);
+
   const displayTotal =
     receipt?.total ??
     total ??
-    (displaySubtotal + displayServiceCharge + displayTax);
+    (subtotalAfterDiscount + displayServiceCharge + displayTax);
 
   const totalItemCount = displayItems.reduce((s, it) => s + it.qty, 0);
 
   const method = receipt?.paymentMethod ?? paymentMethod ?? (isFinalReceipt ? "cash" : null);
   const displayTendered = receipt?.tendered ?? tendered;
   const displayChange = receipt?.change ?? change;
+  const displayRef = receipt?.paymentReference ?? paymentReference;
 
   return (
-    <div
-      id="thermal-receipt"
-      className="thermal-receipt hidden print:block text-black bg-white font-mono text-[11px] leading-tight w-[72mm] max-w-full p-2 mx-auto"
-      style={{
-        color: "#000000",
-        backgroundColor: "#ffffff",
-        fontFamily: "'Courier New', Courier, monospace",
-      }}
-    >
-      {/* --------------------------- HEADER TOKO --------------------------- */}
-      <div className="text-center pb-2">
-        <h1 className="text-[14px] font-black tracking-wider uppercase leading-tight">{cafeName}</h1>
-        <p className="text-[9.5px] mt-1 text-gray-700 leading-tight">{address}</p>
-        <p className="text-[9px] text-gray-700 mt-0.5">Telp: {phone}</p>
-      </div>
-
-      <div className="border-b border-dashed border-black my-1" />
-
-      {/* ------------------------- METADATA STRUK ------------------------- */}
-      <div className="text-[9.5px] space-y-0.5 py-1">
-        <div className="flex justify-between">
-          <span>No. Struk:</span>
-          <span className="font-bold">{displayOrderNumber}</span>
+    <>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: ${is58mm ? "58mm" : "80mm"} auto;
+                margin: 0mm !important;
+              }
+            }
+          `,
+        }}
+      />
+      <div
+        id="thermal-receipt"
+        className={`thermal-receipt hidden print:block text-black bg-white font-mono leading-tight mx-auto ${
+          is58mm
+            ? "thermal-receipt-58mm w-[48mm] max-w-[200px] text-[9.5px] p-1"
+            : "thermal-receipt-80mm w-[72mm] max-w-[300px] text-[11px] p-2"
+        }`}
+        style={{
+          color: "#000000",
+          backgroundColor: "#ffffff",
+          fontFamily: "'Courier New', Courier, monospace",
+        }}
+      >
+        {/* --------------------------- HEADER TOKO --------------------------- */}
+        <div className="text-center pb-1.5">
+          <h1
+            className={`font-black tracking-wider uppercase leading-tight ${
+              is58mm ? "text-[12px]" : "text-[14px]"
+            }`}
+          >
+            {cafeName}
+          </h1>
+          <p className="text-[9px] mt-1 text-gray-700 leading-tight">{address}</p>
+          <p className="text-[8.5px] text-gray-700 mt-0.5">Telp: {phone}</p>
+          <div className="inline-block mt-1 px-1.5 py-0.2 bg-gray-100 rounded text-[7.5px] text-gray-500 font-sans">
+            Ukuran Kertas: {paperSize}
+          </div>
         </div>
-        <div className="flex justify-between">
-          <span>Waktu:</span>
-          <span>
-            {formattedDate} {formattedTime}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span>Kasir:</span>
-          <span className="capitalize">{displayCashier}</span>
-        </div>
-      </div>
 
-      <div className="border-b border-dashed border-black my-1" />
+        <div className="border-b border-dashed border-black my-1" />
+
+        {/* ------------------------- METADATA STRUK ------------------------- */}
+        <div className="text-[9px] space-y-0.5 py-1">
+          <div className="flex justify-between">
+            <span>No. Struk:</span>
+            <span className="font-bold">{displayOrderNumber}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Waktu:</span>
+            <span>
+              {formattedDate} {formattedTime}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Kasir:</span>
+            <span className="capitalize">{displayCashier}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Pelanggan:</span>
+            <span className="font-bold">{displayCustomer}</span>
+          </div>
+          {displayCustomerPhone && (
+            <div className="flex justify-between">
+              <span>No. HP:</span>
+              <span>{displayCustomerPhone}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span>Tipe / Meja:</span>
+            <span className="uppercase font-bold">
+              {displayOrderType === "take-away" ? "Take Away" : "Dine In"}
+              {displayTable ? ` (Meja ${displayTable})` : ""}
+            </span>
+          </div>
+        </div>
+
+        <div className="border-b border-dashed border-black my-1" />
 
       {/* ------------------------- DAFTAR PESANAN ------------------------- */}
       <div className="py-1 space-y-1.5">
@@ -199,6 +270,19 @@ export default function ReceiptPrint({
           <span>{formatIDR(displaySubtotal)}</span>
         </div>
 
+        {displayDiscount > 0 && (
+          <>
+            <div className="flex justify-between text-gray-800">
+              <span>Diskon:</span>
+              <span>- {formatIDR(displayDiscount)}</span>
+            </div>
+            <div className="flex justify-between text-gray-800 font-medium">
+              <span>Subtotal Stlh Diskon:</span>
+              <span>{formatIDR(subtotalAfterDiscount)}</span>
+            </div>
+          </>
+        )}
+
         {displayServiceCharge > 0 && (
           <div className="flex justify-between text-gray-800">
             <span>Biaya Layanan ({servicePct}%):</span>
@@ -222,8 +306,22 @@ export default function ReceiptPrint({
           <>
             <div className="flex justify-between pt-1">
               <span>Metode Bayar:</span>
-              <span className="uppercase font-bold">{method}</span>
+              <span className="uppercase font-bold">
+                {method === "cash"
+                  ? "Tunai"
+                  : method === "qris"
+                    ? "QRIS"
+                    : method === "transfer"
+                      ? "Transfer Bank"
+                      : "Debit"}
+              </span>
             </div>
+            {method === "transfer" && displayRef && (
+              <div className="flex justify-between text-gray-700">
+                <span>Ref / Pengirim:</span>
+                <span className="font-bold">{displayRef}</span>
+              </div>
+            )}
             {method === "cash" && displayTendered !== undefined && (
               <>
                 <div className="flex justify-between">
@@ -259,5 +357,6 @@ export default function ReceiptPrint({
         </p>
       </div>
     </div>
+    </>
   );
 }

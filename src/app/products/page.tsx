@@ -150,8 +150,10 @@ export default function ProductsPage() {
           icon: formData.icon,
           imageUrl: formData.imageUrl ?? "",
           isActive: formData.isActive,
+          isBundle: formData.isBundle ?? false,
+          bundleItems: formData.bundleItems,
           variants: formData.variants,
-          recipe: formData.recipe.map((r) => ({
+          recipe: (formData.recipe || []).map((r) => ({
             ingredientId: r.ingredientId,
             qty: r.qty,
             variantName: r.variantName ?? null,
@@ -499,10 +501,18 @@ export default function ProductsPage() {
                               </div>
                             )}
                             <div className="min-w-0">
-                              <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-faint">
-                                {categoryName}
-                              </span>
-                              <h3 className="font-display text-base font-bold text-cream truncate leading-tight">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-faint">
+                                  {categoryName}
+                                </span>
+                                {p.isBundle && (
+                                  <span className="inline-flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.2 text-[8.5px] font-extrabold text-brand uppercase tracking-wider">
+                                    <Sparkles className="size-2.5" />
+                                    <span>Paket Bundling</span>
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="font-display text-base font-bold text-cream truncate leading-tight mt-0.5">
                                 {p.name}
                               </h3>
                               <p className="text-[11px] text-sand/80 truncate mt-0.5">
@@ -523,7 +533,7 @@ export default function ProductsPage() {
                         <div className="rounded-2xl border border-line bg-coal p-3 my-3">
                           <div className="flex items-center justify-between text-xs">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-faint">HPP Bahan:</span>
+                              <span className="text-faint">{p.isBundle ? "HPP Modal:" : "HPP Bahan:"}</span>
                               <span className="font-display font-bold tabular text-sand">
                                 {formatIDR(hpp)}
                               </span>
@@ -544,13 +554,28 @@ export default function ProductsPage() {
                             </div>
                           </div>
 
-                          {/* Detail Ringkas Resep Bahan */}
+                          {/* Detail Ringkas Resep Bahan atau Isi Paket */}
                           <div className="mt-2.5 pt-2 border-t border-line/50 text-[10.5px] text-faint">
-                            <span className="font-bold text-sand">BOM ({p.recipe.length} bahan):</span>{" "}
-                            {p.recipe.length > 0 ? (
-                              p.recipe.map((r) => `${r.ingredientName} (${formatQty(r.qty, r.unit)})`).join(", ")
+                            {p.isBundle ? (
+                              <>
+                                <span className="font-bold text-sand">
+                                  Isi Paket ({p.bundleItems?.length ?? 0} menu):
+                                </span>{" "}
+                                {p.bundleItems && p.bundleItems.length > 0 ? (
+                                  p.bundleItems.map((b) => `${b.qty}x ${b.productName || "Menu"}`).join(", ")
+                                ) : (
+                                  <span className="text-red-400 italic">Belum ada item penyusun</span>
+                                )}
+                              </>
                             ) : (
-                              <span className="text-red-400 italic">Belum ada resep bahan baku</span>
+                              <>
+                                <span className="font-bold text-sand">BOM ({p.recipe.length} bahan):</span>{" "}
+                                {p.recipe.length > 0 ? (
+                                  p.recipe.map((r) => `${r.ingredientName} (${formatQty(r.qty, r.unit)})`).join(", ")
+                                ) : (
+                                  <span className="text-red-400 italic">Belum ada resep bahan baku</span>
+                                )}
+                              </>
                             )}
                           </div>
 
@@ -931,6 +956,12 @@ export default function ProductsPage() {
         initialData={productModal.data}
         categories={categories}
         ingredients={ingredients}
+        allProducts={products.map((p) => ({
+          id: p.id ?? 0,
+          name: p.name,
+          price: p.price,
+          hpp: p.hpp ?? 0,
+        }))}
         onClose={() => setProductModal({ open: false })}
         onSave={handleSaveProduct}
         onDelete={handleDeleteProduct}

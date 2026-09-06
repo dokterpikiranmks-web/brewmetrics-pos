@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db";
-import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings } from "@/db/schema";
+import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings, customers } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { buildRecipeIndex, hppPerUnit, mergeUsage, usageForLine } from "./recipes";
 import type { CreateOrderPayload, OrderReceipt, SessionUser } from "./types";
@@ -29,8 +29,8 @@ export async function nextOrderNumber(tx: Pick<typeof db, "execute">): Promise<s
   return `BM-${ymd}-${String(seq).padStart(3, "0")}`;
 }
 
-export async function getReceiptByOfflineId(offlineId: string): Promise<OrderReceipt | null> {
-  const found = await db.query.orders.findFirst({ where: eq(orders.offlineId, offlineId) });
+export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt | null> {
+  const found = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!found) return null;
   const [items, settingsRow] = await Promise.all([
     db.select().from(orderItems).where(eq(orderItems.orderId, found.id)),
@@ -39,7 +39,16 @@ export async function getReceiptByOfflineId(offlineId: string): Promise<OrderRec
   return {
     id: found.id,
     orderNumber: found.orderNumber,
-    paymentMethod: found.paymentMethod as "cash" | "qris" | "debit",
+    paymentMethod: found.paymentMethod as any,
+    customerId: found.customerId ?? null,
+    customerName: found.customerName ?? "Umum",
+    customerPhone: found.customerPhone ?? "",
+    orderType: (found.orderType as any) ?? "dine-in",
+    tableNumber: found.tableNumber ?? "",
+    discountType: (found.discountType as any) ?? null,
+    discountValue: found.discountValue ?? 0,
+    discountAmount: found.discountAmount ?? 0,
+    paymentReference: found.paymentReference ?? "",
     subtotal: found.subtotal,
     tax: found.tax ?? 0,
     serviceCharge: found.serviceCharge ?? 0,
@@ -57,7 +66,7 @@ export async function getReceiptByOfflineId(offlineId: string): Promise<OrderRec
       qty: i.qty,
       unitPrice: i.unitPrice,
       totalPrice: i.totalPrice,
-      modifiers: i.modifiers as { name: string; price: number }[],
+      modifiers: (i.modifiers as { name: string; price: number }[]) ?? [],
     })),
     storeSettings: settingsRow
       ? {
@@ -68,11 +77,20 @@ export async function getReceiptByOfflineId(offlineId: string): Promise<OrderRec
           phone: settingsRow.phone,
           taxPercentage: settingsRow.taxPercentage,
           serviceChargePercentage: settingsRow.serviceChargePercentage,
+          printerPaperSize: (settingsRow.printerPaperSize as "58mm" | "80mm") ?? "58mm",
+          autoPrintReceipt: settingsRow.autoPrintReceipt ?? true,
           receiptFooterMessage: settingsRow.receiptFooterMessage,
         }
       : null,
   };
 }
+
+export async function getReceiptByOfflineId(offlineId: string): Promise<OrderReceipt | null> {
+  const found = await db.query.orders.findFirst({ where: eq(orders.offlineId, offlineId) });
+  if (!found) return null;
+  return getOrderReceiptById(found.id);
+}
+
 
 /**
  * Buat order: validasi harga dari server, hitung HPP dari resep,
@@ -142,9 +160,20 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   });
 
   const subtotal = normalized.reduce((s, l) => s + l.totalPrice, 0);
-  const serviceCharge = Math.round((subtotal * Math.max(0, serviceChargePercentage)) / 100);
-  const tax = Math.round(((subtotal + serviceCharge) * Math.max(0, taxPercentage)) / 100);
-  const grandTotal = subtotal + serviceCharge + tax;
+
+  // Kalkulasi Diskon Transaksi
+  let discountAmount = 0;
+  if (payload.discountType === "percentage") {
+    const pct = Math.max(0, Math.min(100, Math.floor(payload.discountValue ?? 0)));
+    discountAmount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
+  } else if (payload.discountType === "fixed") {
+    discountAmount = Math.min(subtotal, Math.max(0, Math.floor(payload.discountValue ?? 0)));
+  }
+
+  const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+  const serviceCharge = Math.round((subtotalAfterDiscount * Math.max(0, serviceChargePercentage)) / 100);
+  const tax = Math.round(((subtotalAfterDiscount + serviceCharge) * Math.max(0, taxPercentage)) / 100);
+  const grandTotal = subtotalAfterDiscount + serviceCharge + tax;
 
   const totalHpp = normalized.reduce((s, l) => s + l.hpp, 0);
   const itemCount = normalized.reduce((s, l) => s + l.qty, 0);
@@ -186,6 +215,39 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
       `);
     }
 
+    // Sinkronisasi Mini CRM Pelanggan
+    let customerId: number | null = null;
+    const phone = (payload.customerPhone ?? "").trim();
+    if (phone) {
+      const existingCustomer = await tx.query.customers.findFirst({
+        where: eq(customers.phone, phone),
+      });
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+        await tx
+          .update(customers)
+          .set({
+            name: (payload.customerName ?? "").trim() || existingCustomer.name,
+            totalOrders: sql`total_orders + 1`,
+            totalSpend: sql`total_spend + ${grandTotal}`,
+            lastVisitAt: new Date(),
+          })
+          .where(eq(customers.id, existingCustomer.id));
+      } else {
+        const [newCust] = await tx
+          .insert(customers)
+          .values({
+            name: (payload.customerName ?? "").trim() || "Pelanggan",
+            phone,
+            totalOrders: 1,
+            totalSpend: grandTotal,
+            lastVisitAt: new Date(),
+          })
+          .returning();
+        customerId = newCust.id;
+      }
+    }
+
     const orderNumber = await nextOrderNumber(tx);
     const [inserted] = await tx
       .insert(orders)
@@ -194,6 +256,15 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         offlineId: payload.offlineId ?? null,
         cashierId: user.id,
         cashierName: user.name,
+        customerId,
+        customerName: (payload.customerName ?? "").trim() || "Umum",
+        customerPhone: phone,
+        orderType: payload.orderType === "take-away" ? "take-away" : "dine-in",
+        tableNumber: (payload.tableNumber ?? "").trim(),
+        discountType: payload.discountType ?? null,
+        discountValue: payload.discountValue ?? 0,
+        discountAmount,
+        paymentReference: (payload.paymentReference ?? "").trim(),
         status: "paid",
         paymentMethod: payload.paymentMethod,
         subtotal,
@@ -201,7 +272,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         serviceCharge,
         total: grandTotal,
         hpp: totalHpp,
-        profit: subtotal - totalHpp,
+        profit: subtotalAfterDiscount - totalHpp,
         tendered,
         change,
         itemCount,
@@ -229,7 +300,16 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   return {
     id: receipt.id,
     orderNumber: receipt.orderNumber,
-    paymentMethod: receipt.paymentMethod as "cash" | "qris" | "debit",
+    paymentMethod: receipt.paymentMethod as any,
+    customerId: receipt.customerId ?? null,
+    customerName: receipt.customerName ?? "Umum",
+    customerPhone: receipt.customerPhone ?? "",
+    orderType: (receipt.orderType as any) ?? "dine-in",
+    tableNumber: receipt.tableNumber ?? "",
+    discountType: (receipt.discountType as any) ?? null,
+    discountValue: receipt.discountValue ?? 0,
+    discountAmount: receipt.discountAmount ?? 0,
+    paymentReference: receipt.paymentReference ?? "",
     subtotal: receipt.subtotal,
     tax: receipt.tax,
     serviceCharge: receipt.serviceCharge,
@@ -258,8 +338,74 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
           phone: settingsRow.phone,
           taxPercentage: settingsRow.taxPercentage,
           serviceChargePercentage: settingsRow.serviceChargePercentage,
+          printerPaperSize: (settingsRow.printerPaperSize as "58mm" | "80mm") ?? "58mm",
+          autoPrintReceipt: settingsRow.autoPrintReceipt ?? true,
           receiptFooterMessage: settingsRow.receiptFooterMessage,
         }
       : null,
   };
 }
+
+/**
+ * Void transaksi yang sudah tersimpan di database:
+ * - Wajib diotorisasi oleh Supervisor (Manager atau Owner)
+ * - Mengubah status order menjadi 'void'
+ * - Mengembalikan (refund) stok bahan baku yang telah terpotong ke tabel ingredients
+ */
+export async function voidOrder(
+  orderId: number,
+  supervisor: { id: number; name: string; role: string },
+  reason = ""
+): Promise<{ ok: boolean; orderNumber: string }> {
+  const target = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
+  if (!target) {
+    throw new OrderError("Pesanan tidak ditemukan.", 404, "ORDER_NOT_FOUND");
+  }
+  if (target.status === "void") {
+    throw new OrderError("Pesanan ini sudah dibatalkan sebelumnya.", 400, "ALREADY_VOID");
+  }
+
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, target.id));
+  const index = await buildRecipeIndex();
+
+  // Hitung balik total bahan baku yang digunakan untuk direfund
+  const totalRefund = new Map<number, number>();
+  const [allVariants, allModifiers] = await Promise.all([
+    db.select().from(variants),
+    db.select().from(modifiers),
+  ]);
+  const variantIdByName = new Map(allVariants.map((v) => [`${v.productId}:${v.name}`, v.id]));
+  const modifierIdByName = new Map(allModifiers.map((m) => [m.name, m.id]));
+
+  for (const it of items) {
+    if (!it.productId) continue;
+    const variantId = it.variantName
+      ? (variantIdByName.get(`${it.productId}:${it.variantName}`) ?? null)
+      : null;
+    const modifierIds = ((it.modifiers as { name: string; price: number }[]) ?? [])
+      .map((m) => modifierIdByName.get(m.name))
+      .filter((x): x is number => typeof x === "number");
+
+    mergeUsage(totalRefund, usageForLine({ productId: it.productId, variantId, qty: it.qty, modifierIds }, index));
+  }
+
+  await db.transaction(async (tx) => {
+    // Refund stok bahan baku
+    for (const [ingId, qty] of totalRefund) {
+      await tx.execute(sql`
+        UPDATE ingredients SET stock_qty = stock_qty + ${qty}, updated_at = now() WHERE id = ${ingId}
+      `);
+    }
+
+    // Update status order menjadi void
+    await tx
+      .update(orders)
+      .set({
+        status: "void",
+      })
+      .where(eq(orders.id, orderId));
+  });
+
+  return { ok: true, orderNumber: target.orderNumber };
+}
+

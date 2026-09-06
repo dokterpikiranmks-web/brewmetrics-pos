@@ -68,6 +68,17 @@ export default function LoginScreen() {
   );
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d: { user: SessionUser | null }) => {
+        if (d.user) {
+          router.replace(HOME_BY_ROLE[d.user.role]);
+        }
+      })
+      .catch(() => {});
+  }, [router]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (/^[0-9]$/.test(e.key)) pushDigit(e.key);
       if (e.key === "Backspace") setPin((p) => p.slice(0, -1));

@@ -1,29 +1,49 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { CloudOff, CloudUpload, RefreshCcw } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CatalogPane from "@/components/pos/CatalogPane";
 import VariantSheet, { type VariantSelection } from "@/components/pos/VariantSheet";
 import TicketPane from "@/components/pos/TicketPane";
-import PaymentModal from "@/components/pos/PaymentModal";
+import PaymentModal, { type Method } from "@/components/pos/PaymentModal";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
+import OrderHistoryModal from "@/components/pos/OrderHistoryModal";
 import VoidAuthModal, { type VoidRequest } from "@/components/pos/VoidAuthModal";
 import CloseShiftModal from "@/components/pos/CloseShiftModal";
 import CashMovementModal from "@/components/cash/CashMovementModal";
-import type { CatalogDto, OrderReceipt, SessionUser, TodayOrderDto, StoreSettingDto } from "@/lib/types";
+import type {
+  CatalogDto,
+  OrderReceipt,
+  SessionUser,
+  TodayOrderDto,
+  StoreSettingDto,
+  OrderType,
+  DiscountType,
+} from "@/lib/types";
 import { cartLineKey, cartTotal, calculateOrderTotals, toPayloadLines, type CartLine } from "@/lib/cart";
 import { enqueueOrder, flushQueue, newOfflineId, queueCount } from "@/lib/offline";
 
 export default function PosPage() {
+  const router = useRouter();
   const [catalog, setCatalog] = useState<CatalogDto | null>(null);
   const [me, setMe] = useState<SessionUser | null>(null);
   const [settings, setSettings] = useState<StoreSettingDto | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [sheet, setSheet] = useState<CatalogDto["products"][number] | null>(null);
+
+  // Metadata Transaksi Kasir & Pelanggan
+  const [customerName, setCustomerName] = useState("Umum");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [orderType, setOrderType] = useState<OrderType>("dine-in");
+  const [tableNumber, setTableNumber] = useState("");
+  const [discount, setDiscount] = useState<{ type: DiscountType; value: number } | null>(null);
+
   const [payOpen, setPayOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [cashMovementOpen, setCashMovementOpen] = useState(false);
   const [todayOrders, setTodayOrders] = useState<TodayOrderDto[]>([]);
@@ -51,10 +71,44 @@ export default function PosPage() {
     }
   }, []);
 
+  // Tangkap event buka riwayat pesanan dari navbar AppShell
+  useEffect(() => {
+    const handleOpenHistory = () => setOrderHistoryOpen(true);
+    window.addEventListener("bm-open-order-history", handleOpenHistory);
+
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("tab") === "history") {
+        setOrderHistoryOpen(true);
+      }
+    }
+
+    return () => {
+      window.removeEventListener("bm-open-order-history", handleOpenHistory);
+    };
+  }, []);
+
   useEffect(() => {
     setQueue(queueCount());
     setOnline(navigator.onLine);
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => setMe(d.user)).catch(() => {});
+
+    // Proteksi Rute: Halaman /pos HANYA boleh diakses oleh user role 'cashier'
+    // Jika user role 'owner' atau 'manager' mencoba mengakses, redirect paksa langsung ke /analytics
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d: { user: SessionUser | null }) => {
+        if (!d.user) {
+          router.replace("/");
+          return;
+        }
+        if (d.user.role !== "cashier") {
+          router.replace("/analytics");
+          return;
+        }
+        setMe(d.user);
+      })
+      .catch(() => router.replace("/"));
+
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d: { settings?: StoreSettingDto }) => {
@@ -68,7 +122,7 @@ export default function PosPage() {
     refreshToday();
     const t = setInterval(refreshToday, 30000);
     return () => clearInterval(t);
-  }, [refreshToday]);
+  }, [refreshToday, router]);
 
   /* ------------------------- ONLINE / OFFLINE HANDLING ------------------------ */
   useEffect(() => {
@@ -146,7 +200,8 @@ export default function PosPage() {
     }
   };
 
-  const changeQty = (key: string, delta: number) => {
+  // Pengurangan kuantitas di keranjang aktif (murni state lokal, tanpa PIN)
+  const handleQty = (key: string, delta: number) => {
     setLines((prev) =>
       prev
         .map((l) => (l.key === key ? { ...l, qty: l.qty + delta } : l))
@@ -154,61 +209,35 @@ export default function PosPage() {
     );
   };
 
-  /* -------------------------- VOID AUTHORIZATION -------------------------- */
-  const requestRemoveLine = (key: string) => {
-    const line = lines.find((l) => l.key === key);
-    if (!line) return;
-
-    if (me?.role === "cashier") {
-      setVoidRequest({
-        type: "item",
-        key: line.key,
-        name: `${line.name}${line.variantName ? ` (${line.variantName})` : ""}`,
-        price: line.unitPrice * line.qty,
-      });
-    } else {
-      // Role Manager atau Owner langsung menghapus tanpa modal PIN
-      setLines((prev) => prev.filter((l) => l.key !== key));
-    }
+  // Penghapusan item di keranjang aktif (murni state lokal, tanpa PIN)
+  const handleRemoveLine = (key: string) => {
+    setLines((prev) => prev.filter((l) => l.key !== key));
   };
 
-  const requestClearLines = () => {
-    if (lines.length === 0) return;
-
-    if (me?.role === "cashier") {
-      setVoidRequest({
-        type: "clear",
-        name: `${lines.length} menu (${lines.reduce((s, l) => s + l.qty, 0)} item)`,
-        price: cartTotal(lines),
-      });
-    } else {
-      // Role Manager atau Owner langsung membatalkan tanpa modal PIN
-      setLines([]);
-    }
+  // Kosongkan keranjang aktif (murni state lokal, tanpa PIN)
+  const handleClearLines = () => {
+    setLines([]);
   };
 
-  const requestChangeQty = (key: string, delta: number) => {
-    const line = lines.find((l) => l.key === key);
-    if (!line) return;
-
-    // Jika qty = 1 dan kasir menekan tombol minus (-1), minta otorisasi void
-    if (delta < 0 && line.qty <= 1) {
-      requestRemoveLine(key);
-      return;
-    }
-
-    changeQty(key, delta);
+  /* ------------------- VOID AUTHORIZATION (SAVED ORDERS ONLY) ------------------ */
+  // Otorisasi PIN Void HANYA muncul saat membatalkan transaksi yang SUDAH tersimpan di DB
+  const handleVoidSavedOrder = (order: TodayOrderDto) => {
+    setVoidRequest({
+      type: "order",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      name: `${order.itemCount} item (${order.customerName ?? "Umum"})`,
+      price: order.total,
+    });
   };
 
   const handleVoidAuthorized = (supervisor: { id: number; name: string; role: string }) => {
-    if (voidRequest?.type === "item" && voidRequest.key) {
-      setLines((prev) => prev.filter((l) => l.key !== voidRequest.key));
-      showToast(`Item berhasil di-void oleh ${supervisor.name} (${supervisor.role}).`, "ok");
-    } else if (voidRequest?.type === "clear") {
-      setLines([]);
-      showToast(`Seluruh struk dibatalkan oleh ${supervisor.name} (${supervisor.role}).`, "ok");
-    }
+    showToast(
+      `Transaksi ${voidRequest?.orderNumber ?? ""} berhasil di-void oleh ${supervisor.name} (${supervisor.role}). Stok bahan dikembalikan.`,
+      "ok"
+    );
     setVoidRequest(null);
+    refreshToday();
   };
 
   /* ---------------------- CALCULATE TAX & SERVICE CHARGE --------------------- */
@@ -216,19 +245,33 @@ export default function PosPage() {
   const totals = calculateOrderTotals(
     rawSubtotal,
     settings?.taxPercentage ?? 10,
-    settings?.serviceChargePercentage ?? 0
+    settings?.serviceChargePercentage ?? 0,
+    discount?.type,
+    discount?.value ?? 0
   );
 
   /* ------------------------------- SUBMIT ORDER ------------------------------ */
-  const submitOrder = async (method: "cash" | "qris" | "debit", tendered: number): Promise<OrderReceipt | null> => {
+  const submitOrder = async (
+    method: Method,
+    tendered: number,
+    paymentReference?: string
+  ): Promise<OrderReceipt | null> => {
     const grandTotal = totals.grandTotal;
     const payloadLines = toPayloadLines(lines);
 
     const buildProvisional = (): OrderReceipt => ({
       id: 0,
       orderNumber: `OFFLINE-${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
+      customerName: customerName.trim() || "Umum",
+      customerPhone: customerPhone.trim() || null,
+      orderType,
+      tableNumber: tableNumber.trim() || null,
       paymentMethod: method,
+      paymentReference: paymentReference || null,
       subtotal: totals.subtotal,
+      discountType: discount?.type ?? null,
+      discountValue: discount?.value ?? 0,
+      discountAmount: totals.discountAmount,
       tax: totals.tax,
       serviceCharge: totals.serviceCharge,
       total: grandTotal,
@@ -270,7 +313,18 @@ export default function PosPage() {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentMethod: method, tendered, lines: payloadLines }),
+        body: JSON.stringify({
+          paymentMethod: method,
+          tendered,
+          customerName: customerName.trim() || "Umum",
+          customerPhone: customerPhone.trim() || undefined,
+          orderType,
+          tableNumber: tableNumber.trim() || undefined,
+          discountType: discount?.type,
+          discountValue: discount?.value,
+          paymentReference: paymentReference?.trim() || undefined,
+          lines: payloadLines,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -290,8 +344,18 @@ export default function PosPage() {
     }
   };
 
+  // Reset keranjang dan metadata pesanan saat transaksi selesai atau pesanan baru dimulai
+  const handleResetForNewOrder = () => {
+    setLines([]);
+    setCustomerName("Umum");
+    setCustomerPhone("");
+    setOrderType("dine-in");
+    setTableNumber("");
+    setDiscount(null);
+  };
+
   return (
-    <AppShell allowedRoles={["cashier", "manager", "owner"]}>
+    <AppShell allowedRoles={["cashier"]}>
       {/* offline / sync strip */}
       <AnimatePresence>
         {(!online || queue > 0) && (
@@ -322,21 +386,31 @@ export default function PosPage() {
             ))}
           </div>
         ) : (
-          <CatalogPane catalog={catalog} onPick={pickProduct} />
+          <CatalogPane
+            catalog={catalog}
+            onPick={pickProduct}
+            onOpenHistory={() => setOrderHistoryOpen(true)}
+          />
         )}
 
         <TicketPane
           lines={lines}
           storeSettings={settings}
-          subtotal={totals.subtotal}
-          serviceCharge={totals.serviceCharge}
-          tax={totals.tax}
-          grandTotal={totals.grandTotal}
-          onQty={requestChangeQty}
-          onRemove={requestRemoveLine}
-          onClear={requestClearLines}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          customerPhone={customerPhone}
+          setCustomerPhone={setCustomerPhone}
+          orderType={orderType}
+          setOrderType={setOrderType}
+          tableNumber={tableNumber}
+          setTableNumber={setTableNumber}
+          discount={discount}
+          setDiscount={setDiscount}
+          onQty={handleQty}
+          onRemove={handleRemoveLine}
+          onClear={handleClearLines}
           onPay={() => setPayOpen(true)}
-          onOpenHistory={() => setDrawerOpen(true)}
+          onOpenHistory={() => setOrderHistoryOpen(true)}
           onCloseShift={() => setShiftModalOpen(true)}
           onCashMovement={() => setCashMovementOpen(true)}
           historyCount={todayOrders.length}
@@ -357,14 +431,27 @@ export default function PosPage() {
         open={payOpen}
         total={totals.grandTotal}
         offline={!online}
+        storeSettings={settings}
         onClose={() => setPayOpen(false)}
         onSubmit={submitOrder}
-        onDone={() => setLines([])}
+        onDone={handleResetForNewOrder}
       />
 
-      <OrdersDrawer open={drawerOpen} orders={todayOrders} queueCount={queue} onClose={() => setDrawerOpen(false)} />
+      <OrderHistoryModal
+        open={orderHistoryOpen}
+        onClose={() => setOrderHistoryOpen(false)}
+        storeSettings={settings}
+      />
 
-      {/* Modal Otorisasi Void Khusus Kasir */}
+      <OrdersDrawer
+        open={drawerOpen}
+        orders={todayOrders}
+        queueCount={queue}
+        onClose={() => setDrawerOpen(false)}
+        onVoidOrder={handleVoidSavedOrder}
+      />
+
+      {/* Modal Otorisasi Void Khusus Pembatalan Transaksi Tersimpan */}
       <VoidAuthModal
         open={Boolean(voidRequest)}
         request={voidRequest}

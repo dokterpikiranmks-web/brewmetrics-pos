@@ -11,6 +11,7 @@ import {
   ChartSpline,
   UtensilsCrossed,
   Settings,
+  ReceiptText,
   LogOut,
   Loader2,
   CircleUserRound,
@@ -21,7 +22,7 @@ import { NAV_TABS, ROLE_ACCENT, ROLE_LABEL } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { formatDateID } from "@/lib/format";
 
-const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings };
+const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, ReceiptText };
 
 function LiveClock({ mobile = false }: { mobile?: boolean }) {
   const [now, setNow] = useState<Date | null>(null);
@@ -74,7 +75,8 @@ export default function AppShell({
           router.replace("/");
           return;
         }
-        // Proteksi RBAC Client-Side: Jika cashier mencoba akses halaman terlarang, paksa redirect ke /pos
+
+        // 1. Proteksi RBAC Client-Side: Jika cashier mencoba akses rute manajemen kafe, paksa redirect ke /pos
         if (
           d.user.role === "cashier" &&
           (pathname.startsWith("/inventory") ||
@@ -86,13 +88,21 @@ export default function AppShell({
           return;
         }
 
+        // 2. Proteksi RBAC Client-Side: Jika role 'owner' atau 'manager' mencoba akses /pos, paksa redirect langsung ke /analytics
+        if (
+          (d.user.role === "owner" || d.user.role === "manager") &&
+          pathname.startsWith("/pos")
+        ) {
+          router.replace("/analytics");
+          return;
+        }
+
         if (!allowedRoles.includes(d.user.role)) {
           if (d.user.role === "cashier") {
             router.replace("/pos");
             return;
           }
-          const fallback = NAV_TABS.find((t) => t.roles.includes(d.user!.role));
-          router.replace(fallback?.href ?? "/");
+          router.replace("/analytics");
           return;
         }
         setUser(d.user);
@@ -105,14 +115,23 @@ export default function AppShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // Saring navigasi sesuai role user
+  // Saring navigasi sesuai role user (Owner: Analytics, Menu, Inv, Settings; Cashier: POS, Riwayat)
   const tabs = useMemo(() => {
     if (!user) return [];
-    if (user.role === "cashier") {
-      return NAV_TABS.filter((t) => t.href === "/pos");
-    }
     return NAV_TABS.filter((t) => t.roles.includes(user.role));
   }, [user]);
+
+  const handleTabClick = (tab: (typeof tabs)[number], e: React.MouseEvent) => {
+    if (tab.isAction && tab.actionKey === "open-order-history") {
+      e.preventDefault();
+      if (pathname.startsWith("/pos")) {
+        window.dispatchEvent(new CustomEvent("bm-open-order-history"));
+      } else {
+        router.push("/pos?tab=history");
+      }
+      setMobileMenuOpen(false);
+    }
+  };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -156,11 +175,12 @@ export default function AppShell({
           <nav className="hidden md:flex items-center gap-1 sm:gap-1.5 mx-auto">
             {tabs.map((tab) => {
               const Icon = TAB_ICONS[tab.icon];
-              const active = pathname.startsWith(tab.href);
+              const active = !tab.isAction && pathname.startsWith(tab.href);
               return (
                 <Link
                   key={tab.href}
                   href={tab.href}
+                  onClick={(e) => handleTabClick(tab, e)}
                   className={`relative flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold transition-colors ${
                     active ? "text-coal" : "text-sand hover:text-cream hover:bg-panel-2"
                   }`}
@@ -285,12 +305,12 @@ export default function AppShell({
                 <div className="space-y-1.5">
                   {tabs.map((tab) => {
                     const Icon = TAB_ICONS[tab.icon];
-                    const active = pathname.startsWith(tab.href);
+                    const active = !tab.isAction && pathname.startsWith(tab.href);
                     return (
                       <Link
                         key={tab.href}
                         href={tab.href}
-                        onClick={() => setMobileMenuOpen(false)}
+                        onClick={(e) => handleTabClick(tab, e)}
                         className={`flex items-center gap-3 rounded-xl px-3.5 py-3 text-xs font-bold transition-colors ${
                           active
                             ? "bg-brand text-coal shadow-sm"

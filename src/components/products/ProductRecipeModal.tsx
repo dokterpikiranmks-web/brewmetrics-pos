@@ -40,6 +40,8 @@ export interface ProductFormData {
   icon: string;
   imageUrl?: string;
   isActive: boolean;
+  isBundle?: boolean;
+  bundleItems?: { productId: number; productName?: string; qty: number }[];
   variants: VariantData[];
   recipe: RecipeItemData[];
 }
@@ -75,6 +77,7 @@ export default function ProductRecipeModal({
   initialData,
   categories,
   ingredients,
+  allProducts = [],
   onClose,
   onSave,
   onDelete,
@@ -83,6 +86,7 @@ export default function ProductRecipeModal({
   initialData?: ProductFormData | null;
   categories: { id: number; name: string }[];
   ingredients: IngredientDto[];
+  allProducts?: { id: number; name: string; price: number; hpp: number }[];
   onClose: () => void;
   onSave: (data: ProductFormData) => void;
   onDelete?: (id: number) => void;
@@ -101,6 +105,10 @@ export default function ProductRecipeModal({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isActive, setIsActive] = useState(true);
+  const [isBundle, setIsBundle] = useState(false);
+  const [bundleItems, setBundleItems] = useState<{ productId: number; productName?: string; qty: number }[]>([]);
+  const [selectedBundleProdId, setSelectedBundleProdId] = useState<number>(0);
+  const [bundleItemQty, setBundleItemQty] = useState<number>(1);
   const [variants, setVariants] = useState<VariantData[]>([]);
   const [recipe, setRecipe] = useState<RecipeItemData[]>([]);
 
@@ -122,6 +130,8 @@ export default function ProductRecipeModal({
         setIcon(initialData.icon);
         setImageUrl(initialData.imageUrl || "");
         setIsActive(initialData.isActive);
+        setIsBundle(Boolean(initialData.isBundle));
+        setBundleItems(initialData.bundleItems || []);
         setVariants(initialData.variants || []);
         setRecipe(initialData.recipe || []);
       } else {
@@ -133,6 +143,8 @@ export default function ProductRecipeModal({
         setIcon("Coffee");
         setImageUrl("");
         setIsActive(true);
+        setIsBundle(false);
+        setBundleItems([]);
         setVariants([
           { name: "Panas", priceDelta: 0 },
           { name: "Dingin", priceDelta: 2000 },
@@ -146,8 +158,10 @@ export default function ProductRecipeModal({
       if (ingredients.length > 0) setSelectedIngId(ingredients[0].id);
       setIngQty("");
       setTargetVariant("all");
+      if (allProducts.length > 0) setSelectedBundleProdId(allProducts[0].id);
+      setBundleItemQty(1);
     }
-  }, [open, initialData, categories, ingredients]);
+  }, [open, initialData, categories, ingredients, allProducts]);
 
   // Selected ingredient detail
   const currentIngredient = useMemo(
@@ -156,20 +170,65 @@ export default function ProductRecipeModal({
   );
 
   /* ---------------------- REAL-TIME HPP CALCULATION ---------------------- */
+  const availableSubProducts = useMemo(() => {
+    return (allProducts || []).filter((p) => !initialData?.id || p.id !== initialData.id);
+  }, [allProducts, initialData?.id]);
+
+  const bundleNormalPrice = useMemo(() => {
+    const prodMap = new Map((allProducts || []).map((p) => [p.id, p]));
+    return bundleItems.reduce((sum, item) => {
+      const p = prodMap.get(item.productId);
+      return sum + (p ? p.price * item.qty : 0);
+    }, 0);
+  }, [bundleItems, allProducts]);
+
+  const bundleHpp = useMemo(() => {
+    const prodMap = new Map((allProducts || []).map((p) => [p.id, p]));
+    return bundleItems.reduce((sum, item) => {
+      const p = prodMap.get(item.productId);
+      return sum + (p ? p.hpp * item.qty : 0);
+    }, 0);
+  }, [bundleItems, allProducts]);
+
   const baseHpp = useMemo(() => {
     return recipe.reduce((sum, item) => {
-      // Base items or item regardless
       return sum + item.qty * item.costPerUnit;
     }, 0);
   }, [recipe]);
 
-  const grossProfit = Math.max(0, price - baseHpp);
-  const marginPct = price > 0 ? Math.round(((price - baseHpp) / price) * 1000) / 10 : 0;
+  const effectiveHpp = isBundle ? bundleHpp : baseHpp;
+  const grossProfit = Math.max(0, price - effectiveHpp);
+  const marginPct = price > 0 ? Math.round(((price - effectiveHpp) / price) * 1000) / 10 : 0;
 
   // Saran harga jual ideal F&B (target margin 65%)
-  const suggestedPrice = Math.ceil((baseHpp / 0.35) / 1000) * 1000;
+  const suggestedPrice = Math.ceil((effectiveHpp / 0.35) / 1000) * 1000;
 
   /* ----------------------------- HANDLERS ----------------------------- */
+  const handleAddBundleItem = () => {
+    const p = availableSubProducts.find((sp) => sp.id === selectedBundleProdId);
+    if (!p) {
+      setError("Pilih produk yang valid untuk ditambahkan ke paket.");
+      return;
+    }
+    const q = Math.max(1, Number(bundleItemQty) || 1);
+    const existingIndex = bundleItems.findIndex((b) => b.productId === p.id);
+    if (existingIndex >= 0) {
+      setBundleItems((prev) =>
+        prev.map((b, idx) => (idx === existingIndex ? { ...b, qty: b.qty + q } : b))
+      );
+    } else {
+      setBundleItems((prev) => [
+        ...prev,
+        { productId: p.id, productName: p.name, qty: q },
+      ]);
+    }
+    setError(null);
+  };
+
+  const handleRemoveBundleItem = (idx: number) => {
+    setBundleItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleAddVariant = () => {
     setVariants((prev) => [...prev, { name: "Varian Baru", priceDelta: 0 }]);
   };
@@ -263,19 +322,27 @@ export default function ProductRecipeModal({
       return;
     }
 
+    if (isBundle && bundleItems.length === 0) {
+      setError("Paket bundling harus memiliki minimal 1 produk penyusun.");
+      setActiveTab("recipe");
+      return;
+    }
+
     onSave({
       id: initialData?.id,
       categoryId,
       name: name.trim(),
       tagline: tagline.trim(),
       price: Number(price),
-      hpp: Math.round(baseHpp),
+      hpp: Math.round(effectiveHpp),
       color,
       icon,
       imageUrl: imageUrl.trim() || undefined,
       isActive,
-      variants,
-      recipe,
+      isBundle,
+      bundleItems: isBundle ? bundleItems : undefined,
+      variants: isBundle ? [] : variants,
+      recipe: isBundle ? [] : recipe,
     });
     onClose();
   };
@@ -356,10 +423,10 @@ export default function ProductRecipeModal({
                       : "text-faint hover:text-cream"
                   }`}
                 >
-                  <Scale className="size-3.5" />
-                  <span>2. Resep (BOM)</span>
+                  {isBundle ? <Sparkles className="size-3.5" /> : <Scale className="size-3.5" />}
+                  <span>{isBundle ? "2. Isi Paket Bundling" : "2. Resep (BOM)"}</span>
                   <span className="grid size-4.5 place-items-center rounded-full bg-coal/40 text-[10px] tabular font-bold">
-                    {recipe.length}
+                    {isBundle ? bundleItems.length : recipe.length}
                   </span>
                 </button>
                 <button
@@ -381,7 +448,7 @@ export default function ProductRecipeModal({
                 <div className="flex items-center gap-1.5">
                   <span className="text-faint">HPP:</span>
                   <span className="font-display font-bold tabular text-sand">
-                    {formatIDR(baseHpp)}
+                    {formatIDR(effectiveHpp)}
                   </span>
                 </div>
                 <div className="h-3.5 w-px bg-line" />
@@ -417,6 +484,50 @@ export default function ProductRecipeModal({
               {/* TAB 1: INFORMASI PRODUK & VARIAN */}
               {activeTab === "info" && (
                 <div className="space-y-5">
+                  {/* Tipe Menu: Satuan vs Paket Bundling */}
+                  <div className="rounded-2xl border border-line bg-coal/70 p-3.5 space-y-2.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand">
+                      Tipe Produk Menu
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsBundle(false)}
+                        className={`btn-press flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                          !isBundle
+                            ? "border-brand bg-brand/15 text-brand shadow-sm"
+                            : "border-line bg-panel text-faint hover:text-sand"
+                        }`}
+                      >
+                        <Coffee className="size-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold leading-tight">Produk Satuan (Standar)</p>
+                          <p className="text-[10.5px] text-faint mt-0.5 leading-tight">
+                            Produk mandiri dengan resep bahan baku langsung (BOM).
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsBundle(true)}
+                        className={`btn-press flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                          isBundle
+                            ? "border-brand bg-brand/15 text-brand shadow-sm"
+                            : "border-line bg-panel text-faint hover:text-sand"
+                        }`}
+                      >
+                        <Sparkles className="size-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold leading-tight">Bundle / Paket Promo</p>
+                          <p className="text-[10.5px] text-faint mt-0.5 leading-tight">
+                            Gabungan 2+ produk dengan harga khusus promo (BOM terpotong otomatis).
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Nama Produk */}
                     <div>
@@ -636,71 +747,219 @@ export default function ProductRecipeModal({
                     </div>
                   </div>
 
-                  {/* Pengaturan Varian */}
-                  <div className="pt-2 border-t border-line">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-display text-sm font-bold text-cream">Varian Produk</h3>
-                        <p className="text-[11px] text-faint">
-                          Contoh: Panas, Dingin (+2rb), atau Ukuran Large (+5rb)
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddVariant}
-                        className="btn-press flex items-center gap-1 rounded-xl border border-line bg-panel px-3 py-1.5 text-xs font-semibold text-sand hover:text-cream"
-                      >
-                        <Plus className="size-3.5" />
-                        <span>Tambah Varian</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {variants.map((v, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2.5 rounded-2xl border border-line bg-coal p-2.5"
-                        >
-                          <input
-                            type="text"
-                            value={v.name}
-                            onChange={(e) => handleUpdateVariant(idx, "name", e.target.value)}
-                            placeholder="Nama Varian (cth: Dingin)"
-                            className="input-dark text-xs flex-1"
-                          />
-                          <div className="flex items-center gap-1.5 rounded-xl border border-line-2 bg-panel px-2.5 py-1.5 w-36">
-                            <span className="text-[10px] text-faint">+Rp</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={500}
-                              value={v.priceDelta}
-                              onChange={(e) => handleUpdateVariant(idx, "priceDelta", Number(e.target.value))}
-                              className="w-full bg-transparent text-xs font-bold tabular outline-none text-sand"
-                              placeholder="0"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariant(idx)}
-                            className="btn-press grid size-8 place-items-center rounded-xl text-faint hover:text-red-400 hover:bg-panel"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
+                  {/* Pengaturan Varian (Hanya untuk produk non-bundle) */}
+                  {!isBundle && (
+                    <div className="pt-2 border-t border-line">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="font-display text-sm font-bold text-cream">Varian Produk</h3>
+                          <p className="text-[11px] text-faint">
+                            Contoh: Panas, Dingin (+2rb), atau Ukuran Large (+5rb)
+                          </p>
                         </div>
-                      ))}
-                      {variants.length === 0 && (
-                        <p className="text-xs text-faint py-3 text-center italic">
-                          Tidak ada varian (produk menggunakan harga tunggal).
-                        </p>
-                      )}
+                        <button
+                          type="button"
+                          onClick={handleAddVariant}
+                          className="btn-press flex items-center gap-1 rounded-xl border border-line bg-panel px-3 py-1.5 text-xs font-semibold text-sand hover:text-cream"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Tambah Varian</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {variants.map((v, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2.5 rounded-2xl border border-line bg-coal p-2.5"
+                          >
+                            <input
+                              type="text"
+                              value={v.name}
+                              onChange={(e) => handleUpdateVariant(idx, "name", e.target.value)}
+                              placeholder="Nama Varian (cth: Dingin)"
+                              className="input-dark text-xs flex-1"
+                            />
+                            <div className="flex items-center gap-1.5 rounded-xl border border-line-2 bg-panel px-2.5 py-1.5 w-36">
+                              <span className="text-[10px] text-faint">+Rp</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={500}
+                                value={v.priceDelta}
+                                onChange={(e) => handleUpdateVariant(idx, "priceDelta", Number(e.target.value))}
+                                className="w-full bg-transparent text-xs font-bold tabular outline-none text-sand"
+                                placeholder="0"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariant(idx)}
+                              className="btn-press grid size-8 place-items-center rounded-xl text-faint hover:text-red-400 hover:bg-panel"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {variants.length === 0 && (
+                          <p className="text-xs text-faint py-3 text-center italic">
+                            Tidak ada varian (produk menggunakan harga tunggal).
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              {/* TAB 2: RESEP & BILL OF MATERIALS (BOM) */}
+              {/* TAB 2: RESEP (BOM) ATAU PAKET BUNDLING */}
               {activeTab === "recipe" && (
+                isBundle ? (
+                  <div className="space-y-5">
+                    {/* Form Tambah Item ke Paket */}
+                    <div className="rounded-2xl border border-brand/40 bg-brand/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-brand">
+                        <Sparkles className="size-4" />
+                        <span>Pilih Produk Penyusun Paket Bundling</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-8">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-faint mb-1">
+                            Pilih Produk
+                          </label>
+                          <select
+                            value={selectedBundleProdId}
+                            onChange={(e) => setSelectedBundleProdId(Number(e.target.value))}
+                            className="input-dark text-xs"
+                          >
+                            {availableSubProducts.map((p) => (
+                              <option key={p.id} value={p.id} className="bg-coal text-cream">
+                                {p.name} — Harga: {formatIDR(p.price)} (HPP: {formatIDR(p.hpp)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-faint mb-1">
+                            Kuantitas (Qty)
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={bundleItemQty}
+                            onChange={(e) => setBundleItemQty(Math.max(1, Number(e.target.value)))}
+                            className="input-dark text-xs text-center font-bold"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 flex items-end">
+                          <button
+                            type="button"
+                            onClick={handleAddBundleItem}
+                            className="btn-press w-full flex items-center justify-center gap-1.5 rounded-xl bg-brand py-2 text-xs font-bold text-coal shadow-sm shadow-brand/40 hover:brightness-110"
+                          >
+                            <Plus className="size-3.5" strokeWidth={2.5} />
+                            <span>Tambah</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ringkasan Finansial Paket Promo */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="rounded-2xl border border-line bg-coal p-3.5">
+                        <p className="text-[10px] uppercase font-bold text-faint tracking-wider">Total Harga Normal</p>
+                        <p className="font-display text-base font-bold tabular text-sand mt-0.5 line-through">
+                          {formatIDR(bundleNormalPrice)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-brand/40 bg-brand/10 p-3.5">
+                        <p className="text-[10px] uppercase font-bold text-brand tracking-wider">Harga Promo Paket</p>
+                        <p className="font-display text-base font-bold tabular text-brand mt-0.5">
+                          {formatIDR(price)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
+                        <p className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Hemat Pelanggan</p>
+                        <p className="font-display text-base font-bold tabular text-emerald-400 mt-0.5">
+                          {formatIDR(Math.max(0, bundleNormalPrice - price))}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-line bg-coal p-3.5">
+                        <p className="text-[10px] uppercase font-bold text-faint tracking-wider">Total HPP Modal (BOM)</p>
+                        <p className="font-display text-base font-bold tabular text-cream mt-0.5">
+                          {formatIDR(bundleHpp)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Daftar Produk dalam Paket */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-display text-xs font-bold uppercase tracking-wider text-sand">
+                          Produk dalam Paket ({bundleItems.length} item)
+                        </h3>
+                        <p className="text-[11px] text-faint">
+                          Bahan baku otomatis terpotong dari stok saat paket ini dipesan.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        {bundleItems.map((item, idx) => {
+                          const p = availableSubProducts.find((sp) => sp.id === item.productId);
+                          return (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between p-3 rounded-2xl border border-line bg-coal hover:border-line-2 transition"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="grid size-9 place-items-center rounded-xl bg-brand/10 text-brand border border-brand/20 font-bold text-xs">
+                                  {item.qty}x
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-cream">{p?.name || item.productName || "Produk"}</p>
+                                  <p className="text-[10px] text-faint">
+                                    Harga Satuan: {formatIDR(p?.price ?? 0)} • HPP Satuan: {formatIDR(p?.hpp ?? 0)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <p className="font-display text-xs font-bold tabular text-sand">
+                                    {formatIDR((p?.price ?? 0) * item.qty)}
+                                  </p>
+                                  <p className="text-[9.5px] text-faint tabular">
+                                    Modal: {formatIDR((p?.hpp ?? 0) * item.qty)}
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveBundleItem(idx)}
+                                  className="btn-press grid size-7 place-items-center rounded-lg text-faint hover:text-red-400 hover:bg-panel"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {bundleItems.length === 0 && (
+                          <div className="py-8 text-center border border-dashed border-line rounded-2xl text-faint text-xs">
+                            Belum ada produk yang dimasukkan ke paket ini. Pilih produk di atas lalu klik Tambah.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-5">
                   {/* Grid Bagian Atas: Form Tautkan Bahan di Kiri, Card Metrik Dinamis di Kanan */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -934,6 +1193,7 @@ export default function ProductRecipeModal({
                     </div>
                   </div>
                 </div>
+                )
               )}
 
               {/* TAB 3: KALKULATOR & SIMULASI MARGIN */}
@@ -950,7 +1210,7 @@ export default function ProductRecipeModal({
                     }`}
                   >
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-faint mb-1">
-                      Kalkulasi Margin Resep Real-Time
+                      Kalkulasi Margin {isBundle ? "Paket Bundling" : "Resep"} Real-Time
                     </p>
                     <p
                       className={`font-display text-4xl sm:text-5xl font-extrabold tabular my-1 ${
@@ -982,9 +1242,11 @@ export default function ProductRecipeModal({
                     </div>
 
                     <div className="rounded-2xl border border-line bg-coal p-4 text-center">
-                      <span className="text-[10.5px] uppercase font-bold text-faint">Total HPP Bahan (BOM)</span>
+                      <span className="text-[10.5px] uppercase font-bold text-faint">
+                        {isBundle ? "Total HPP Modal Bahan (BOM)" : "Total HPP Bahan (BOM)"}
+                      </span>
                       <p className="font-display text-xl font-bold tabular text-red-300 mt-1">
-                        {formatIDR(baseHpp)}
+                        {formatIDR(effectiveHpp)}
                       </p>
                     </div>
 
@@ -1004,7 +1266,7 @@ export default function ProductRecipeModal({
                         Rekomendasi AI Pricing (Target Margin 65%)
                       </h4>
                       <p className="text-sand/90">
-                        Berdasarkan total HPP bahan baku saat ini sebesar <strong>{formatIDR(baseHpp)}</strong>,
+                        Berdasarkan total HPP modal saat ini sebesar <strong>{formatIDR(effectiveHpp)}</strong>,
                         harga jual ideal yang disarankan adalah minimal{" "}
                         <strong className="text-brand font-display text-sm">{formatIDR(suggestedPrice)}</strong>.
                       </p>

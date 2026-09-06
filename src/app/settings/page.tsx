@@ -7,13 +7,14 @@ import {
   Loader2, Printer, AlertCircle, Sparkles, RefreshCcw, Image as ImageIcon,
   Users, UserPlus, ShieldCheck, CircleUserRound, Crown, KeyRound, Pencil,
   Search, Lock, Database, HardDriveDownload, UploadCloud, FileSpreadsheet,
-  Download, AlertTriangle, CheckCircle2, ShieldAlert,
+  Download, AlertTriangle, CheckCircle2, ShieldAlert, HeartHandshake,
+  Trophy, MessageCircle,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import StaffModal from "@/components/settings/StaffModal";
 import ExportReportModal from "@/components/analytics/ExportReportModal";
-import type { StoreSettingDto, StaffUserDto, SessionUser, Role } from "@/lib/types";
-import { formatIDR, formatDateID } from "@/lib/format";
+import type { StoreSettingDto, StaffUserDto, SessionUser, Role, CustomerDto } from "@/lib/types";
+import { formatIDR, formatDateID, formatTime } from "@/lib/format";
 import { ROLE_LABEL, ROLE_ACCENT } from "@/lib/nav";
 
 export default function SettingsPage() {
@@ -21,8 +22,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" } | null>(null);
 
-  // Active Sub-Tab: "store" | "staff" | "backup" (Khusus Owner)
-  const [activeTab, setActiveTab] = useState<"store" | "staff" | "backup">("store");
+  // Active Sub-Tab: "store" | "customers" | "staff" | "backup"
+  const [activeTab, setActiveTab] = useState<"store" | "customers" | "staff" | "backup">("store");
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
 
   // Store Settings State
@@ -35,6 +36,15 @@ export default function SettingsPage() {
   const [receiptFooterMessage, setReceiptFooterMessage] = useState(
     "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"
   );
+  // Printer Configuration State
+  const [printerPaperSize, setPrinterPaperSize] = useState<"58mm" | "80mm">("58mm");
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState<boolean>(true);
+
+  // Mini CRM Customers State
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerSort, setCustomerSort] = useState<"spend" | "orders" | "recent">("spend");
 
   // Staff & PIN Management State (Khusus Role 'owner')
   const [staffList, setStaffList] = useState<StaffUserDto[]>([]);
@@ -90,6 +100,8 @@ export default function SettingsPage() {
             data.settings.receiptFooterMessage ||
               "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"
           );
+          setPrinterPaperSize(data.settings.printerPaperSize ?? "58mm");
+          setAutoPrintReceipt(data.settings.autoPrintReceipt ?? true);
         }
       }
     } catch (err) {
@@ -99,6 +111,36 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
+
+  /* -------------------------- LOAD CUSTOMERS --------------------------- */
+  const loadCustomers = async () => {
+    setLoadingCustomers(true);
+    try {
+      const params = new URLSearchParams({
+        sortBy: customerSort,
+        limit: "50",
+      });
+      if (customerSearch.trim()) {
+        params.set("q", customerSearch.trim());
+      }
+      const res = await fetch(`/api/customers?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomers(data.customers ?? []);
+      }
+    } catch (err) {
+      console.error("loadCustomers error:", err);
+      showToast("Gagal memuat data pelanggan setia.", "warn");
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "customers") {
+      loadCustomers();
+    }
+  }, [activeTab, customerSort]);
 
   /* ---------------------------- LOAD STAFF ----------------------------- */
   const loadStaff = async () => {
@@ -154,6 +196,8 @@ export default function SettingsPage() {
           taxPercentage: Number(taxPercentage) || 0,
           serviceChargePercentage: Number(serviceChargePercentage) || 0,
           receiptFooterMessage: receiptFooterMessage.trim(),
+          printerPaperSize,
+          autoPrintReceipt,
         }),
       });
 
@@ -163,7 +207,7 @@ export default function SettingsPage() {
         return;
       }
 
-      showToast("Pengaturan profil kafe & struk berhasil disimpan ke database!", "ok");
+      showToast("Pengaturan profil kafe & printer berhasil disimpan!", "ok");
     } catch (err) {
       console.error("save settings error:", err);
       showToast("Terjadi kendala saat menyimpan pengaturan.", "warn");
@@ -374,7 +418,11 @@ export default function SettingsPage() {
               <span className="inline-flex items-center gap-1.5 text-brand normal-case tracking-normal">
                 {activeTab === "store" ? (
                   <>
-                    <Store className="size-3.5" /> Profil Kafe &amp; Struk
+                    <Store className="size-3.5" /> Profil Kafe &amp; Printer
+                  </>
+                ) : activeTab === "customers" ? (
+                  <>
+                    <HeartHandshake className="size-3.5" /> Pelanggan Setia (CRM)
                   </>
                 ) : activeTab === "staff" ? (
                   <>
@@ -389,14 +437,18 @@ export default function SettingsPage() {
             </p>
             <h1 className="font-display text-2xl lg:text-3xl font-bold tracking-tight">
               {activeTab === "store"
-                ? "Pengaturan Profil Kafe"
+                ? "Pengaturan Profil & Printer Kafe"
+                : activeTab === "customers"
+                ? "Pelanggan Setia (Mini CRM)"
                 : activeTab === "staff"
                 ? "Manajemen Staf & Hak Akses"
                 : "Backup & Restore Database"}
             </h1>
             <p className="text-xs sm:text-sm text-sand mt-1">
               {activeTab === "store"
-                ? "Atur identitas kafe, persentase Pajak PB1, Service Charge, dan pesan penutup struk thermal POS."
+                ? "Atur identitas kafe, persentase Pajak PB1, Service Charge, ukuran kertas thermal (58mm/80mm), dan opsi cetak otomatis."
+                : activeTab === "customers"
+                ? "Daftar pelanggan setia, frekuensi kunjungan, akumulasi total belanja, dan database kontak WhatsApp pelanggan."
                 : activeTab === "staff"
                 ? "Daftarkan akun staf baru, kelola peran (Role), dan atur 4 digit PIN login POS secara terpusat."
                 : "Ekspor seluruh database ke file JSON untuk pencadangan aman, atau pulihkan data dari file backup."}
@@ -422,6 +474,17 @@ export default function SettingsPage() {
                 >
                   <Printer className="size-4 text-brand" />
                   <span>Test Cetak Thermal</span>
+                </button>
+              </>
+            ) : activeTab === "customers" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={loadCustomers}
+                  className="btn-press grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-panel text-sand hover:text-cream shrink-0"
+                  title="Segarkan data pelanggan"
+                >
+                  <RefreshCcw className="size-4" />
                 </button>
               </>
             ) : activeTab === "staff" ? (
@@ -476,7 +539,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ===================================================================
-            SUB-NAVIGATION TABS (PROFIL KAFE vs KELOLA STAF & PIN vs BACKUP & RESTORE)
+            SUB-NAVIGATION TABS (PROFIL & PRINTER vs CRM PELANGGAN vs KELOLA STAF & PIN vs BACKUP & RESTORE)
            =================================================================== */}
         <div className="flex items-center gap-2 border-b border-line pb-1 overflow-x-auto">
           <button
@@ -489,7 +552,28 @@ export default function SettingsPage() {
             }`}
           >
             <Store className="size-4" />
-            <span>Profil &amp; Struk Kafe</span>
+            <span>Profil &amp; Printer Kafe</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("customers");
+              if (customers.length === 0) loadCustomers();
+            }}
+            className={`btn-press px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === "customers"
+                ? "bg-brand text-coal shadow-md shadow-brand/20"
+                : "text-sand hover:text-cream hover:bg-panel"
+            }`}
+          >
+            <HeartHandshake className="size-4" />
+            <span>Pelanggan Setia (CRM)</span>
+            {customers.length > 0 && (
+              <span className="grid place-items-center rounded-full bg-coal/40 px-2 py-0.5 text-[10px] font-bold">
+                {customers.length}
+              </span>
+            )}
           </button>
 
           {currentUser?.role === "owner" && (
@@ -700,6 +784,116 @@ export default function SettingsPage() {
                       Pesan ini akan dicetak di bagian paling bawah setiap struk thermal pelanggan.
                     </p>
                   </div>
+                </div>
+
+                {/* CARD 4: KONFIGURASI PRINTER KASIR */}
+                <div className="rounded-3xl border border-line bg-panel p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-line">
+                    <div className="flex items-center gap-2.5 text-cream font-display font-bold text-sm">
+                      <Printer className="size-4.5 text-brand" />
+                      <span>Konfigurasi Printer Kasir (Thermal Receipt)</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/30">
+                      Hardware POS
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Pilihan Ukuran Kertas */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-faint mb-2">
+                        Lebar Kertas Thermal (Printer Paper Size)
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Card 58mm */}
+                        <button
+                          type="button"
+                          onClick={() => setPrinterPaperSize("58mm")}
+                          className={`btn-press p-4 rounded-2xl border text-left transition-all ${
+                            printerPaperSize === "58mm"
+                              ? "border-brand bg-brand/10 shadow-md shadow-brand/10 ring-1 ring-brand"
+                              : "border-line bg-coal hover:border-line-2 text-sand"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-display text-sm font-bold text-cream">
+                              58mm (Lebar Mini)
+                            </span>
+                            {printerPaperSize === "58mm" && (
+                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal">
+                                <Check className="size-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-faint leading-relaxed">
+                            Lebar area cetak <strong>48mm (~200px)</strong>. Cocok untuk printer portable Bluetooth, USB mini kasir, atau laci kasir sempit.
+                          </p>
+                        </button>
+
+                        {/* Card 80mm */}
+                        <button
+                          type="button"
+                          onClick={() => setPrinterPaperSize("80mm")}
+                          className={`btn-press p-4 rounded-2xl border text-left transition-all ${
+                            printerPaperSize === "80mm"
+                              ? "border-brand bg-brand/10 shadow-md shadow-brand/10 ring-1 ring-brand"
+                              : "border-line bg-coal hover:border-line-2 text-sand"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-display text-sm font-bold text-cream">
+                              80mm (Lebar Standar)
+                            </span>
+                            {printerPaperSize === "80mm" && (
+                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal">
+                                <Check className="size-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-faint leading-relaxed">
+                            Lebar area cetak <strong>72mm (~300px)</strong>. Format standar restoran &amp; kafe modern dengan kolom struk lebih lega dan terbaca jelas.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Toggle Cetak Otomatis */}
+                    <div className="rounded-2xl border border-line-2 bg-coal p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-cream flex items-center gap-2">
+                          <span>Cetak Otomatis Setelah Bayar (Auto-Print)</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setAutoPrintReceipt(!autoPrintReceipt)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            autoPrintReceipt ? "bg-brand" : "bg-line-2"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block size-4 transform rounded-full bg-coal shadow ring-0 transition duration-200 ease-in-out ${
+                              autoPrintReceipt ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-faint leading-relaxed">
+                        Bila aktif, dialog cetak struk (<code>window.print()</code>) otomatis langsung dipanggil sesaat setelah kasir menyelesaikan transaksi pembayaran di POS.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-sand">Ingin mencoba layout hasil cetak?</span>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-line-2 bg-coal px-3 py-2 text-xs font-semibold text-sand hover:text-cream hover:border-brand/40"
+                      >
+                        <Printer className="size-3.5 text-brand" />
+                        <span>Cetak Struk Sampel ({printerPaperSize})</span>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Tombol Simpan */}
                   <div className="pt-2">
@@ -716,7 +910,7 @@ export default function SettingsPage() {
                       ) : (
                         <>
                           <Check className="size-4.5" />
-                          <span>Simpan Pengaturan Kafe</span>
+                          <span>Simpan Pengaturan Kafe &amp; Printer</span>
                         </>
                       )}
                     </button>
@@ -731,13 +925,19 @@ export default function SettingsPage() {
                     <Sparkles className="size-4" />
                     <span>Pratinjau Struk Thermal Dinamis</span>
                   </div>
-                  <span className="text-[11px] text-faint font-mono">Format 72mm / 80mm</span>
+                  <span className="text-[11px] text-faint font-mono">
+                    Format {printerPaperSize} ({printerPaperSize === "58mm" ? "48mm / 200px" : "72mm / 300px"})
+                  </span>
                 </div>
 
                 {/* Kertas Struk Simulasi */}
                 <div className="rounded-3xl border border-line-2 bg-coal p-4 sm:p-5 shadow-2xl overflow-hidden">
                   <div
-                    className="bg-white text-black font-mono text-[11px] leading-tight p-4 rounded-xl shadow-inner max-w-sm mx-auto"
+                    className={`bg-white text-black font-mono leading-tight p-4 rounded-xl shadow-inner mx-auto transition-all ${
+                      printerPaperSize === "58mm"
+                        ? "max-w-[210px] text-[9px]"
+                        : "max-w-sm text-[11px]"
+                    }`}
                     style={{
                       fontFamily: "'Courier New', Courier, monospace",
                       color: "#000000",
@@ -857,6 +1057,249 @@ export default function SettingsPage() {
               </div>
             </div>
           )
+        )}
+
+        {/* ===================================================================
+            TAB: PELANGGAN SETIA (MINI CRM)
+           =================================================================== */}
+        {activeTab === "customers" && (
+          <div className="space-y-5">
+            {/* KPI Overview Pelanggan CRM */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="rounded-3xl border border-line bg-panel p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-faint">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Total Pelanggan</span>
+                  <HeartHandshake className="size-4 text-brand" />
+                </div>
+                <div className="mt-3">
+                  <p className="font-display text-2xl sm:text-3xl font-bold text-cream tabular">
+                    {customers.length}
+                  </p>
+                  <p className="text-[11px] text-emerald-400 mt-0.5">Basis data CRM aktif</p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-line bg-panel p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-faint">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Akumulasi Belanja</span>
+                  <Trophy className="size-4 text-amber-400" />
+                </div>
+                <div className="mt-3">
+                  <p className="font-display text-xl sm:text-2xl font-bold text-amber-400 tabular truncate">
+                    {formatIDR(customers.reduce((sum, c) => sum + (c.totalSpend || 0), 0))}
+                  </p>
+                  <p className="text-[11px] text-faint mt-0.5">Kontribusi omzet CRM</p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-line bg-panel p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-faint">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Total Kunjungan</span>
+                  <Store className="size-4 text-sky-400" />
+                </div>
+                <div className="mt-3">
+                  <p className="font-display text-2xl sm:text-3xl font-bold text-sky-300 tabular">
+                    {customers.reduce((sum, c) => sum + (c.totalOrders || 0), 0)}
+                  </p>
+                  <p className="text-[11px] text-faint mt-0.5">Transaksi tercatat</p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-line bg-panel p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-faint">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Rata-rata Belanja</span>
+                  <Percent className="size-4 text-brand-2" />
+                </div>
+                <div className="mt-3">
+                  <p className="font-display text-xl sm:text-2xl font-bold text-cream tabular truncate">
+                    {formatIDR(
+                      customers.length > 0
+                        ? Math.round(
+                            customers.reduce((sum, c) => sum + (c.totalSpend || 0), 0) / customers.length
+                          )
+                        : 0
+                    )}
+                  </p>
+                  <p className="text-[11px] text-sand mt-0.5">Nilai per pelanggan</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter, Search & Actions */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="size-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") loadCustomers();
+                  }}
+                  placeholder="Cari nama atau nomor HP pelanggan..."
+                  className="input-dark text-xs pl-10 w-full"
+                />
+              </div>
+
+              {/* Sort Selector */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {(
+                  [
+                    { key: "spend", label: "Top Belanja (Spend)" },
+                    { key: "orders", label: "Paling Loyal (Orders)" },
+                    { key: "recent", label: "Kunjungan Terbaru" },
+                  ] as const
+                ).map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setCustomerSort(s.key)}
+                    className={`btn-press px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                      customerSort === s.key
+                        ? "bg-brand text-coal font-bold shadow-sm shadow-brand/30"
+                        : "bg-panel text-faint hover:text-cream border border-line"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Customer List Table */}
+            {loadingCustomers ? (
+              <div className="py-20 text-center text-faint flex flex-col items-center justify-center gap-3">
+                <Loader2 className="size-8 animate-spin text-brand" />
+                <p className="text-xs">Memuat database pelanggan setia...</p>
+              </div>
+            ) : customers.length === 0 ? (
+              <div className="rounded-3xl border border-line bg-panel p-12 text-center space-y-3">
+                <HeartHandshake className="size-12 text-faint mx-auto opacity-60" />
+                <p className="font-display font-bold text-cream text-base">Belum ada data pelanggan tersimpan</p>
+                <p className="text-xs text-faint max-w-md mx-auto leading-relaxed">
+                  Data pelanggan akan otomatis terdaftar dan terakumulasi saat kasir memasukkan nomor HP pelanggan pada panel kasir POS saat transaksi berlangsung.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-line bg-panel overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-line bg-coal/50 text-[10px] font-bold uppercase tracking-wider text-faint">
+                        <th className="py-3 px-4 sm:px-6 w-16 text-center">Rank</th>
+                        <th className="py-3 px-4">Nama Pelanggan</th>
+                        <th className="py-3 px-4">No. HP / WhatsApp</th>
+                        <th className="py-3 px-4 text-center">Frekuensi</th>
+                        <th className="py-3 px-4 text-right">Total Belanja</th>
+                        <th className="py-3 px-4 text-right hidden sm:table-cell">Rata-rata/Order</th>
+                        <th className="py-3 px-4 sm:px-6 text-right">Kunjungan Terakhir</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {customers.map((cust, idx) => {
+                        const cleanPhone = cust.phone.replace(/[^0-9]/g, "");
+                        const waNumber = cleanPhone.startsWith("0")
+                          ? "62" + cleanPhone.slice(1)
+                          : cleanPhone.startsWith("62")
+                          ? cleanPhone
+                          : "62" + cleanPhone;
+                        const avg = cust.totalOrders > 0 ? Math.round(cust.totalSpend / cust.totalOrders) : 0;
+
+                        return (
+                          <tr key={cust.id} className="hover:bg-panel-2 transition-colors">
+                            {/* Rank */}
+                            <td className="py-3.5 px-4 text-center">
+                              {idx === 0 ? (
+                                <span className="inline-grid place-items-center size-6 rounded-full bg-amber-400/20 text-amber-400 font-bold border border-amber-400/40 text-[11px]">
+                                  🥇
+                                </span>
+                              ) : idx === 1 ? (
+                                <span className="inline-grid place-items-center size-6 rounded-full bg-slate-300/20 text-slate-300 font-bold border border-slate-300/40 text-[11px]">
+                                  🥈
+                                </span>
+                              ) : idx === 2 ? (
+                                <span className="inline-grid place-items-center size-6 rounded-full bg-amber-700/20 text-amber-600 font-bold border border-amber-700/40 text-[11px]">
+                                  🥉
+                                </span>
+                              ) : (
+                                <span className="font-mono text-faint text-[11px]">#{idx + 1}</span>
+                              )}
+                            </td>
+
+                            {/* Nama & Avatar */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="grid size-9 place-items-center rounded-2xl border border-line-2 bg-coal font-display font-bold text-sand shrink-0">
+                                  {cust.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <span className="font-display font-bold text-cream text-sm block">
+                                    {cust.name}
+                                  </span>
+                                  <span className="text-[10px] text-faint">ID Pelanggan #{cust.id}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* No Telepon & WA action */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sand text-[12px]">{cust.phone}</span>
+                                {cleanPhone && (
+                                  <a
+                                    href={`https://wa.me/${waNumber}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn-press inline-grid place-items-center size-6 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30"
+                                    title="Hubungi via WhatsApp"
+                                  >
+                                    <MessageCircle className="size-3" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Frekuensi Transaksi */}
+                            <td className="py-3.5 px-4 text-center">
+                              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-brand/10 text-brand border border-brand/20">
+                                {cust.totalOrders}x pesanan
+                              </span>
+                            </td>
+
+                            {/* Total Belanja */}
+                            <td className="py-3.5 px-4 text-right">
+                              <span className="font-display font-bold text-cream text-sm tabular">
+                                {formatIDR(cust.totalSpend)}
+                              </span>
+                            </td>
+
+                            {/* Average per Order */}
+                            <td className="py-3.5 px-4 text-right hidden sm:table-cell text-sand font-mono tabular text-[11px]">
+                              {formatIDR(avg)}
+                            </td>
+
+                            {/* Kunjungan Terakhir */}
+                            <td className="py-3.5 px-4 sm:px-6 text-right text-faint text-[11px]">
+                              {cust.lastVisitAt ? (
+                                <>
+                                  <span className="text-sand font-medium block">
+                                    {formatDateID(new Date(cust.lastVisitAt))}
+                                  </span>
+                                  <span className="text-[10px]">{formatTime(cust.lastVisitAt)}</span>
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* ===================================================================

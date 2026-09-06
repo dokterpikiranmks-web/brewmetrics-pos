@@ -80,6 +80,54 @@ export async function ensureStoreSettingsTable() {
   }
 }
 
+export async function ensureOrdersSchema() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name text NOT NULL DEFAULT 'Umum';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type text NOT NULL DEFAULT 'dine-in';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS table_number text NOT NULL DEFAULT '';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_type text DEFAULT NULL;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_value integer NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount integer NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference text DEFAULT '';
+    `);
+  } catch (err) {
+    console.error("ensureOrdersSchema error:", err);
+  }
+}
+
+export async function ensureBatch2Schema() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS printer_paper_size text NOT NULL DEFAULT '58mm';
+      ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS auto_print_receipt boolean NOT NULL DEFAULT true;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS is_bundle boolean NOT NULL DEFAULT false;
+
+      CREATE TABLE IF NOT EXISTS bundle_items (
+        id serial PRIMARY KEY,
+        bundle_product_id integer NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        sub_product_id integer NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        qty integer NOT NULL DEFAULT 1
+      );
+
+      CREATE TABLE IF NOT EXISTS customers (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        phone text NOT NULL UNIQUE,
+        total_orders integer NOT NULL DEFAULT 0,
+        total_spend integer NOT NULL DEFAULT 0,
+        last_visit_at timestamp with time zone NOT NULL DEFAULT now(),
+        created_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id integer REFERENCES customers(id);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone text DEFAULT '';
+    `);
+  } catch (err) {
+    console.error("ensureBatch2Schema error:", err);
+  }
+}
+
 /**
  * Idempotent schema verifier — hanya memastikan tabel & kolom yang dibutuhkan aplikasi sudah ada di Supabase.
  * Tidak memasukkan data tiruan / auto-seed sama sekali.
@@ -90,6 +138,8 @@ export async function ensureSchema(): Promise<void> {
       await ensureShiftReportsTable();
       await ensureProductsHppColumn();
       await ensureStoreSettingsTable();
+      await ensureOrdersSchema();
+      await ensureBatch2Schema();
     })().catch((e) => {
       schemaPromise = null;
       throw e;

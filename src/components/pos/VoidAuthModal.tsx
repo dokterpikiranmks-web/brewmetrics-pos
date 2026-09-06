@@ -6,7 +6,9 @@ import { ShieldAlert, X, Delete, Loader2, KeyRound, AlertTriangle } from "lucide
 import { formatIDR } from "@/lib/format";
 
 export interface VoidRequest {
-  type: "item" | "clear";
+  type: "item" | "clear" | "order";
+  orderId?: number;
+  orderNumber?: string;
   key?: string;
   name?: string;
   price?: number;
@@ -65,25 +67,47 @@ export default function VoidAuthModal({
     setError(null);
 
     try {
-      const res = await fetch("/api/auth/verify-void-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pin: trimmed,
-          reason: request?.type === "item" ? `Hapus item ${request.name}` : "Batalkan seluruh struk",
-        }),
-      });
+      if (request?.type === "order" && request.orderId) {
+        // Void transaksi yang SUDAH tersimpan di database
+        const res = await fetch(`/api/orders/${request.orderId}/void`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pin: trimmed,
+            reason: request.name ? `Void pesanan ${request.orderNumber ?? request.orderId}: ${request.name}` : undefined,
+          }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Otorisasi void ditolak.");
+          setPin("");
+          return;
+        }
 
-      if (!res.ok) {
-        setError(data.error ?? "Otorisasi ditolak.");
-        setPin("");
-        return;
+        onAuthorized(data.supervisor ?? { id: 0, name: "Supervisor", role: "manager" });
+        onClose();
+      } else {
+        // Fallback otorisasi supervisor umum
+        const res = await fetch("/api/auth/verify-void-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pin: trimmed,
+            reason: request?.type === "item" ? `Hapus item ${request.name}` : "Batalkan transaksi",
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Otorisasi ditolak.");
+          setPin("");
+          return;
+        }
+
+        onAuthorized(data.supervisor);
+        onClose();
       }
-
-      onAuthorized(data.supervisor);
-      onClose();
     } catch {
       setError("Gagal menghubungi server otorisasi.");
     } finally {
@@ -125,6 +149,7 @@ export default function VoidAuthModal({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
                 className="btn-press grid size-8 place-items-center rounded-xl border border-line bg-coal text-faint hover:text-cream"
               >
@@ -137,13 +162,17 @@ export default function VoidAuthModal({
               <div className="flex items-center justify-between text-xs">
                 <span className="text-faint">Tindakan:</span>
                 <span className="font-bold text-red-400">
-                  {request?.type === "item" ? "Hapus Item Menu" : "Batalkan Seluruh Struk"}
+                  {request?.type === "order"
+                    ? "Batalkan Pesanan Tersimpan (Void)"
+                    : request?.type === "item"
+                      ? "Hapus Item Menu"
+                      : "Batalkan Seluruh Struk"}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs mt-1">
                 <span className="text-faint">Keterangan:</span>
                 <span className="font-semibold text-cream truncate max-w-[190px]">
-                  {request?.name ?? "—"}
+                  {request?.name ?? request?.orderNumber ?? "—"}
                 </span>
               </div>
               {request?.price !== undefined && (

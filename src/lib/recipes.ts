@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/db";
-import { ingredients, modifierIngredients, recipeItems } from "@/db/schema";
-import type { Ingredient, ModifierIngredient, RecipeItem } from "@/db/schema";
+import { ingredients, modifierIngredients, recipeItems, bundleItems } from "@/db/schema";
+import type { Ingredient, ModifierIngredient, RecipeItem, BundleItem } from "@/db/schema";
 
 /**
  * RecipeIndex — peta Bill of Materials untuk meledakkan satu item menu
@@ -12,23 +12,31 @@ export interface RecipeIndex {
   baseRows: Map<number, RecipeItem[]>; // productId -> rows (apply to every variant)
   variantRows: Map<number, RecipeItem[]>; // variantId -> rows (specific)
   modifierRows: Map<number, ModifierIngredient[]>; // modifierId -> rows
+  bundleRows: Map<number, { subProductId: number; qty: number }[]>; // bundleProductId -> subProducts
 }
 
 let cached: { at: number; index: RecipeIndex } | null = null;
 
 export async function buildRecipeIndex(force = false): Promise<RecipeIndex> {
   if (!force && cached && Date.now() - cached.at < 10_000) return cached.index;
-  const [ings, rItems, mItems] = await Promise.all([
+  const [ings, rItems, mItems, bItems] = await Promise.all([
     db.select().from(ingredients),
     db.select().from(recipeItems),
     db.select().from(modifierIngredients),
+    db.select().from(bundleItems),
   ]);
   const index: RecipeIndex = {
     ingredientById: new Map(ings.map((i) => [i.id, i])),
     baseRows: new Map(),
     variantRows: new Map(),
     modifierRows: new Map(),
+    bundleRows: new Map(),
   };
+  for (const b of bItems) {
+    const arr = index.bundleRows.get(b.bundleProductId) ?? [];
+    arr.push({ subProductId: b.subProductId, qty: b.qty });
+    index.bundleRows.set(b.bundleProductId, arr);
+  }
   for (const r of rItems) {
     if (r.variantId) {
       const arr = index.variantRows.get(r.variantId) ?? [];
@@ -73,6 +81,19 @@ export function usageForLine(line: LineInput, index: RecipeIndex): Map<number, n
   for (const mid of line.modifierIds) {
     for (const m of index.modifierRows.get(mid) ?? []) add(m.ingredientId, m.qty * line.qty);
   }
+
+  // Jika produk adalah paket bundling, ledakkan resep dari seluruh sub-produknya
+  const bundles = index.bundleRows.get(line.productId);
+  if (bundles && bundles.length > 0) {
+    for (const b of bundles) {
+      const subUsage = usageForLine(
+        { productId: b.subProductId, variantId: null, qty: b.qty * line.qty, modifierIds: [] },
+        index
+      );
+      mergeUsage(usage, subUsage);
+    }
+  }
+
   return usage;
 }
 

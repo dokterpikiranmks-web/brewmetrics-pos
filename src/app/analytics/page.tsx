@@ -6,14 +6,15 @@ import {
   TrendingUp, TrendingDown, Wallet, ReceiptText, PiggyBank, BanknoteArrowDown,
   BanknoteArrowUp, TriangleAlert, MessageCircleWarning, RefreshCcw, X, Loader2,
   CircleDollarSign, Radio, ArrowDownToLine, ArrowUpFromLine,
-  Scale, CheckCircle2, ShieldAlert, FileSpreadsheet,
+  Scale, CheckCircle2, ShieldAlert, FileSpreadsheet, HeartHandshake,
+  Trophy, MessageCircle,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { RevenueChart, HourlyChart, TopProducts, PaymentDonut } from "@/components/analytics/Charts";
 import ExportReportModal from "@/components/analytics/ExportReportModal";
 import MenuEngineeringMatrix from "@/components/analytics/MenuEngineeringMatrix";
 import CashMovementModal from "@/components/cash/CashMovementModal";
-import type { AnalyticsSummary, ForecastItem } from "@/lib/types";
+import type { AnalyticsSummary, ForecastItem, CustomerDto } from "@/lib/types";
 import { formatIDR, formatQty, formatTime } from "@/lib/format";
 
 interface CashMovementDto {
@@ -23,6 +24,7 @@ interface CashMovementDto {
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [movements, setMovements] = useState<CashMovementDto[]>([]);
+  const [topCustomers, setTopCustomers] = useState<CustomerDto[]>([]);
   const [cashOpen, setCashOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -35,12 +37,14 @@ export default function AnalyticsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [s, m] = await Promise.all([
+      const [s, m, c] = await Promise.all([
         fetch("/api/analytics/summary").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/cash-movements").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/customers?sortBy=spend&limit=6").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (s) setSummary(s as AnalyticsSummary);
       if (m) setMovements((m as { movements: CashMovementDto[] }).movements);
+      if (c) setTopCustomers(c.customers ?? []);
       setLastSync(new Date());
     } catch {
       /* diam saat offline */
@@ -372,6 +376,82 @@ export default function AnalyticsPage() {
                 ))}
                 {movements.length === 0 && (
                   <p className="text-sm text-faint py-6 md:col-span-2 xl:col-span-3 text-center">Belum ada catatan kas.</p>
+                )}
+              </div>
+            </Card>
+
+            {/* ------------------------- PELANGGAN SETIA (MINI CRM) ------------------------- */}
+            <Card
+              title="Daftar Pelanggan Paling Loyal (Mini CRM)"
+              subtitle="Ranking pelanggan berdasarkan akumulasi omzet belanja & frekuensi pesanan"
+              action={
+                <a
+                  href="/settings"
+                  className="btn-press text-xs font-bold text-brand hover:underline flex items-center gap-1"
+                >
+                  <span>Buka CRM Lengkap</span>
+                  <span>→</span>
+                </a>
+              }
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {topCustomers.map((cust, idx) => {
+                  const cleanPhone = cust.phone.replace(/[^0-9]/g, "");
+                  const waNumber = cleanPhone.startsWith("0")
+                    ? "62" + cleanPhone.slice(1)
+                    : cleanPhone.startsWith("62")
+                    ? cleanPhone
+                    : "62" + cleanPhone;
+                  return (
+                    <div
+                      key={cust.id}
+                      className="flex items-center gap-3 rounded-xl border border-line bg-coal p-3.5 hover:border-line-2 transition-colors"
+                    >
+                      <div className="relative shrink-0">
+                        <div className="grid size-10 place-items-center rounded-2xl border border-line-2 bg-panel font-display font-bold text-sand text-sm">
+                          {cust.name.charAt(0).toUpperCase()}
+                        </div>
+                        {idx < 3 && (
+                          <span className="absolute -top-1.5 -left-1.5 text-xs">
+                            {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] font-bold text-cream truncate">{cust.name}</p>
+                          <span className="rounded-full bg-brand/10 text-brand text-[10px] font-bold px-1.5 py-0.5 border border-brand/20 shrink-0">
+                            {cust.totalOrders}x order
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-faint flex items-center gap-1.5 mt-0.5">
+                          <span>{cust.phone}</span>
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/${waNumber}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-400 hover:text-emerald-300"
+                              title="Kirim WhatsApp"
+                            >
+                              <MessageCircle className="size-3 inline" />
+                            </a>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-display text-[13.5px] font-bold tabular text-amber-400">
+                          {formatIDR(cust.totalSpend)}
+                        </p>
+                        <p className="text-[10px] text-faint">Total belanja</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {topCustomers.length === 0 && (
+                  <p className="text-sm text-faint py-6 md:col-span-2 xl:col-span-3 text-center">
+                    Belum ada data pelanggan setia tercatat. Masukkan No. HP pelanggan saat checkout di POS.
+                  </p>
                 )}
               </div>
             </Card>
