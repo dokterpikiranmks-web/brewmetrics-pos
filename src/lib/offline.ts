@@ -8,6 +8,7 @@ export interface QueuedOrder {
   lines: CartLinePayload[];
   paymentMethod: CreateOrderPayload["paymentMethod"];
   tendered?: number;
+  paymentBreakdown?: import("./types").PaymentBreakdownItem[];
   /** Estimasi total sisi klien (untuk struk provisional) */
   estTotal: number;
   cashierName: string;
@@ -64,6 +65,7 @@ export async function flushQueue(): Promise<FlushResult> {
           offlineId: item.offlineId,
           paymentMethod: item.paymentMethod,
           tendered: item.tendered,
+          paymentBreakdown: item.paymentBreakdown,
           lines: item.lines,
         } satisfies CreateOrderPayload),
       });

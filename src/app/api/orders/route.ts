@@ -23,6 +23,7 @@ export async function GET() {
     orderNumber: o.orderNumber,
     cashierName: o.cashierName,
     paymentMethod: o.paymentMethod,
+    paymentBreakdown: (o.paymentBreakdown as any) ?? [],
     customerName: o.customerName ?? "Umum",
     orderType: (o.orderType as any) ?? "dine-in",
     tableNumber: o.tableNumber ?? "",
@@ -42,8 +43,24 @@ export async function POST(req: Request) {
 
   try {
     const payload = (await req.json()) as CreateOrderPayload;
-    if (!["cash", "qris", "debit", "transfer"].includes(payload.paymentMethod)) {
+    if (!["cash", "qris", "debit", "transfer", "split"].includes(payload.paymentMethod)) {
       return Response.json({ error: "Metode pembayaran tidak valid." }, { status: 400 });
+    }
+    if (payload.paymentMethod === "split") {
+      if (!Array.isArray(payload.paymentBreakdown) || payload.paymentBreakdown.length < 2) {
+        return Response.json(
+          { error: "Split pembayaran membutuhkan minimal 2 metode bayar." },
+          { status: 400 }
+        );
+      }
+      for (const item of payload.paymentBreakdown) {
+        if (!["cash", "qris", "debit", "transfer"].includes(item.method) || item.amount <= 0) {
+          return Response.json(
+            { error: "Setiap rincian split pembayaran harus memiliki metode valid dan nominal di atas 0." },
+            { status: 400 }
+          );
+        }
+      }
     }
     const receipt = await createOrder(payload, user);
     return Response.json({ receipt });

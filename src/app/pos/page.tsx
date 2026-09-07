@@ -14,6 +14,7 @@ import OrderHistoryModal from "@/components/pos/OrderHistoryModal";
 import VoidAuthModal, { type VoidRequest } from "@/components/pos/VoidAuthModal";
 import CloseShiftModal from "@/components/pos/CloseShiftModal";
 import CashMovementModal from "@/components/cash/CashMovementModal";
+import SplitBillModal from "@/components/pos/SplitBillModal";
 import type {
   CatalogDto,
   OrderReceipt,
@@ -22,6 +23,7 @@ import type {
   StoreSettingDto,
   OrderType,
   DiscountType,
+  PaymentBreakdownItem,
 } from "@/lib/types";
 import { cartLineKey, cartTotal, calculateOrderTotals, toPayloadLines, type CartLine } from "@/lib/cart";
 import { enqueueOrder, flushQueue, newOfflineId, queueCount } from "@/lib/offline";
@@ -42,6 +44,7 @@ export default function PosPage() {
   const [discount, setDiscount] = useState<{ type: DiscountType; value: number } | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
+  const [splitBillOpen, setSplitBillOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
@@ -52,6 +55,8 @@ export default function PosPage() {
   const [toast, setToast] = useState<{ msg: string; kind: "err" | "ok" | "warn" } | null>(null);
   const [voidRequest, setVoidRequest] = useState<VoidRequest | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pendingSplitRemainingRef = useRef<CartLine[] | null>(null);
+  const pendingSplitBackupRef = useRef<CartLine[] | null>(null);
 
   const showToast = useCallback((msg: string, kind: "err" | "ok" | "warn" = "ok") => {
     clearTimeout(toastTimer.current);
@@ -254,7 +259,8 @@ export default function PosPage() {
   const submitOrder = async (
     method: Method,
     tendered: number,
-    paymentReference?: string
+    paymentReference?: string,
+    paymentBreakdown?: PaymentBreakdownItem[]
   ): Promise<OrderReceipt | null> => {
     const grandTotal = totals.grandTotal;
     const payloadLines = toPayloadLines(lines);
@@ -268,6 +274,7 @@ export default function PosPage() {
       tableNumber: tableNumber.trim() || null,
       paymentMethod: method,
       paymentReference: paymentReference || null,
+      paymentBreakdown: paymentBreakdown || [],
       subtotal: totals.subtotal,
       discountType: discount?.type ?? null,
       discountValue: discount?.value ?? 0,
@@ -300,6 +307,7 @@ export default function PosPage() {
         lines: payloadLines,
         paymentMethod: method,
         tendered,
+        paymentBreakdown,
         estTotal: grandTotal,
         cashierName: me?.name ?? "",
       });
@@ -316,6 +324,7 @@ export default function PosPage() {
         body: JSON.stringify({
           paymentMethod: method,
           tendered,
+          paymentBreakdown,
           customerName: customerName.trim() || "Umum",
           customerPhone: customerPhone.trim() || undefined,
           orderType,
@@ -352,6 +361,39 @@ export default function PosPage() {
     setOrderType("dine-in");
     setTableNumber("");
     setDiscount(null);
+  };
+
+  // Handler proses Split Bill: langsung bayar Nota Baru, amankan sisa Nota Asal
+  const handlePaySplitBill = (newBillLines: CartLine[], remainingLines: CartLine[]) => {
+    pendingSplitRemainingRef.current = remainingLines;
+    pendingSplitBackupRef.current = lines;
+    setLines(newBillLines);
+    setSplitBillOpen(false);
+    setPayOpen(true);
+  };
+
+  const handleClosePayment = () => {
+    // Jika pembayaran dibatalkan saat split bill, pulihkan keranjang ke item lengkap
+    if (pendingSplitBackupRef.current) {
+      setLines(pendingSplitBackupRef.current);
+      pendingSplitBackupRef.current = null;
+      pendingSplitRemainingRef.current = null;
+    }
+    setPayOpen(false);
+  };
+
+  const handlePaymentDone = () => {
+    // Jika ada sisa item dari Nota Asal, pasang ke keranjang untuk pembayaran nota berikutnya
+    if (pendingSplitRemainingRef.current && pendingSplitRemainingRef.current.length > 0) {
+      setLines(pendingSplitRemainingRef.current);
+      pendingSplitRemainingRef.current = null;
+      pendingSplitBackupRef.current = null;
+      showToast("Nota baru berhasil dibayar! Sisa item nota asal kini ada di keranjang kasir.", "ok");
+    } else {
+      pendingSplitBackupRef.current = null;
+      pendingSplitRemainingRef.current = null;
+      handleResetForNewOrder();
+    }
   };
 
   return (
@@ -410,6 +452,7 @@ export default function PosPage() {
           onRemove={handleRemoveLine}
           onClear={handleClearLines}
           onPay={() => setPayOpen(true)}
+          onOpenSplitBill={() => setSplitBillOpen(true)}
           onOpenHistory={() => setOrderHistoryOpen(true)}
           onCloseShift={() => setShiftModalOpen(true)}
           onCashMovement={() => setCashMovementOpen(true)}
@@ -432,9 +475,17 @@ export default function PosPage() {
         total={totals.grandTotal}
         offline={!online}
         storeSettings={settings}
-        onClose={() => setPayOpen(false)}
+        onClose={handleClosePayment}
         onSubmit={submitOrder}
-        onDone={handleResetForNewOrder}
+        onDone={handlePaymentDone}
+      />
+
+      <SplitBillModal
+        open={splitBillOpen}
+        onClose={() => setSplitBillOpen(false)}
+        lines={lines}
+        storeSettings={settings}
+        onPaySplitBill={handlePaySplitBill}
       />
 
       <OrderHistoryModal

@@ -159,9 +159,13 @@ export const orders = pgTable(
     customerId: integer("customer_id").references(() => customers.id),
     customerPhone: text("customer_phone").default(""),
     status: text("status", { enum: ["paid", "void"] }).notNull().default("paid"),
-    paymentMethod: text("payment_method", { enum: ["cash", "qris", "debit", "transfer"] })
+    paymentMethod: text("payment_method", { enum: ["cash", "qris", "debit", "transfer", "split"] })
       .notNull()
       .default("cash"),
+    paymentBreakdown: jsonb("payment_breakdown")
+      .$type<{ method: string; amount: number; reference?: string }[]>()
+      .notNull()
+      .default([]),
     customerName: text("customer_name").notNull().default("Umum"),
     orderType: text("order_type", { enum: ["dine-in", "take-away"] })
       .notNull()

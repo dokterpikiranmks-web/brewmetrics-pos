@@ -19,6 +19,7 @@ import {
   Sparkles,
   Award,
   Loader2,
+  Split,
 } from "lucide-react";
 import type { CartLine, OrderTotals } from "@/lib/cart";
 import { cartTotal, calculateOrderTotals } from "@/lib/cart";
@@ -42,6 +43,7 @@ interface TicketPaneProps {
   onRemove: (key: string) => void;
   onClear: () => void;
   onPay: () => void;
+  onOpenSplitBill?: () => void;
   onOpenHistory: () => void;
   onCloseShift?: () => void;
   onCashMovement?: () => void;
@@ -66,6 +68,7 @@ export default function TicketPane({
   onRemove,
   onClear,
   onPay,
+  onOpenSplitBill,
   onOpenHistory,
   onCloseShift,
   onCashMovement,
@@ -105,6 +108,7 @@ export default function TicketPane({
           totalItems={totalItems}
           historyCount={historyCount}
           cashierName={cashierName}
+          onOpenSplitBill={onOpenSplitBill}
           onOpenHistory={onOpenHistory}
           onCloseShift={onCloseShift}
           onCashMovement={onCashMovement}
@@ -128,9 +132,11 @@ export default function TicketPane({
           totals={totals}
           servicePct={servicePct}
           taxPct={taxPct}
+          totalItems={totalItems}
           disabled={lines.length === 0}
           onOpenDiscount={() => setDiscountModalOpen(true)}
           onRemoveDiscount={() => setDiscount(null)}
+          onOpenSplitBill={onOpenSplitBill}
           onPay={onPay}
         />
       </aside>
@@ -220,6 +226,10 @@ export default function TicketPane({
                 totalItems={totalItems}
                 historyCount={historyCount}
                 cashierName={cashierName}
+                onOpenSplitBill={() => {
+                  setMobileOpen(false);
+                  onOpenSplitBill?.();
+                }}
                 onOpenHistory={onOpenHistory}
                 onCloseShift={onCloseShift}
                 onCashMovement={onCashMovement}
@@ -245,9 +255,14 @@ export default function TicketPane({
                 totals={totals}
                 servicePct={servicePct}
                 taxPct={taxPct}
+                totalItems={totalItems}
                 disabled={lines.length === 0}
                 onOpenDiscount={() => setDiscountModalOpen(true)}
                 onRemoveDiscount={() => setDiscount(null)}
+                onOpenSplitBill={() => {
+                  setMobileOpen(false);
+                  onOpenSplitBill?.();
+                }}
                 onPay={handleMobilePay}
               />
             </motion.div>
@@ -450,6 +465,7 @@ function TicketHeader({
   totalItems,
   historyCount,
   cashierName = "Kasir",
+  onOpenSplitBill,
   onOpenHistory,
   onCloseShift,
   onCashMovement,
@@ -461,6 +477,7 @@ function TicketHeader({
   totalItems: number;
   historyCount: number;
   cashierName?: string;
+  onOpenSplitBill?: () => void;
   onOpenHistory: () => void;
   onCloseShift?: () => void;
   onCashMovement?: () => void;
@@ -509,6 +526,18 @@ function TicketHeader({
             title="Tutup Shift (Blind Z-Report)"
           >
             <Scale className="size-4" />
+          </button>
+        )}
+
+        {onOpenSplitBill && (
+          <button
+            type="button"
+            onClick={onOpenSplitBill}
+            disabled={linesCount === 0 || totalItems < 2}
+            className="btn-press relative grid size-8 sm:size-9 place-items-center rounded-xl border border-line bg-panel text-sand hover:text-brand hover:border-brand/40 disabled:opacity-40 disabled:pointer-events-none"
+            title="Split Nota (Pecah Tagihan)"
+          >
+            <Split className="size-4" />
           </button>
         )}
 
@@ -648,17 +677,21 @@ function TicketSummary({
   totals,
   servicePct,
   taxPct,
+  totalItems = 0,
   disabled,
   onOpenDiscount,
   onRemoveDiscount,
+  onOpenSplitBill,
   onPay,
 }: {
   totals: OrderTotals;
   servicePct: number;
   taxPct: number;
+  totalItems?: number;
   disabled: boolean;
   onOpenDiscount: () => void;
   onRemoveDiscount: () => void;
+  onOpenSplitBill?: () => void;
   onPay: () => void;
 }) {
   return (
@@ -742,15 +775,29 @@ function TicketSummary({
         </motion.p>
       </div>
 
-      <button
-        type="button"
-        onClick={onPay}
-        disabled={disabled}
-        className="btn-press relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-brand py-3.5 sm:py-3.5 font-display text-sm sm:text-[15px] font-bold text-coal shadow-[0_16px_44px_-14px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
-      >
-        <span>Bayar Sekarang</span>
-        <ArrowRight className="size-4.5" />
-      </button>
+      <div className="flex items-center gap-2">
+        {onOpenSplitBill && (
+          <button
+            type="button"
+            onClick={onOpenSplitBill}
+            disabled={disabled || totalItems < 2}
+            className="btn-press flex items-center justify-center gap-1.5 rounded-2xl border border-line bg-panel py-3.5 px-3.5 font-display text-xs font-bold text-sand hover:text-brand hover:border-brand/40 disabled:opacity-40 disabled:pointer-events-none shrink-0 transition-colors"
+            title="Pecah pesanan menjadi 2 nota pembayaran"
+          >
+            <Split className="size-4 text-brand" />
+            <span>Split Nota</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onPay}
+          disabled={disabled}
+          className="btn-press relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-brand py-3.5 sm:py-3.5 font-display text-sm sm:text-[15px] font-bold text-coal shadow-[0_16px_44px_-14px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+        >
+          <span>Bayar Sekarang</span>
+          <ArrowRight className="size-4.5" />
+        </button>
+      </div>
 
       <p className="mt-1.5 text-center text-[10px] text-faint">
         Struk dicetak setelah pembayaran lunas

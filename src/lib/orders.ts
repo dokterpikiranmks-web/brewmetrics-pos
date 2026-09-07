@@ -39,7 +39,9 @@ export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt
   return {
     id: found.id,
     orderNumber: found.orderNumber,
+    status: (found.status as "paid" | "void") ?? "paid",
     paymentMethod: found.paymentMethod as any,
+    paymentBreakdown: (found.paymentBreakdown as any) ?? [],
     customerId: found.customerId ?? null,
     customerName: found.customerName ?? "Umum",
     customerPhone: found.customerPhone ?? "",
@@ -267,6 +269,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         paymentReference: (payload.paymentReference ?? "").trim(),
         status: "paid",
         paymentMethod: payload.paymentMethod,
+        paymentBreakdown: payload.paymentBreakdown ?? [],
         subtotal,
         tax,
         serviceCharge,
@@ -300,7 +303,9 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   return {
     id: receipt.id,
     orderNumber: receipt.orderNumber,
+    status: "paid",
     paymentMethod: receipt.paymentMethod as any,
+    paymentBreakdown: (receipt.paymentBreakdown as any) ?? [],
     customerId: receipt.customerId ?? null,
     customerName: receipt.customerName ?? "Umum",
     customerPhone: receipt.customerPhone ?? "",

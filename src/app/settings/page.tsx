@@ -8,11 +8,12 @@ import {
   Users, UserPlus, ShieldCheck, CircleUserRound, Crown, KeyRound, Pencil,
   Search, Lock, Database, HardDriveDownload, UploadCloud, FileSpreadsheet,
   Download, AlertTriangle, CheckCircle2, ShieldAlert, HeartHandshake,
-  Trophy, MessageCircle,
+  Trophy, MessageCircle, Flame, Trash2,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import StaffModal from "@/components/settings/StaffModal";
 import ExportReportModal from "@/components/analytics/ExportReportModal";
+import ReceiptPrint from "@/components/pos/ReceiptPrint";
 import type { StoreSettingDto, StaffUserDto, SessionUser, Role, CustomerDto } from "@/lib/types";
 import { formatIDR, formatDateID, formatTime } from "@/lib/format";
 import { ROLE_LABEL, ROLE_ACCENT } from "@/lib/nav";
@@ -64,6 +65,17 @@ export default function SettingsPage() {
   const [restoreAgreement, setRestoreAgreement] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  // Danger Zone: Reset Database State (Khusus Role 'owner')
+  const [resetTargets, setResetTargets] = useState({
+    transactions: false,
+    customers: false,
+    inventory: false,
+    catalog: false,
+  });
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [resettingDb, setResettingDb] = useState(false);
+  const [showCalibrationPrint, setShowCalibrationPrint] = useState(false);
 
   const showToast = (msg: string, kind: "ok" | "warn" = "ok") => {
     setToast({ msg, kind });
@@ -372,6 +384,65 @@ export default function SettingsPage() {
       showToast("Terjadi kegagalan jaringan saat memulihkan database.", "warn");
     } finally {
       setRestoring(false);
+    }
+  };
+
+  /* ------------------- TEST CALIBRATION PRINT ------------------- */
+  const handleTestCalibrationPrint = () => {
+    setShowCalibrationPrint(true);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setShowCalibrationPrint(false), 1000);
+    }, 250);
+  };
+
+  /* ------------------- RESET DATABASE SELEKTIF ------------------- */
+  const handleResetDatabase = async () => {
+    if (resetConfirmation !== "HAPUS-PERMANEN") return;
+    const hasAnyTarget =
+      resetTargets.transactions ||
+      resetTargets.customers ||
+      resetTargets.inventory ||
+      resetTargets.catalog;
+    if (!hasAnyTarget) {
+      showToast("Pilih setidaknya satu jenis data untuk dikosongkan.", "warn");
+      return;
+    }
+
+    setResettingDb(true);
+    try {
+      const res = await fetch("/api/admin/reset-database", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmation: resetConfirmation.trim(),
+          targets: resetTargets,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Gagal mengosongkan database.", "warn");
+        return;
+      }
+
+      showToast(data.message || "Database berhasil dikosongkan secara selektif!", "ok");
+      setResetConfirmation("");
+      setResetTargets({
+        transactions: false,
+        customers: false,
+        inventory: false,
+        catalog: false,
+      });
+
+      // Muat ulang data terkait
+      await loadSettings();
+      if (activeTab === "customers") loadCustomers();
+      if (activeTab === "staff") loadStaff();
+    } catch (err) {
+      console.error("reset database error:", err);
+      showToast("Terjadi kendala saat mereset database.", "warn");
+    } finally {
+      setResettingDb(false);
     }
   };
 
@@ -786,12 +857,12 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* CARD 4: KONFIGURASI PRINTER KASIR */}
+                {/* CARD 4: KONFIGURASI PRINTER */}
                 <div className="rounded-3xl border border-line bg-panel p-5 sm:p-6 space-y-4">
                   <div className="flex items-center justify-between pb-2 border-b border-line">
                     <div className="flex items-center gap-2.5 text-cream font-display font-bold text-sm">
                       <Printer className="size-4.5 text-brand" />
-                      <span>Konfigurasi Printer Kasir (Thermal Receipt)</span>
+                      <span>Konfigurasi Printer</span>
                     </div>
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/30">
                       Hardware POS
@@ -817,16 +888,16 @@ export default function SettingsPage() {
                         >
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="font-display text-sm font-bold text-cream">
-                              58mm (Lebar Mini)
+                              58mm (lebar receipt 200px / 48mm area cetak)
                             </span>
                             {printerPaperSize === "58mm" && (
-                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal">
+                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal shrink-0">
                                 <Check className="size-3 stroke-[3]" />
                               </span>
                             )}
                           </div>
                           <p className="text-[11px] text-faint leading-relaxed">
-                            Lebar area cetak <strong>48mm (~200px)</strong>. Cocok untuk printer portable Bluetooth, USB mini kasir, atau laci kasir sempit.
+                            Lebar receipt 200px dengan area cetak 48mm. Cocok untuk printer portable Bluetooth, mini thermal USB, atau meja kasir ringkas.
                           </p>
                         </button>
 
@@ -842,16 +913,16 @@ export default function SettingsPage() {
                         >
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="font-display text-sm font-bold text-cream">
-                              80mm (Lebar Standar)
+                              80mm (lebar receipt 280px / 72mm area cetak)
                             </span>
                             {printerPaperSize === "80mm" && (
-                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal">
+                              <span className="grid size-5 place-items-center rounded-full bg-brand text-coal shrink-0">
                                 <Check className="size-3 stroke-[3]" />
                               </span>
                             )}
                           </div>
                           <p className="text-[11px] text-faint leading-relaxed">
-                            Lebar area cetak <strong>72mm (~300px)</strong>. Format standar restoran &amp; kafe modern dengan kolom struk lebih lega dan terbaca jelas.
+                            Lebar receipt 280px dengan area cetak 72mm. Standar printer kasir high-speed restoran/kafe dengan kolom tagihan lebih lebar dan lega.
                           </p>
                         </button>
                       </div>
@@ -882,15 +953,22 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-sand">Ingin mencoba layout hasil cetak?</span>
+                    {/* Uji Cetak Printer Kalibrasi */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 p-3 rounded-2xl border border-line bg-coal/70">
+                      <div>
+                        <p className="text-xs font-bold text-cream">Uji Presisi Hasil Cetak Fisik</p>
+                        <p className="text-[11px] text-faint mt-0.5">
+                          Cetak struk dummy kalibrasi untuk mengecek presisi batas tepi (margin ruler) dan ketajaman teks fisik.
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => window.print()}
-                        className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-line-2 bg-coal px-3 py-2 text-xs font-semibold text-sand hover:text-cream hover:border-brand/40"
+                        onClick={handleTestCalibrationPrint}
+                        className="btn-press inline-flex items-center justify-center gap-2 rounded-xl border border-brand/50 bg-brand/15 px-4 py-2.5 text-xs font-bold text-brand hover:bg-brand/25 transition shrink-0"
+                        title="Uji Cetak Printer Thermal"
                       >
-                        <Printer className="size-3.5 text-brand" />
-                        <span>Cetak Struk Sampel ({printerPaperSize})</span>
+                        <Printer className="size-4" />
+                        <span>Uji Cetak Printer ({printerPaperSize})</span>
                       </button>
                     </div>
                   </div>
@@ -1749,6 +1827,193 @@ export default function SettingsPage() {
                 <span>Buka Ekspor Excel</span>
               </button>
             </div>
+
+            {/* CARD 4: ZONA BAHAYA: RESET DATABASE (KHUSUS OWNER) */}
+            <div className="rounded-3xl border border-red-500/30 bg-red-950/20 p-6 sm:p-7 shadow-ticket space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3.5">
+                  <div className="grid size-12 place-items-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 shrink-0">
+                    <Flame className="size-6 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-cream">
+                      Zona Bahaya: Reset Database
+                    </h3>
+                    <p className="text-xs text-sand mt-0.5">
+                      Kosongkan data tertentu secara selektif dan permanen. Gunakan fitur ini dengan sangat hati-hati.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/15 px-3 py-1 text-[11px] font-bold text-red-300 uppercase">
+                  <ShieldAlert className="size-3.5" /> Khusus Owner
+                </span>
+              </div>
+
+              {/* Checkbox Pilihan Data */}
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-red-200">
+                  Pilih Data yang Ingin Dikosongkan:
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Option 1: Riwayat Transaksi & Laporan Shift */}
+                  <label
+                    className={`btn-press flex items-start gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${
+                      resetTargets.transactions
+                        ? "border-red-500 bg-red-500/15 shadow-sm shadow-red-500/10 ring-1 ring-red-500"
+                        : "border-line bg-coal hover:border-line-2"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={resetTargets.transactions}
+                      onChange={(e) =>
+                        setResetTargets((prev) => ({ ...prev, transactions: e.target.checked }))
+                      }
+                      disabled={resettingDb}
+                      className="size-4 mt-0.5 rounded border-line accent-red-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="font-display text-xs font-bold text-cream">
+                        1. Riwayat Transaksi &amp; Laporan Shift
+                      </p>
+                      <p className="text-[11px] text-sand leading-relaxed">
+                        Mengosongkan riwayat pesanan (<code>orders</code>, <code>order_items</code>), laporan tutup kasir (<code>shift_reports</code>), dan buku kas operasional (<code>cash_movements</code>).
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Data Pelanggan CRM */}
+                  <label
+                    className={`btn-press flex items-start gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${
+                      resetTargets.customers
+                        ? "border-red-500 bg-red-500/15 shadow-sm shadow-red-500/10 ring-1 ring-red-500"
+                        : "border-line bg-coal hover:border-line-2"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={resetTargets.customers}
+                      onChange={(e) =>
+                        setResetTargets((prev) => ({ ...prev, customers: e.target.checked }))
+                      }
+                      disabled={resettingDb}
+                      className="size-4 mt-0.5 rounded border-line accent-red-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="font-display text-xs font-bold text-cream">
+                        2. Data Pelanggan CRM
+                      </p>
+                      <p className="text-[11px] text-sand leading-relaxed">
+                        Mengosongkan basis data kontak pelanggan setia (<code>customers</code>), poin, dan riwayat total kunjungan.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Option 3: Stok & Kartu Inventaris */}
+                  <label
+                    className={`btn-press flex items-start gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${
+                      resetTargets.inventory
+                        ? "border-red-500 bg-red-500/15 shadow-sm shadow-red-500/10 ring-1 ring-red-500"
+                        : "border-line bg-coal hover:border-line-2"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={resetTargets.inventory}
+                      onChange={(e) =>
+                        setResetTargets((prev) => ({ ...prev, inventory: e.target.checked }))
+                      }
+                      disabled={resettingDb}
+                      className="size-4 mt-0.5 rounded border-line accent-red-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="font-display text-xs font-bold text-cream">
+                        3. Stok &amp; Kartu Inventaris
+                      </p>
+                      <p className="text-[11px] text-sand leading-relaxed">
+                        Mengosongkan daftar bahan baku presisi (<code>ingredients</code>) dan resep BOM.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Option 4: Katalog Menu & Resep */}
+                  <label
+                    className={`btn-press flex items-start gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${
+                      resetTargets.catalog
+                        ? "border-red-500 bg-red-500/15 shadow-sm shadow-red-500/10 ring-1 ring-red-500"
+                        : "border-line bg-coal hover:border-line-2"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={resetTargets.catalog}
+                      onChange={(e) =>
+                        setResetTargets((prev) => ({ ...prev, catalog: e.target.checked }))
+                      }
+                      disabled={resettingDb}
+                      className="size-4 mt-0.5 rounded border-line accent-red-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="font-display text-xs font-bold text-cream">
+                        4. Katalog Menu &amp; Resep
+                      </p>
+                      <p className="text-[11px] text-sand leading-relaxed">
+                        Mengosongkan seluruh kategori, produk, varian suhu, paket bundling, modifier, dan resep BOM.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Input Verifikasi Keamanan */}
+              <div className="rounded-2xl border border-red-500/30 bg-coal/80 p-4 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-red-200 mb-1">
+                    Verifikasi Keamanan Konfirmasi Eksekusi
+                  </label>
+                  <p className="text-xs text-sand">
+                    Ketik kata sandi konfirmasi persis <strong className="text-red-400 font-mono font-black">HAPUS-PERMANEN</strong> untuk mengaktifkan tombol eksekusi:
+                  </p>
+                </div>
+                <input
+                  type="text"
+                  value={resetConfirmation}
+                  onChange={(e) => setResetConfirmation(e.target.value)}
+                  placeholder="Ketik persis: HAPUS-PERMANEN"
+                  disabled={resettingDb}
+                  className="w-full rounded-xl border border-red-500/40 bg-coal px-4 py-2.5 text-xs sm:text-sm font-mono tracking-wider font-bold text-red-400 placeholder:text-faint/50 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 uppercase"
+                />
+              </div>
+
+              {/* Tombol Eksekusi */}
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleResetDatabase}
+                  disabled={
+                    resetConfirmation.trim() !== "HAPUS-PERMANEN" ||
+                    (!resetTargets.transactions &&
+                      !resetTargets.customers &&
+                      !resetTargets.inventory &&
+                      !resetTargets.catalog) ||
+                    resettingDb
+                  }
+                  className="btn-press flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-3.5 font-display text-sm font-bold text-white shadow-lg shadow-red-600/30 hover:bg-red-500 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                >
+                  {resettingDb ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Mengeksekusi Reset Database…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="size-4.5" />
+                      <span>Hapus Data Terpilih</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1877,6 +2142,22 @@ export default function SettingsPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ELEMEN CETAK THERMAL TERSEMBUNYI UNTUK UJI CETAK KALIBRASI */}
+        <ReceiptPrint
+          isCalibration={true}
+          storeSettings={{
+            id: 1,
+            cafeName,
+            address,
+            phone,
+            taxPercentage: Number(taxPercentage) || 0,
+            serviceChargePercentage: Number(serviceChargePercentage) || 0,
+            printerPaperSize,
+            receiptFooterMessage,
+            logoUrl,
+          }}
+        />
       </div>
     </AppShell>
   );

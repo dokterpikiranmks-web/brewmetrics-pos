@@ -43,11 +43,18 @@ export interface CartLinePayload {
 
 export type OrderType = "dine-in" | "take-away";
 export type DiscountType = "percentage" | "fixed";
-export type PaymentMethod = "cash" | "qris" | "debit" | "transfer";
+export type PaymentMethod = "cash" | "qris" | "debit" | "transfer" | "split";
+
+export interface PaymentBreakdownItem {
+  method: "cash" | "qris" | "debit" | "transfer";
+  amount: number;
+  reference?: string;
+}
 
 export interface CreateOrderPayload {
   offlineId?: string;
   paymentMethod: PaymentMethod;
+  paymentBreakdown?: PaymentBreakdownItem[];
   tendered?: number;
   customerName?: string;
   customerPhone?: string;
@@ -86,7 +93,9 @@ export interface StoreSettingDto {
 export interface OrderReceipt {
   id: number;
   orderNumber: string;
+  status?: "paid" | "void";
   paymentMethod: PaymentMethod;
+  paymentBreakdown?: PaymentBreakdownItem[];
   customerId?: number | null;
   customerName?: string;
   customerPhone?: string | null;
@@ -116,6 +125,7 @@ export interface TodayOrderDto {
   orderNumber: string;
   cashierName: string;
   paymentMethod: string;
+  paymentBreakdown?: PaymentBreakdownItem[];
   customerId?: number | null;
   customerName?: string;
   customerPhone?: string | null;

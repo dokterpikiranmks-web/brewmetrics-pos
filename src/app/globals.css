@@ -162,7 +162,7 @@ body {
 
   .thermal-receipt-80mm {
     width: 72mm !important;
-    max-width: 300px !important;
+    max-width: 280px !important;
   }
 }
 
