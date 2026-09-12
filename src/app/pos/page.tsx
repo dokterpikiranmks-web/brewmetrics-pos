@@ -466,6 +466,7 @@ export default function PosPage() {
           onCashMovement={() => setCashMovementOpen(true)}
           historyCount={todayOrders.length}
           cashierName={me?.name ?? "Kasir"}
+          currentUser={me}
         />
       </div>
 

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   await ensureSeeded();
   const { searchParams } = new URL(req.url);
-  const outletIdParam = searchParams.get("outletId");
+  const outletIdParam = searchParams.get("outletId") || searchParams.get("outlet_id");
   const period = searchParams.get("period") || "today";
 
   try {
@@ -58,18 +58,25 @@ export async function GET(req: Request) {
       .orderBy(desc(attendances.createdAt))
       .limit(100);
 
-    const dto: AttendanceDto[] = rows.map((r) => ({
-      id: r.id,
-      userId: r.userId,
-      userName: r.userName ?? "Staf",
-      userRole: r.userRole ?? "cashier",
-      outletId: r.outletId ?? null,
-      outletName: r.outletName ?? "Cabang Pusat",
-      type: r.type as "clock_in" | "clock_out",
-      photoUrl: r.photoUrl,
-      note: r.note ?? "",
-      createdAt: r.createdAt.toISOString(),
-    }));
+    const dto: AttendanceDto[] = rows.map((r) => {
+      // Penanganan nilai kosong (Defensive Handling)
+      const rawName = r.userName?.trim() || "";
+      const rawUsername = (r as Record<string, unknown>).username as string | undefined;
+      const finalName = rawName || rawUsername?.trim() || "Kasir Aktif";
+
+      return {
+        id: r.id,
+        userId: r.userId,
+        userName: finalName,
+        userRole: r.userRole ?? "cashier",
+        outletId: r.outletId ?? null,
+        outletName: r.outletName ?? "Cabang Pusat",
+        type: r.type as "clock_in" | "clock_out",
+        photoUrl: r.photoUrl,
+        note: r.note ?? "",
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
 
     return Response.json({ attendances: dto });
   } catch (err) {
@@ -81,15 +88,23 @@ export async function GET(req: Request) {
 /**
  * POST /api/attendance
  * Merekam absensi foto selfie (Masuk / Pulang) dari staf kasir.
+ * Menerima payload camelCase (userId, outletId) maupun snake_case (user_id, outlet_id).
  */
 export async function POST(req: Request) {
   await ensureSeeded();
 
   try {
-    const body = (await req.json()) as CreateAttendancePayload;
-    const userId = Number(body.userId);
+    const body = (await req.json()) as CreateAttendancePayload & {
+      user_id?: number;
+      outlet_id?: number;
+      photo_url?: string;
+    };
+
+    // Ambil userId baik dari userId maupun user_id
+    const rawUserId = body.userId ?? body.user_id;
+    const userId = Number(rawUserId);
     const type = body.type;
-    let photoUrl = (body.photoUrl ?? "").trim();
+    let photoUrl = (body.photoUrl ?? body.photo_url ?? "").trim();
     const note = (body.note ?? "").trim();
 
     if (!userId || isNaN(userId)) {
@@ -113,8 +128,14 @@ export async function POST(req: Request) {
       return Response.json({ error: "Staf tidak ditemukan dalam sistem." }, { status: 404 });
     }
 
-    // Tentukan outletId: prioritas dari payload, lalu dari user.outletId, lalu fallback ke default 1
-    const outletId = body.outletId ? Number(body.outletId) : targetUser.outletId ?? 1;
+    // Defensive handling nama kasir
+    const rawName = targetUser.name?.trim() || "";
+    const rawUsername = (targetUser as Record<string, unknown>).username as string | undefined;
+    const finalUserName = rawName || rawUsername?.trim() || "Kasir Aktif";
+
+    // Tentukan outletId: prioritas dari payload (outletId atau outlet_id), lalu dari targetUser.outletId, lalu fallback default 1
+    const rawOutletId = body.outletId ?? body.outlet_id;
+    const outletId = rawOutletId ? Number(rawOutletId) : targetUser.outletId ?? 1;
 
     // Jika photoUrl berupa data URL base64, unggah ke Supabase Storage bucket 'attendance-photos'
     if (photoUrl.startsWith("data:")) {
@@ -143,7 +164,7 @@ export async function POST(req: Request) {
     const dto: AttendanceDto = {
       id: created.id,
       userId: created.userId,
-      userName: targetUser.name,
+      userName: finalUserName,
       userRole: targetUser.role,
       outletId: created.outletId ?? null,
       outletName: outletInfo?.name ?? "Cabang Pusat",
@@ -158,7 +179,7 @@ export async function POST(req: Request) {
     return Response.json(
       {
         success: true,
-        message: `Absensi ${typeLabel} untuk ${targetUser.name} berhasil direkam.`,
+        message: `Absensi ${typeLabel} untuk ${finalUserName} berhasil direkam.`,
         attendance: dto,
       },
       { status: 201 }

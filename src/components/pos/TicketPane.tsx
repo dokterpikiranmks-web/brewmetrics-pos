@@ -25,7 +25,7 @@ import {
 import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
 import { cartTotal, calculateOrderTotals, type CartLine, type OrderTotals } from "@/lib/cart";
 import { formatIDR } from "@/lib/format";
-import type { StoreSettingDto, OrderType, DiscountType, DiscountDto } from "@/lib/types";
+import type { StoreSettingDto, OrderType, DiscountType, DiscountDto, SessionUser } from "@/lib/types";
 
 interface TicketPaneProps {
   lines: CartLine[];
@@ -50,6 +50,7 @@ interface TicketPaneProps {
   onCashMovement?: () => void;
   historyCount: number;
   cashierName?: string;
+  currentUser?: SessionUser | null;
 }
 
 export default function TicketPane({
@@ -75,6 +76,7 @@ export default function TicketPane({
   onCashMovement,
   historyCount,
   cashierName = "Kasir",
+  currentUser,
 }: TicketPaneProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
@@ -295,6 +297,7 @@ export default function TicketPane({
       <SelfieAttendanceModal
         isOpen={attendanceModalOpen}
         onClose={() => setAttendanceModalOpen(false)}
+        currentUser={currentUser}
       />
     </>
   );

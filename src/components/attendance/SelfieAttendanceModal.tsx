@@ -10,8 +10,8 @@ import {
   X,
   Loader2,
   Clock,
-  Store,
   User,
+  Lock,
 } from "lucide-react";
 import type { SessionUser, StaffUserDto, OutletDto, AttendanceDto } from "@/lib/types";
 
@@ -31,7 +31,9 @@ export function SelfieAttendanceModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Form states
+  // Active Kasir & Staff states
+  const [activeUser, setActiveUser] = useState<SessionUser | null>(currentUser ?? null);
+  const [isChangingStaff, setIsChangingStaff] = useState(false);
   const [staffList, setStaffList] = useState<StaffUserDto[]>([]);
   const [outlets, setOutlets] = useState<OutletDto[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | "">("");
@@ -47,34 +49,77 @@ export function SelfieAttendanceModal({
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Load staff and outlets if user not logged in or to populate choices
+  // Load active cashier, staff list via public endpoint, and outlets
   useEffect(() => {
     if (!isOpen) return;
 
+    // Reset switch mode whenever modal reopens
+    setIsChangingStaff(false);
+
+    // 1. Deteksi Data Kasir Aktif (Primary Flow)
     if (currentUser) {
+      setActiveUser(currentUser);
       setSelectedUserId(currentUser.id);
-      if (currentUser.outletId) {
-        setSelectedOutletId(currentUser.outletId);
-      }
+      setSelectedOutletId(currentUser.outletId || 1);
+    } else {
+      // Fallback: Jika prop currentUser belum diteruskan, periksa sesi aktif browser
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d: { user: SessionUser | null }) => {
+          if (d.user) {
+            setActiveUser(d.user);
+            setSelectedUserId(d.user.id);
+            setSelectedOutletId(d.user.outletId || 1);
+          }
+        })
+        .catch(() => {});
     }
 
-    // Fetch staff
-    fetch("/api/users")
+    // 2. Perbaikan Endpoint Pengambilan Staf (Fallback Flow)
+    // Menggunakan /api/attendance/staff-list yang dapat diakses kasir (bukan /api/users khusus owner)
+    fetch("/api/attendance/staff-list")
       .then((r) => r.json())
-      .then((data) => {
-        if (data.users) {
-          setStaffList(data.users);
-          if (!currentUser && data.users.length > 0) {
-            setSelectedUserId(data.users[0].id);
-            if (data.users[0].outletId) {
-              setSelectedOutletId(data.users[0].outletId);
-            }
+      .then((res) => {
+        // Memeriksa format response: jika { data: [...] } baca res.data, jika array baca langsung
+        let rawList: Record<string, unknown>[] = [];
+        if (Array.isArray(res)) {
+          rawList = res;
+        } else if (Array.isArray(res?.data)) {
+          rawList = res.data;
+        } else if (Array.isArray(res?.users)) {
+          rawList = res.users;
+        }
+
+        const formattedStaff: StaffUserDto[] = rawList.map((s) => {
+          // Penanganan kasus nama null/kosong (Defensive Handling)
+          const rawName = typeof s.name === "string" ? s.name.trim() : "";
+          const rawUsername = typeof s.username === "string" ? s.username.trim() : "";
+          const displayName = rawName || rawUsername || "Kasir Aktif";
+
+          return {
+            id: Number(s.id),
+            name: displayName,
+            role: (s.role as "cashier" | "manager" | "owner") || "cashier",
+            active: Boolean(s.is_active ?? s.active ?? true),
+            outletId: (s.outlet_id as number) ?? (s.outletId as number) ?? null,
+            outletName: (s.outlet_name as string) ?? (s.outletName as string) ?? null,
+            createdAt: (s.created_at as string) ?? (s.createdAt as string) ?? new Date().toISOString(),
+          };
+        });
+
+        setStaffList(formattedStaff);
+
+        // Jika tidak ada kasir aktif yang terdeteksi, pilih staf pertama sebagai default
+        if (!currentUser && formattedStaff.length > 0) {
+          setSelectedUserId((prev) => (prev ? prev : formattedStaff[0].id));
+          if (formattedStaff[0].outletId) {
+            setSelectedOutletId((prev) => (prev ? prev : (formattedStaff[0].outletId || 1)));
           }
         }
       })
-      .catch((err) => console.error("Error loading staff:", err));
+      .catch((err) => console.error("Error loading staff list:", err));
 
-    // Fetch outlets
+    // 3. Fetch daftar cabang/outlets
     fetch("/api/outlets?activeOnly=true")
       .then((r) => r.json())
       .then((data) => {
@@ -112,10 +157,11 @@ export function SelfieAttendanceModal({
         videoRef.current.play();
       }
       setCameraActive(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Camera access error:", err);
+      const msg = err instanceof Error ? err.message : "";
       setCameraError(
-        err.message ||
+        msg ||
           "Gagal mengakses kamera depan. Pastikan izin kamera telah diberikan di peramban."
       );
       setCameraActive(false);
@@ -172,8 +218,15 @@ export function SelfieAttendanceModal({
   };
 
   const handleSubmitAttendance = async () => {
-    if (!selectedUserId) {
-      setErrorMessage("Silakan pilih staf.");
+    // Tentukan user_id dan outlet_id yang valid
+    const isLockedToActive = Boolean(activeUser && !isChangingStaff);
+    const resolvedUserId = isLockedToActive ? activeUser?.id : Number(selectedUserId);
+    const resolvedOutletId = isLockedToActive
+      ? (activeUser?.outletId || Number(selectedOutletId) || 1)
+      : (Number(selectedOutletId) || 1);
+
+    if (!resolvedUserId) {
+      setErrorMessage("Silakan pilih staf yang akan absen.");
       return;
     }
     if (!capturedPhoto) {
@@ -186,12 +239,15 @@ export function SelfieAttendanceModal({
     setSuccessMsg("");
 
     try {
+      // Pastikan payload menyertakan user_id: currentUser.id dan outlet_id: currentUser.outletId || 1
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: Number(selectedUserId),
-          outletId: selectedOutletId ? Number(selectedOutletId) : undefined,
+          userId: Number(resolvedUserId),
+          user_id: Number(resolvedUserId),
+          outletId: Number(resolvedOutletId),
+          outlet_id: Number(resolvedOutletId),
           type,
           photoUrl: capturedPhoto,
           note: note.trim(),
@@ -212,14 +268,21 @@ export function SelfieAttendanceModal({
       setTimeout(() => {
         onClose();
       }, 1800);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan sistem saat absensi.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setErrorMessage(msg || "Terjadi kesalahan sistem saat absensi.");
     } finally {
       setSubmitting(false);
     }
   };
 
   if (!isOpen) return null;
+
+  // Defensive handling nama kasir aktif untuk read-only display
+  const activeCashierName =
+    activeUser?.name?.trim() ||
+    (activeUser as Record<string, unknown> | null)?.username as string | undefined ||
+    "Kasir Aktif";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-coal/85 backdrop-blur-sm animate-in fade-in-0 overflow-y-auto">
@@ -292,20 +355,40 @@ export function SelfieAttendanceModal({
             </button>
           </div>
 
-          {/* Staf Selection */}
+          {/* Staf Selection / Read-Only Display */}
           <div>
-            <label className="block text-[11px] font-semibold text-sand mb-1">
-              Nama Staf / Kasir
-            </label>
-            {currentUser ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-coal border border-line text-xs text-cream">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-semibold text-sand">
+                Nama Staf / Kasir
+              </label>
+              {activeUser && (
+                <button
+                  type="button"
+                  onClick={() => setIsChangingStaff((prev) => !prev)}
+                  className="text-[10px] text-brand hover:underline font-semibold"
+                >
+                  {isChangingStaff ? "Gunakan Kasir Aktif" : "Ganti Staf (Shift Lain)"}
+                </button>
+              )}
+            </div>
+
+            {/* Primary Flow: Tampilkan nama kasir aktif secara otomatis dan kunci inputnya (read-only) */}
+            {activeUser && !isChangingStaff ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-coal border border-line-2 text-xs text-cream">
                 <User className="size-3.5 text-brand shrink-0" />
-                <span className="font-semibold">{currentUser.name}</span>
+                <span className="font-semibold text-cream">
+                  Nama Staf: [{activeCashierName}]
+                </span>
                 <span className="text-[10px] text-faint ml-auto capitalize">
-                  ({currentUser.role})
+                  ({activeUser.role})
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-panel border border-line text-sand font-mono">
+                  <Lock className="size-2.5 text-sand" />
+                  Terkunci
                 </span>
               </div>
             ) : (
+              /* Fallback Flow: Dropdown pilihan staf jika dibutuhkan (misal pergantian shift) */
               <select
                 value={selectedUserId}
                 onChange={(e) => {
@@ -318,11 +401,15 @@ export function SelfieAttendanceModal({
                 }}
                 className="w-full rounded-xl border border-line bg-coal px-3 py-2 text-xs text-cream focus:border-brand focus:outline-none"
               >
-                {staffList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.role}) {s.outletName ? `• ${s.outletName}` : ""}
-                  </option>
-                ))}
+                {staffList.length === 0 ? (
+                  <option value="">Memuat daftar staf...</option>
+                ) : (
+                  staffList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.role}) {s.outletName ? `• ${s.outletName}` : ""}
+                    </option>
+                  ))
+                )}
               </select>
             )}
           </div>
