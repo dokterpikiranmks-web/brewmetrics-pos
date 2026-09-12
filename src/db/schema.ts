@@ -12,6 +12,19 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
+/* --------------------------------- OUTLETS --------------------------------- */
+
+export const outlets = pgTable("outlets", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  code: text("code").notNull().unique(),
+  address: text("address").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /* ---------------------------------- USERS ---------------------------------- */
 
 export const users = pgTable("users", {
@@ -19,6 +32,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   pin: text("pin").notNull(),
   role: text("role", { enum: ["cashier", "manager", "owner"] }).notNull(),
+  outletId: integer("outlet_id").references(() => outlets.id),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -174,6 +188,7 @@ export const orders = pgTable(
     discountType: text("discount_type", { enum: ["percentage", "fixed"] }),
     discountValue: integer("discount_value").notNull().default(0),
     discountAmount: integer("discount_amount").notNull().default(0),
+    discountName: text("discount_name").default(""),
     paymentReference: text("payment_reference").default(""),
     subtotal: integer("subtotal").notNull().default(0),
     tax: integer("tax").notNull().default(0),
@@ -184,12 +199,14 @@ export const orders = pgTable(
     tendered: integer("tendered"),
     change: integer("change"),
     itemCount: integer("item_count").notNull().default(0),
+    outletId: integer("outlet_id").references(() => outlets.id),
     isOfflineSync: boolean("is_offline_sync").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("orders_number_idx").on(t.orderNumber),
     uniqueIndex("orders_offline_idx").on(t.offlineId),
+    index("orders_outlet_idx").on(t.outletId),
     index("orders_created_idx").on(t.createdAt),
   ]
 );
@@ -223,9 +240,10 @@ export const cashMovements = pgTable(
     amount: integer("amount").notNull(),
     note: text("note").notNull().default(""),
     userName: text("user_name").notNull().default(""),
+    outletId: integer("outlet_id").references(() => outlets.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("cash_created_idx").on(t.createdAt)]
+  (t) => [index("cash_created_idx").on(t.createdAt), index("cash_outlet_idx").on(t.outletId)]
 );
 
 /* ------------------------------ SHIFT REPORTS ------------------------------ */
@@ -236,6 +254,7 @@ export const shiftReports = pgTable(
     id: serial("id").primaryKey(),
     cashierId: integer("cashier_id").references(() => users.id),
     cashierName: text("cashier_name").notNull().default(""),
+    outletId: integer("outlet_id").references(() => outlets.id),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
     expectedCash: integer("expected_cash").notNull(),
@@ -251,8 +270,22 @@ export const shiftReports = pgTable(
   (t) => [
     index("shift_reports_created_idx").on(t.createdAt),
     index("shift_reports_cashier_idx").on(t.cashierId),
+    index("shift_reports_outlet_idx").on(t.outletId),
   ]
 );
+
+/* -------------------------------- DISCOUNTS -------------------------------- */
+
+export const discounts = pgTable("discounts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type", { enum: ["percentage", "fixed"] }).notNull(),
+  value: integer("value").notNull(),
+  minOrder: integer("min_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /* ----------------------------- STORE SETTINGS ------------------------------ */
 
@@ -274,11 +307,45 @@ export const storeSettings = pgTable("store_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ------------------------------- ATTENDANCE -------------------------------- */
+
+export const attendances = pgTable(
+  "attendances",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    outletId: integer("outlet_id").references(() => outlets.id),
+    type: text("type", { enum: ["clock_in", "clock_out"] }).notNull(),
+    photoUrl: text("photo_url").notNull(),
+    note: text("note").default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("attendances_user_idx").on(t.userId),
+    index("attendances_outlet_idx").on(t.outletId),
+    index("attendances_created_idx").on(t.createdAt),
+  ]
+);
+
 /* -------------------------------- RELATIONS -------------------------------- */
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const outletsRelations = relations(outlets, ({ many }) => ({
+  users: many(users),
   orders: many(orders),
   shiftReports: many(shiftReports),
+  attendances: many(attendances),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  outlet: one(outlets, {
+    fields: [users.outletId],
+    references: [outlets.id],
+  }),
+  orders: many(orders),
+  shiftReports: many(shiftReports),
+  attendances: many(attendances),
 }));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
@@ -364,6 +431,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.customerId],
     references: [customers.id],
   }),
+  outlet: one(outlets, {
+    fields: [orders.outletId],
+    references: [outlets.id],
+  }),
   items: many(orderItems),
 }));
 
@@ -383,10 +454,27 @@ export const shiftReportsRelations = relations(shiftReports, ({ one }) => ({
     fields: [shiftReports.cashierId],
     references: [users.id],
   }),
+  outlet: one(outlets, {
+    fields: [shiftReports.outletId],
+    references: [outlets.id],
+  }),
+}));
+
+export const attendancesRelations = relations(attendances, ({ one }) => ({
+  user: one(users, {
+    fields: [attendances.userId],
+    references: [users.id],
+  }),
+  outlet: one(outlets, {
+    fields: [attendances.outletId],
+    references: [outlets.id],
+  }),
 }));
 
 /* --------------------------------- TYPES ----------------------------------- */
 
+export type Outlet = typeof outlets.$inferSelect;
+export type OutletInsert = typeof outlets.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Product = typeof products.$inferSelect;
@@ -402,4 +490,8 @@ export type OrderItem = typeof orderItems.$inferSelect;
 export type CashMovement = typeof cashMovements.$inferSelect;
 export type ShiftReport = typeof shiftReports.$inferSelect;
 export type StoreSetting = typeof storeSettings.$inferSelect;
+export type Discount = typeof discounts.$inferSelect;
+export type DiscountInsert = typeof discounts.$inferInsert;
+export type Attendance = typeof attendances.$inferSelect;
+export type AttendanceInsert = typeof attendances.$inferInsert;
 

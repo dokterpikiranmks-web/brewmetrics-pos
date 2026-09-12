@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Coffee, Delete, Zap, Boxes, BrainCircuit, Fingerprint, Loader2,
-  TrendingUp, Wifi, BadgeCheck,
+  TrendingUp, Wifi, BadgeCheck, Camera,
 } from "lucide-react";
 import { HOME_BY_ROLE } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
+import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -19,6 +20,7 @@ export default function LoginScreen() {
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [userName, setUserName] = useState("");
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   const submit = useCallback(
     async (value: string) => {
@@ -291,10 +293,26 @@ export default function LoginScreen() {
             </button>
           </div>
 
+          {/* Tombol Absen Masuk / Pulang (Foto Wajah) */}
+          <div className="pt-1 pb-1">
+            <button
+              type="button"
+              onClick={() => setAttendanceModalOpen(true)}
+              className="btn-press w-full flex items-center justify-center gap-2.5 py-3 rounded-2xl border border-brand/30 bg-brand/10 hover:bg-brand/20 text-brand font-bold text-xs shadow-lg shadow-brand/10 transition-all group"
+            >
+              <Camera className="size-4 group-hover:scale-110 transition-transform" />
+              <span>Absen Masuk / Pulang (Foto Wajah)</span>
+            </button>
+          </div>
 
-          <p className="text-center text-[11px] text-faint mt-6">
+          <p className="text-center text-[11px] text-faint mt-5">
             BrewMetrics v2.4 — build lisensi <span className="text-sand font-semibold">PERPETUAL</span>
           </p>
+
+          <SelfieAttendanceModal
+            isOpen={attendanceModalOpen}
+            onClose={() => setAttendanceModalOpen(false)}
+          />
         </motion.div>
       </div>
     </div>

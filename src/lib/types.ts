@@ -6,6 +6,8 @@ export interface SessionUser {
   id: number;
   name: string;
   role: Role;
+  outletId?: number | null;
+  outletName?: string | null;
 }
 
 export interface StaffUserDto {
@@ -13,6 +15,8 @@ export interface StaffUserDto {
   name: string;
   role: Role;
   active: boolean;
+  outletId?: number | null;
+  outletName?: string | null;
   createdAt: string;
 }
 
@@ -63,7 +67,9 @@ export interface CreateOrderPayload {
   tableNumber?: string;
   discountType?: DiscountType | null;
   discountValue?: number;
+  discountName?: string;
   paymentReference?: string;
+  outletId?: number | null;
   lines: CartLinePayload[];
 }
 
@@ -104,7 +110,10 @@ export interface OrderReceipt {
   discountType?: DiscountType | null;
   discountValue?: number;
   discountAmount?: number;
+  discountName?: string | null;
   paymentReference?: string | null;
+  outletId?: number | null;
+  outletName?: string | null;
   subtotal: number;
   tax?: number;
   serviceCharge?: number;
@@ -132,6 +141,9 @@ export interface TodayOrderDto {
   orderType?: OrderType;
   tableNumber?: string | null;
   discountAmount?: number;
+  discountName?: string | null;
+  outletId?: number | null;
+  outletName?: string | null;
   total: number;
   itemCount: number;
   status?: "paid" | "void";
@@ -179,6 +191,8 @@ export interface ShiftReportDto {
   id: number;
   cashierId: number | null;
   cashierName: string;
+  outletId?: number | null;
+  outletName?: string | null;
   openedAt: string;
   closedAt: string;
   expectedCash: number;
@@ -247,4 +261,123 @@ export interface AnalyticsSummary {
   recentShifts?: ShiftReportDto[];
   menuEngineering?: MenuEngineeringSummary;
   generatedAt: string;
+}
+
+/* ----------------------------- MASTER DISCOUNTS ----------------------------- */
+
+export interface DiscountDto {
+  id: number;
+  name: string;
+  type: DiscountType;
+  value: number;
+  minOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppliedPromo {
+  id: number;
+  name: string;
+  type: DiscountType;
+  value: number;
+  minOrder: number;
+}
+
+/* -------------------------- SALES SUMMARY & METRICS ------------------------- */
+
+export interface PaymentChannelMetric {
+  channel: "cash" | "qris" | "debit" | "transfer";
+  label: string;
+  total: number;
+  ordersCount: number;
+  pctOfTotal: number;
+}
+
+export interface ProductSalesMetric {
+  rank: number;
+  productId: number | null;
+  name: string;
+  category: string;
+  qty: number;
+  revenue: number;
+  contributionPct: number;
+}
+
+export interface SalesSummaryPeriodDto {
+  period: "today" | "last7days" | "thisMonth";
+  startDate: string;
+  endDate: string;
+  totalGrossSales: number;
+  totalOrders: number;
+  channels: {
+    cash: number;
+    qris: number;
+    debit: number;
+    transfer: number;
+    total: number;
+    counts: {
+      cash: number;
+      qris: number;
+      debit: number;
+      transfer: number;
+      split: number;
+      total: number;
+    };
+  };
+  metrics: PaymentChannelMetric[];
+  products: ProductSalesMetric[];
+}
+
+/* --------------------------------- OUTLETS --------------------------------- */
+
+export interface OutletDto {
+  id: number;
+  name: string;
+  code: string;
+  address: string;
+  phone: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOutletPayload {
+  name: string;
+  code: string;
+  address?: string;
+  phone?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateOutletPayload {
+  id: number;
+  name?: string;
+  code?: string;
+  address?: string;
+  phone?: string;
+  isActive?: boolean;
+}
+
+/* ------------------------------- ATTENDANCE -------------------------------- */
+
+export interface AttendanceDto {
+  id: number;
+  userId: number;
+  userName: string;
+  userRole: Role;
+  outletId: number | null;
+  outletName: string | null;
+  type: "clock_in" | "clock_out";
+  photoUrl: string;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface CreateAttendancePayload {
+  userId: number;
+  outletId?: number | null;
+  type: "clock_in" | "clock_out";
+  photoUrl: string;
+  note?: string;
 }

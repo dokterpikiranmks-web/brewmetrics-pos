@@ -128,6 +128,102 @@ export async function ensureBatch2Schema() {
   }
 }
 
+export async function ensureDiscountsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS discounts (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        type text NOT NULL,
+        value integer NOT NULL,
+        min_order integer NOT NULL DEFAULT 0,
+        is_active boolean NOT NULL DEFAULT true,
+        created_at timestamp with time zone NOT NULL DEFAULT now(),
+        updated_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_name text DEFAULT '';
+    `);
+
+    const existing = await db.execute(sql`SELECT count(*)::int AS cnt FROM discounts`);
+    const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+    if (count === 0) {
+      await db.execute(sql`
+        INSERT INTO discounts (name, type, value, min_order, is_active) VALUES
+        ('Diskon Member 10%', 'percentage', 10, 30000, true),
+        ('Jumat Berkah Rp 5.000', 'fixed', 5000, 25000, true),
+        ('Promo Ngopi Hemat 15%', 'percentage', 15, 60000, true),
+        ('Voucher Karyawan Rp 10.000', 'fixed', 10000, 50000, true);
+      `);
+    }
+  } catch (err) {
+    console.error("ensureDiscountsTable error:", err);
+  }
+}
+
+export async function ensureOutletsAndMultiBranchSchema() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS outlets (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        code text NOT NULL UNIQUE,
+        address text NOT NULL DEFAULT '',
+        phone text NOT NULL DEFAULT '',
+        is_active boolean NOT NULL DEFAULT true,
+        created_at timestamp with time zone NOT NULL DEFAULT now(),
+        updated_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+    `);
+
+    // Seed default outlets if none exist
+    const existing = await db.execute(sql`SELECT count(*)::int AS cnt FROM outlets`);
+    const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+    if (count === 0) {
+      await db.execute(sql`
+        INSERT INTO outlets (name, code, address, phone, is_active) VALUES
+        ('Cabang Pusat (HQ)', 'HQ', 'Jl. Metro Tanjung Bunga No. 8, Makassar', '0812-4455-6677', true),
+        ('Cabang Pettarani', 'CBG-PTR', 'Jl. A.P. Pettarani No. 24, Makassar', '0812-9988-7766', true);
+      `);
+    }
+
+    // Assign default outlet_id = 1 to existing users, orders, shifts that have null outlet_id
+    await db.execute(sql`
+      UPDATE users SET outlet_id = 1 WHERE outlet_id IS NULL AND role = 'cashier';
+      UPDATE orders SET outlet_id = 1 WHERE outlet_id IS NULL;
+      UPDATE shift_reports SET outlet_id = 1 WHERE outlet_id IS NULL;
+      UPDATE cash_movements SET outlet_id = 1 WHERE outlet_id IS NULL;
+    `);
+  } catch (err) {
+    console.error("ensureOutletsAndMultiBranchSchema error:", err);
+  }
+}
+
+export async function ensureAttendancesTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS attendances (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL REFERENCES users(id),
+        outlet_id integer REFERENCES outlets(id),
+        type text NOT NULL,
+        photo_url text NOT NULL,
+        note text DEFAULT '',
+        created_at timestamp with time zone NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS attendances_user_idx ON attendances(user_id);
+      CREATE INDEX IF NOT EXISTS attendances_outlet_idx ON attendances(outlet_id);
+      CREATE INDEX IF NOT EXISTS attendances_created_idx ON attendances(created_at);
+    `);
+  } catch (err) {
+    console.error("ensureAttendancesTable error:", err);
+  }
+}
+
 /**
  * Idempotent schema verifier — hanya memastikan tabel & kolom yang dibutuhkan aplikasi sudah ada di Supabase.
  * Tidak memasukkan data tiruan / auto-seed sama sekali.
@@ -140,6 +236,9 @@ export async function ensureSchema(): Promise<void> {
       await ensureStoreSettingsTable();
       await ensureOrdersSchema();
       await ensureBatch2Schema();
+      await ensureDiscountsTable();
+      await ensureOutletsAndMultiBranchSchema();
+      await ensureAttendancesTable();
     })().catch((e) => {
       schemaPromise = null;
       throw e;

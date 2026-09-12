@@ -21,6 +21,7 @@ import {
 import { NAV_TABS, ROLE_ACCENT, ROLE_LABEL } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { formatDateID } from "@/lib/format";
+import { BranchSwitcher } from "@/components/branch/BranchSwitcher";
 
 const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, ReceiptText };
 
@@ -199,8 +200,10 @@ export default function AppShell({
             })}
           </nav>
 
-          {/* Sisi Kanan Desktop (>= md): Jam, Profil Lengkap, & Tombol Logout */}
+          {/* Sisi Kanan Desktop (>= md): Branch Switcher, Jam, Profil Lengkap, & Tombol Logout */}
           <div className="hidden md:flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <BranchSwitcher user={user} />
+            <div className="h-8 w-px bg-line" />
             <LiveClock />
             <div className="h-8 w-px bg-line" />
             <div className="flex items-center gap-2.5">
@@ -289,7 +292,7 @@ export default function AppShell({
                 </div>
 
                 {/* Kartu Profil User */}
-                <div className="p-3.5 rounded-2xl bg-coal border border-line mb-4 flex items-center gap-3">
+                <div className="p-3.5 rounded-2xl bg-coal border border-line mb-3 flex items-center gap-3">
                   <div className="grid size-10 place-items-center rounded-full border border-line-2 bg-panel shrink-0">
                     <CircleUserRound className="size-5 text-brand" strokeWidth={1.8} />
                   </div>
@@ -299,6 +302,11 @@ export default function AppShell({
                       {ROLE_LABEL[user.role]}
                     </span>
                   </div>
+                </div>
+
+                {/* Branch Switcher Mobile */}
+                <div className="mb-4">
+                  <BranchSwitcher user={user} />
                 </div>
 
                 {/* List Tab Navigasi */}

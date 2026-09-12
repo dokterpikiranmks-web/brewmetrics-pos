@@ -13,7 +13,9 @@ import AppShell from "@/components/AppShell";
 import { RevenueChart, HourlyChart, TopProducts, PaymentDonut } from "@/components/analytics/Charts";
 import ExportReportModal from "@/components/analytics/ExportReportModal";
 import MenuEngineeringMatrix from "@/components/analytics/MenuEngineeringMatrix";
+import SalesSummarySection from "@/components/analytics/SalesSummarySection";
 import CashMovementModal from "@/components/cash/CashMovementModal";
+import { useBranch } from "@/context/BranchContext";
 import type { AnalyticsSummary, ForecastItem, CustomerDto } from "@/lib/types";
 import { formatIDR, formatQty, formatTime } from "@/lib/format";
 
@@ -22,6 +24,7 @@ interface CashMovementDto {
 }
 
 export default function AnalyticsPage() {
+  const { activeOutletId, activeOutlet } = useBranch();
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [movements, setMovements] = useState<CashMovementDto[]>([]);
   const [topCustomers, setTopCustomers] = useState<CustomerDto[]>([]);
@@ -37,8 +40,10 @@ export default function AnalyticsPage() {
 
   const load = useCallback(async () => {
     try {
+      const outletParam =
+        activeOutletId && activeOutletId !== "all" ? `?outletId=${activeOutletId}` : "";
       const [s, m, c] = await Promise.all([
-        fetch("/api/analytics/summary").then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/analytics/summary${outletParam}`).then((r) => (r.ok ? r.json() : null)),
         fetch("/api/cash-movements").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/customers?sortBy=spend&limit=6").then((r) => (r.ok ? r.json() : null)),
       ]);
@@ -49,7 +54,7 @@ export default function AnalyticsPage() {
     } catch {
       /* diam saat offline */
     }
-  }, []);
+  }, [activeOutletId]);
 
   useEffect(() => {
     load();
@@ -75,10 +80,15 @@ export default function AnalyticsPage() {
         {/* ------------------------------ HEADER ------------------------------ */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.28em] text-faint font-bold mb-1 flex items-center gap-2">
+            <p className="text-[10px] uppercase tracking-[0.28em] text-faint font-bold mb-1 flex items-center gap-2 flex-wrap">
               Owner Cockpit
               <span className="inline-flex items-center gap-1.5 text-emerald-400 normal-case tracking-normal">
                 <Radio className="size-3 animate-pulse-soft" /> Live sync
+              </span>
+              <span className="inline-flex items-center gap-1 text-brand normal-case tracking-normal font-semibold text-[11px] px-2 py-0.5 rounded-md bg-brand/10 border border-brand/20">
+                {activeOutletId === "all"
+                  ? "Semua Cabang (Konsolidasi)"
+                  : activeOutlet?.name || `Cabang #${activeOutletId}`}
               </span>
             </p>
             <h1 className="font-display text-2xl lg:text-3xl font-bold tracking-tight">Analitik &amp; Arus Kas</h1>
@@ -306,6 +316,9 @@ export default function AnalyticsPage() {
                 <ForecastList items={summary.forecast} />
               </Card>
             </div>
+
+            {/* --------- RINGKASAN PENJUALAN (BY METODE BAYAR & BY PRODUK) --------- */}
+            <SalesSummarySection />
 
             {/* ----------------- MENU ENGINEERING MATRIX (30 HARI) ----------------- */}
             <MenuEngineeringMatrix data={summary.menuEngineering} />

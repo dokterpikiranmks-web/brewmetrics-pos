@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { orders, cashMovements, shiftReports } from "@/db/schema";
-import { sql, desc } from "drizzle-orm";
+import { sql, desc, and, eq, gte, lte } from "drizzle-orm";
 import { getSessionUser } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 
@@ -32,17 +32,59 @@ export async function POST(req: Request) {
     const openedAt = lastReport[0]?.closedAt ?? new Date(new Date().setHours(0, 0, 0, 0));
     const closedAt = new Date();
 
-    // 2. Hitung transaksi penjualan sejak shift dibuka
-    const orderStats = await db.execute(sql`
-      SELECT 
-        COUNT(*)::int AS total_orders,
-        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN COALESCE(NULLIF(total, 0), subtotal) ELSE 0 END), 0)::int AS cash_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END), 0)::int AS cash_orders,
-        COALESCE(SUM(CASE WHEN payment_method = 'qris' THEN COALESCE(NULLIF(total, 0), subtotal) ELSE 0 END), 0)::int AS qris_total,
-        COALESCE(SUM(CASE WHEN payment_method = 'debit' THEN COALESCE(NULLIF(total, 0), subtotal) ELSE 0 END), 0)::int AS debit_total
-      FROM orders
-      WHERE status = 'paid' AND created_at >= ${openedAt} AND created_at <= ${closedAt}
-    `);
+    // 2. Ambil transaksi penjualan sejak shift dibuka dengan rekonsiliasi Split Payment
+    const paidOrders = await db
+      .select({
+        paymentMethod: orders.paymentMethod,
+        paymentBreakdown: orders.paymentBreakdown,
+        total: orders.total,
+        subtotal: orders.subtotal,
+        tax: orders.tax,
+        serviceCharge: orders.serviceCharge,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, "paid"),
+          gte(orders.createdAt, openedAt),
+          lte(orders.createdAt, closedAt)
+        )
+      );
+
+    let cashTotal = 0;
+    let cashOrders = 0;
+    let qrisTotal = 0;
+    let debitTotal = 0;
+
+    for (const ord of paidOrders) {
+      const orderTotal = ord.total || (ord.subtotal + (ord.tax ?? 0) + (ord.serviceCharge ?? 0));
+      const breakdown = (ord.paymentBreakdown as Array<{ method: string; amount: number }>) || [];
+
+      if (ord.paymentMethod === "split" && breakdown.length > 0) {
+        let hasCash = false;
+        for (const item of breakdown) {
+          const amt = Number(item.amount) || 0;
+          if (item.method === "cash") {
+            cashTotal += amt;
+            hasCash = true;
+          } else if (item.method === "qris") {
+            qrisTotal += amt;
+          } else if (item.method === "debit") {
+            debitTotal += amt;
+          }
+        }
+        if (hasCash) cashOrders++;
+      } else {
+        if (ord.paymentMethod === "cash") {
+          cashTotal += orderTotal;
+          cashOrders++;
+        } else if (ord.paymentMethod === "qris") {
+          qrisTotal += orderTotal;
+        } else if (ord.paymentMethod === "debit") {
+          debitTotal += orderTotal;
+        }
+      }
+    }
 
     // 3. Hitung mutasi kas masuk dan keluar operasional sejak shift dibuka
     const cashStats = await db.execute(sql`
@@ -53,26 +95,10 @@ export async function POST(req: Request) {
       WHERE created_at >= ${openedAt} AND created_at <= ${closedAt}
     `);
 
-    interface OrderStatsRow {
-      total_orders: number;
-      cash_total: number;
-      cash_orders: number;
-      qris_total: number;
-      debit_total: number;
-    }
-
     interface CashStatsRow {
       cash_in: number;
       cash_out: number;
     }
-
-    const oRow = ((orderStats as unknown as { rows: OrderStatsRow[] }).rows[0] ?? {
-      total_orders: 0,
-      cash_total: 0,
-      cash_orders: 0,
-      qris_total: 0,
-      debit_total: 0,
-    }) as OrderStatsRow;
 
     const cRow = ((cashStats as unknown as { rows: CashStatsRow[] }).rows[0] ?? {
       cash_in: 0,
@@ -80,7 +106,7 @@ export async function POST(req: Request) {
     }) as CashStatsRow;
 
     // Expected cash di laci = Penjualan Tunai + Kas Masuk Operasional - Kas Keluar Operasional
-    const expectedCash = Math.max(0, oRow.cash_total + cRow.cash_in - cRow.cash_out);
+    const expectedCash = Math.max(0, cashTotal + cRow.cash_in - cRow.cash_out);
     const variance = actualCash - expectedCash;
 
     // 4. Simpan hasil Blind Z-Report ke tabel shift_reports
@@ -94,10 +120,10 @@ export async function POST(req: Request) {
         expectedCash,
         actualCash,
         variance,
-        totalOrders: oRow.total_orders,
-        cashOrders: oRow.cash_orders,
-        qrisTotal: oRow.qris_total,
-        debitTotal: oRow.debit_total,
+        totalOrders: paidOrders.length,
+        cashOrders,
+        qrisTotal,
+        debitTotal,
         note,
       })
       .returning();

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
+import { BranchProvider } from "@/context/BranchContext";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -30,7 +31,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id" className={`${jakarta.variable} ${grotesk.variable}`}>
-      <body className="bg-coal text-cream antialiased min-h-dvh">{children}</body>
+      <body className="bg-coal text-cream antialiased min-h-dvh">
+        <BranchProvider>{children}</BranchProvider>
+      </body>
     </html>
   );
 }

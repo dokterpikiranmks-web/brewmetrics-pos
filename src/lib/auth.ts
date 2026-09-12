@@ -31,7 +31,13 @@ export function verifySessionToken(token: string | undefined): SessionUser | nul
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as SessionUser & { exp: number };
     if (!data.exp || data.exp < Date.now()) return null;
-    return { id: data.id, name: data.name, role: data.role };
+    return {
+      id: data.id,
+      name: data.name,
+      role: data.role,
+      outletId: data.outletId ?? null,
+      outletName: data.outletName ?? null,
+    };
   } catch {
     return null;
   }

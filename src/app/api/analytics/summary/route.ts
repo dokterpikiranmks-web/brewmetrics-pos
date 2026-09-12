@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { orders, shiftReports } from "@/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { buildForecastAlerts, buildIngredientDtos } from "@/lib/forecast";
 import type {
@@ -19,20 +19,33 @@ async function query<T>(statement: ReturnType<typeof sql>): Promise<T[]> {
   return (res as unknown as { rows: T[] }).rows;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const { error } = await requireRole(["owner", "manager"]);
   if (error) return error;
+
+  const url = new URL(req.url);
+  const outletParam = url.searchParams.get("outletId");
+  const outletId =
+    outletParam && outletParam !== "all" && !isNaN(Number(outletParam))
+      ? Number(outletParam)
+      : null;
+
+  const outletOrderFilter = outletId ? sql`AND outlet_id = ${outletId}` : sql``;
+  const outletJoinedOrderFilter = outletId ? sql`AND o.outlet_id = ${outletId}` : sql``;
+  const outletCashFilter = outletId
+    ? sql`WHERE outlet_id = ${outletId} AND created_at >= date_trunc('day', now())`
+    : sql`WHERE created_at >= date_trunc('day', now())`;
 
   const todayRows = await query<{ revenue: number; orders: number; hpp: number; profit: number }>(sql`
     SELECT COALESCE(SUM(subtotal),0)::int AS revenue, COUNT(*)::int AS orders,
            COALESCE(SUM(hpp),0)::int AS hpp, COALESCE(SUM(profit),0)::int AS profit
-    FROM orders WHERE status='paid' AND created_at >= date_trunc('day', now())
+    FROM orders WHERE status='paid' AND created_at >= date_trunc('day', now()) ${outletOrderFilter}
   `);
 
   const yesterdayRows = await query<{ revenue: number }>(sql`
     SELECT COALESCE(SUM(subtotal),0)::int AS revenue FROM orders
     WHERE status='paid' AND created_at >= date_trunc('day', now()) - interval '1 day'
-      AND created_at < date_trunc('day', now())
+      AND created_at < date_trunc('day', now()) ${outletOrderFilter}
   `);
 
   const dailyRows = await query<{ date: string; revenue: number; profit: number; orders: number }>(sql`
@@ -41,33 +54,33 @@ export async function GET() {
            COALESCE(SUM(profit),0)::int AS profit,
            COUNT(*)::int AS orders
     FROM orders
-    WHERE status='paid' AND created_at >= now() - interval '29 days'
+    WHERE status='paid' AND created_at >= now() - interval '29 days' ${outletOrderFilter}
     GROUP BY created_at::date
   `);
 
   const hourlyRows = await query<{ hour: number; revenue: number; orders: number }>(sql`
     SELECT extract(hour FROM created_at)::int AS hour,
            COALESCE(SUM(subtotal),0)::int AS revenue, COUNT(*)::int AS orders
-    FROM orders WHERE status='paid' AND created_at >= date_trunc('day', now())
+    FROM orders WHERE status='paid' AND created_at >= date_trunc('day', now()) ${outletOrderFilter}
     GROUP BY 1
   `);
 
   const topRows = await query<{ name: string; qty: number; revenue: number }>(sql`
     SELECT oi.product_name AS name, SUM(oi.qty)::int AS qty, SUM(oi.total_price)::int AS revenue
     FROM order_items oi JOIN orders o ON o.id = oi.order_id
-    WHERE o.status='paid' AND o.created_at >= now() - interval '14 days'
+    WHERE o.status='paid' AND o.created_at >= now() - interval '14 days' ${outletJoinedOrderFilter}
     GROUP BY 1 ORDER BY qty DESC LIMIT 6
   `);
 
   const payRows = await query<{ method: string; value: number }>(sql`
     SELECT payment_method AS method, COALESCE(SUM(subtotal),0)::int AS value
-    FROM orders WHERE status='paid' AND created_at >= now() - interval '29 days'
+    FROM orders WHERE status='paid' AND created_at >= now() - interval '29 days' ${outletOrderFilter}
     GROUP BY 1
   `);
 
   const cashRows = await query<{ type: string; total: number }>(sql`
     SELECT type, COALESCE(SUM(amount),0)::int AS total
-    FROM cash_movements WHERE created_at >= date_trunc('day', now()) GROUP BY type
+    FROM cash_movements ${outletCashFilter} GROUP BY type
   `);
 
   // Query Menu Engineering (30 Hari Terakhir) dari seluruh produk aktif
@@ -95,14 +108,24 @@ export async function GET() {
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN order_items oi ON oi.product_id = p.id
-    LEFT JOIN orders o ON o.id = oi.order_id AND o.status = 'paid' AND o.created_at >= now() - interval '30 days'
+    LEFT JOIN orders o ON o.id = oi.order_id AND o.status = 'paid' AND o.created_at >= now() - interval '30 days' ${outletJoinedOrderFilter}
     WHERE p.is_active = true
     GROUP BY p.id, p.name, c.name, p.price, p.hpp, p.image_url
     ORDER BY total_qty DESC, p.id ASC
   `);
 
-  const recent = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(8);
-  const shiftList = await db.select().from(shiftReports).orderBy(desc(shiftReports.createdAt)).limit(10);
+  const recent = await db
+    .select()
+    .from(orders)
+    .where(outletId ? eq(orders.outletId, outletId) : undefined)
+    .orderBy(desc(orders.createdAt))
+    .limit(8);
+  const shiftList = await db
+    .select()
+    .from(shiftReports)
+    .where(outletId ? eq(shiftReports.outletId, outletId) : undefined)
+    .orderBy(desc(shiftReports.createdAt))
+    .limit(10);
   const [forecast, ingredientDtos] = await Promise.all([buildForecastAlerts(), buildIngredientDtos()]);
 
   const today = todayRows[0] ?? { revenue: 0, orders: 0, hpp: 0, profit: 0 };

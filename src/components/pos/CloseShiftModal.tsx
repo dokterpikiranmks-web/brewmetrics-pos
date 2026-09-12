@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Scale, X, Loader2, CheckCircle2, AlertTriangle, AlertCircle, Printer,
-  LogOut, ArrowRight, Banknote, FileSpreadsheet, RotateCcw,
+  LogOut, ArrowRight, Banknote, FileSpreadsheet, RotateCcw, ChevronDown,
 } from "lucide-react";
 import { formatIDR, formatTime } from "@/lib/format";
 import type { ShiftReportDto } from "@/lib/types";
+import SalesSummarySection from "@/components/analytics/SalesSummarySection";
 
 export default function CloseShiftModal({
   open,
@@ -97,7 +98,7 @@ export default function CloseShiftModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", stiffness: 300, damping: 26 }}
-            className="w-full max-w-lg rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-7 shadow-[0_24px_54px_rgba(0,0,0,0.85)] max-h-[92dvh] overflow-y-auto"
+            className="w-full max-w-xl sm:max-w-2xl rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-7 shadow-[0_24px_54px_rgba(0,0,0,0.85)] max-h-[92dvh] overflow-y-auto"
           >
             {/* ===================================================================
                 FASE 1: BLIND INPUT KAS FISIK DI LACI
@@ -355,6 +356,17 @@ export default function CloseShiftModal({
                       </div>
                     )}
                   </div>
+
+                  {/* AUDIT MULTI-CHANNEL & PENJUALAN PRODUK SHIFT */}
+                  <details className="group rounded-2xl border border-line bg-coal/50 overflow-hidden">
+                    <summary className="flex items-center justify-between p-3.5 cursor-pointer text-xs font-bold text-sand hover:text-cream select-none bg-surface/40">
+                      <span>Rincian Multi-Channel &amp; Penjualan Menu (Shift Hari Ini)</span>
+                      <ChevronDown className="size-4 group-open:rotate-180 transition-transform text-faint" />
+                    </summary>
+                    <div className="p-3.5 pt-2 border-t border-line/50">
+                      <SalesSummarySection compact />
+                    </div>
+                  </details>
 
                   {/* TOMBOL AKSI AKHIR */}
                   <div className="grid grid-cols-2 gap-2.5 pt-1">

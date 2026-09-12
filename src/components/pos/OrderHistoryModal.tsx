@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
+  Tag,
 } from "lucide-react";
 import type { TodayOrderDto, OrderReceipt, StoreSettingDto } from "@/lib/types";
 import { formatIDR, formatTime, formatDateID } from "@/lib/format";
@@ -90,11 +91,48 @@ export default function OrderHistoryModal({
     );
   }, [orders, searchQuery]);
 
-  const totalPaidToday = useMemo(() => {
-    return orders
-      .filter((o) => o.status === "paid")
-      .reduce((sum, o) => sum + o.total, 0);
+  const channelTotals = useMemo(() => {
+    let cash = 0;
+    let qris = 0;
+    let debit = 0;
+    let transfer = 0;
+
+    for (const o of orders) {
+      if (o.status !== "paid") continue;
+      if (
+        o.paymentMethod === "split" &&
+        Array.isArray(o.paymentBreakdown) &&
+        o.paymentBreakdown.length > 0
+      ) {
+        for (const item of o.paymentBreakdown) {
+          const amt = Number(item.amount) || 0;
+          const m = String(item.method).toLowerCase();
+          if (m === "cash") cash += amt;
+          else if (m === "qris") qris += amt;
+          else if (m === "debit") debit += amt;
+          else if (m === "transfer") transfer += amt;
+        }
+      } else {
+        const m = String(o.paymentMethod).toLowerCase();
+        if (m === "cash") cash += o.total;
+        else if (m === "qris") qris += o.total;
+        else if (m === "debit") debit += o.total;
+        else if (m === "transfer") transfer += o.total;
+      }
+    }
+
+    return {
+      cash,
+      qris,
+      debit,
+      transfer,
+      grandTotal: cash + qris + debit + transfer,
+    };
   }, [orders]);
+
+  const totalPaidToday = useMemo(() => {
+    return channelTotals.grandTotal;
+  }, [channelTotals]);
 
   const handleReprint = async (orderId: number) => {
     try {
@@ -217,6 +255,49 @@ export default function OrderHistoryModal({
               </div>
             </div>
 
+            {/* Ringkasan Multi-Channel (Rekonsiliasi Split Payment) */}
+            <div className="border-b border-line bg-coal/60 px-4 sm:px-6 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+                <div className="flex items-center justify-between text-emerald-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Kas Tunai</span>
+                  <Banknote className="size-3.5" />
+                </div>
+                <p className="font-display text-sm font-bold text-cream tabular">
+                  {formatIDR(channelTotals.cash)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-2.5">
+                <div className="flex items-center justify-between text-sky-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">QRIS</span>
+                  <QrCode className="size-3.5" />
+                </div>
+                <p className="font-display text-sm font-bold text-cream tabular">
+                  {formatIDR(channelTotals.qris)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-2.5">
+                <div className="flex items-center justify-between text-violet-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Kartu Debit</span>
+                  <CreditCard className="size-3.5" />
+                </div>
+                <p className="font-display text-sm font-bold text-cream tabular">
+                  {formatIDR(channelTotals.debit)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-2.5">
+                <div className="flex items-center justify-between text-amber-400 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Transfer Bank</span>
+                  <Building2 className="size-3.5" />
+                </div>
+                <p className="font-display text-sm font-bold text-cream tabular">
+                  {formatIDR(channelTotals.transfer)}
+                </p>
+              </div>
+            </div>
+
             {/* Pencarian dan Filter */}
             <div className="border-b border-line p-4 bg-coal/40">
               <div className="relative">
@@ -316,7 +397,31 @@ export default function OrderHistoryModal({
                             {getPaymentIcon(order.paymentMethod)}
                             <span>{getPaymentLabel(order.paymentMethod)}</span>
                           </span>
+                          {order.discountName && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold">
+                              <Tag className="size-2.5" />
+                              <span>{order.discountName}</span>
+                            </span>
+                          )}
                         </div>
+
+                        {/* Rincian Split Payment (jika metode split) */}
+                        {order.paymentMethod === "split" &&
+                          Array.isArray(order.paymentBreakdown) &&
+                          order.paymentBreakdown.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              <span className="text-[10px] text-faint">Split:</span>
+                              {order.paymentBreakdown.map((b, bIdx) => (
+                                <span
+                                  key={bIdx}
+                                  className="inline-flex items-center gap-1 rounded-md bg-surface/80 border border-line px-1.5 py-0.5 text-[10px] text-sand"
+                                >
+                                  <span className="capitalize text-faint">{b.method}:</span>
+                                  <span className="font-bold text-cream tabular">{formatIDR(b.amount)}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
 
                         <div className="flex items-center gap-2.5 text-xs text-faint flex-wrap">
                           <span className="flex items-center gap-1">
@@ -594,7 +699,10 @@ export default function OrderHistoryModal({
 
                             {(selectedReceipt.discountAmount || 0) > 0 && (
                               <div className="flex justify-between text-amber-400">
-                                <span>Diskon Transaksi</span>
+                                <span>
+                                  Diskon Transaksi
+                                  {selectedReceipt.discountName ? ` (${selectedReceipt.discountName})` : ""}
+                                </span>
                                 <span className="tabular font-medium">
                                   - {formatIDR(selectedReceipt.discountAmount || 0)}
                                 </span>

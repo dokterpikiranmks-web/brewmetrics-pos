@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Check, UserPlus, KeyRound, ShieldCheck, CircleUserRound,
-  Crown, Delete, Eye, EyeOff, AlertCircle, Loader2, Lock,
+  Crown, Delete, Eye, EyeOff, AlertCircle, Loader2, Lock, Store,
 } from "lucide-react";
-import type { StaffUserDto, Role } from "@/lib/types";
+import type { StaffUserDto, Role, OutletDto } from "@/lib/types";
 
 interface StaffModalProps {
   open: boolean;
@@ -17,6 +17,7 @@ interface StaffModalProps {
     id?: number;
     name: string;
     role: Role;
+    outletId?: number | null;
     pin?: string;
     active?: boolean;
   }) => Promise<{ error?: string } | void>;
@@ -65,6 +66,8 @@ export default function StaffModal({
 
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("cashier");
+  const [outletId, setOutletId] = useState<number | null>(null);
+  const [outlets, setOutlets] = useState<OutletDto[]>([]);
   const [active, setActive] = useState(true);
 
   // PIN State
@@ -78,9 +81,22 @@ export default function StaffModal({
 
   useEffect(() => {
     if (open) {
+      fetch("/api/outlets?activeOnly=true")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.outlets) {
+            setOutlets(d.outlets);
+            if (!initialData?.outletId && d.outlets.length > 0) {
+              setOutletId(d.outlets[0].id);
+            }
+          }
+        })
+        .catch((e) => console.error("Error fetching outlets in StaffModal:", e));
+
       if (initialData) {
         setName(initialData.name);
         setRole(initialData.role);
+        setOutletId(initialData.outletId ?? null);
         setActive(initialData.active);
         setPin("");
         setResetPinMode(false);
@@ -154,6 +170,11 @@ export default function StaffModal({
       }
     }
 
+    if (role === "cashier" && !outletId) {
+      setError("Kasir wajib ditugaskan ke salah satu cabang / outlet.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -161,12 +182,14 @@ export default function StaffModal({
       id?: number;
       name: string;
       role: Role;
+      outletId?: number | null;
       pin?: string;
       active?: boolean;
     } = {
       id: initialData?.id,
       name: cleanName,
       role,
+      outletId: role === "cashier" ? outletId : (outletId ?? null),
       active,
     };
 
@@ -291,6 +314,41 @@ export default function StaffModal({
                     );
                   })}
                 </div>
+              </div>
+
+              {/* FIELD CABANG / OUTLET */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand mb-1.5 flex items-center justify-between">
+                  <span>
+                    Penugasan Cabang / Outlet {role === "cashier" && <span className="text-brand">*</span>}
+                  </span>
+                  {role === "cashier" && (
+                    <span className="text-[10px] text-amber-400 font-semibold normal-case">
+                      Wajib (Akun kasir terkunci pada outlet ini)
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <select
+                    value={outletId ?? ""}
+                    onChange={(e) => setOutletId(e.target.value ? Number(e.target.value) : null)}
+                    className="input-dark text-sm w-full py-2.5 px-3 rounded-2xl bg-coal border border-line text-cream focus:border-brand focus:outline-none"
+                  >
+                    {role !== "cashier" && (
+                      <option value="">Semua Cabang (Akses Kantor Pusat)</option>
+                    )}
+                    {outlets.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.code}) {o.address ? `• ${o.address}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[10px] text-faint mt-1">
+                  {role === "cashier"
+                    ? "Transaksi kasir dan riwayat absensi akan otomatis tersimpan atas nama cabang ini."
+                    : "Pilih cabang spesifik atau biarkan default untuk akses menyeluruh."}
+                </p>
               </div>
 
               {/* FIELD 3: STATUS AKTIF (KHUSUS MODE EDIT) */}

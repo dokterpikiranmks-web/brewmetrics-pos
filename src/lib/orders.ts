@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db";
-import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings, customers } from "@/db/schema";
+import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings, customers, outlets } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { buildRecipeIndex, hppPerUnit, mergeUsage, usageForLine } from "./recipes";
 import type { CreateOrderPayload, OrderReceipt, SessionUser } from "./types";
@@ -32,9 +32,12 @@ export async function nextOrderNumber(tx: Pick<typeof db, "execute">): Promise<s
 export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt | null> {
   const found = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!found) return null;
-  const [items, settingsRow] = await Promise.all([
+  const [items, settingsRow, outletRow] = await Promise.all([
     db.select().from(orderItems).where(eq(orderItems.orderId, found.id)),
     db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),
+    found.outletId
+      ? db.query.outlets.findFirst({ where: eq(outlets.id, found.outletId) })
+      : Promise.resolve(null),
   ]);
   return {
     id: found.id,
@@ -50,7 +53,10 @@ export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt
     discountType: (found.discountType as any) ?? null,
     discountValue: found.discountValue ?? 0,
     discountAmount: found.discountAmount ?? 0,
+    discountName: found.discountName ?? "",
     paymentReference: found.paymentReference ?? "",
+    outletId: found.outletId ?? null,
+    outletName: outletRow?.name ?? null,
     subtotal: found.subtotal,
     tax: found.tax ?? 0,
     serviceCharge: found.serviceCharge ?? 0,
@@ -255,6 +261,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
       .insert(orders)
       .values({
         orderNumber,
+        outletId: (user as any).outletId ?? payload.outletId ?? 1,
         offlineId: payload.offlineId ?? null,
         cashierId: user.id,
         cashierName: user.name,
@@ -266,6 +273,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         discountType: payload.discountType ?? null,
         discountValue: payload.discountValue ?? 0,
         discountAmount,
+        discountName: (payload.discountName ?? "").trim(),
         paymentReference: (payload.paymentReference ?? "").trim(),
         status: "paid",
         paymentMethod: payload.paymentMethod,
@@ -314,7 +322,9 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     discountType: (receipt.discountType as any) ?? null,
     discountValue: receipt.discountValue ?? 0,
     discountAmount: receipt.discountAmount ?? 0,
+    discountName: receipt.discountName ?? "",
     paymentReference: receipt.paymentReference ?? "",
+    outletId: receipt.outletId ?? null,
     subtotal: receipt.subtotal,
     tax: receipt.tax,
     serviceCharge: receipt.serviceCharge,

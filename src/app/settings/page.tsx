@@ -8,12 +8,15 @@ import {
   Users, UserPlus, ShieldCheck, CircleUserRound, Crown, KeyRound, Pencil,
   Search, Lock, Database, HardDriveDownload, UploadCloud, FileSpreadsheet,
   Download, AlertTriangle, CheckCircle2, ShieldAlert, HeartHandshake,
-  Trophy, MessageCircle, Flame, Trash2,
+  Trophy, MessageCircle, Flame, Trash2, Tag, Building2, Camera,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import StaffModal from "@/components/settings/StaffModal";
 import ExportReportModal from "@/components/analytics/ExportReportModal";
 import ReceiptPrint from "@/components/pos/ReceiptPrint";
+import DiscountManager from "@/components/settings/DiscountManager";
+import { BranchManager } from "@/components/settings/BranchManager";
+import { AttendanceLogsTable } from "@/components/attendance/AttendanceLogsTable";
 import type { StoreSettingDto, StaffUserDto, SessionUser, Role, CustomerDto } from "@/lib/types";
 import { formatIDR, formatDateID, formatTime } from "@/lib/format";
 import { ROLE_LABEL, ROLE_ACCENT } from "@/lib/nav";
@@ -23,8 +26,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" } | null>(null);
 
-  // Active Sub-Tab: "store" | "customers" | "staff" | "backup"
-  const [activeTab, setActiveTab] = useState<"store" | "customers" | "staff" | "backup">("store");
+  // Active Sub-Tab: "store" | "customers" | "staff" | "discounts" | "outlets" | "attendance" | "backup"
+  const [activeTab, setActiveTab] = useState<
+    "store" | "customers" | "staff" | "discounts" | "outlets" | "attendance" | "backup"
+  >("store");
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
 
   // Store Settings State
@@ -233,6 +238,7 @@ export default function SettingsPage() {
     id?: number;
     name: string;
     role: Role;
+    outletId?: number | null;
     pin?: string;
     active?: boolean;
   }): Promise<{ error?: string } | void> => {
@@ -499,6 +505,18 @@ export default function SettingsPage() {
                   <>
                     <Users className="size-3.5" /> Kelola Staf &amp; PIN
                   </>
+                ) : activeTab === "discounts" ? (
+                  <>
+                    <Tag className="size-3.5" /> Kelola Diskon &amp; Promo
+                  </>
+                ) : activeTab === "outlets" ? (
+                  <>
+                    <Building2 className="size-3.5" /> Kelola Cabang / Outlet
+                  </>
+                ) : activeTab === "attendance" ? (
+                  <>
+                    <Camera className="size-3.5" /> Log Absensi Staf
+                  </>
                 ) : (
                   <>
                     <Database className="size-3.5" /> Backup &amp; Restore Database
@@ -513,6 +531,12 @@ export default function SettingsPage() {
                 ? "Pelanggan Setia (Mini CRM)"
                 : activeTab === "staff"
                 ? "Manajemen Staf & Hak Akses"
+                : activeTab === "discounts"
+                ? "Kelola Diskon & Promo"
+                : activeTab === "outlets"
+                ? "Manajemen Multi-Cabang / Outlet"
+                : activeTab === "attendance"
+                ? "Rekapitulasi Absensi Foto Staf"
                 : "Backup & Restore Database"}
             </h1>
             <p className="text-xs sm:text-sm text-sand mt-1">
@@ -522,6 +546,12 @@ export default function SettingsPage() {
                 ? "Daftar pelanggan setia, frekuensi kunjungan, akumulasi total belanja, dan database kontak WhatsApp pelanggan."
                 : activeTab === "staff"
                 ? "Daftarkan akun staf baru, kelola peran (Role), dan atur 4 digit PIN login POS secara terpusat."
+                : activeTab === "discounts"
+                ? "Atur master promo diskon persentase (%) dan potongan nominal (Rp) dengan syarat minimal belanja yang dapat dipilih kasir di POS."
+                : activeTab === "outlets"
+                ? "Atur master cabang kafe, kode outlet, alamat cabang, dan aktifasi operasional cabang POS."
+                : activeTab === "attendance"
+                ? "Audit foto selfie absensi kehadiran staf kasir saat masuk dan pulang per cabang secara real-time."
                 : "Ekspor seluruh database ke file JSON untuk pencadangan aman, atau pulihkan data dari file backup."}
             </p>
           </div>
@@ -647,8 +677,47 @@ export default function SettingsPage() {
             )}
           </button>
 
+          <button
+            type="button"
+            onClick={() => setActiveTab("discounts")}
+            className={`btn-press px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === "discounts"
+                ? "bg-brand text-coal shadow-md shadow-brand/20"
+                : "text-sand hover:text-cream hover:bg-panel"
+            }`}
+          >
+            <Tag className="size-4" />
+            <span>Kelola Diskon &amp; Promo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("attendance")}
+            className={`btn-press px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === "attendance"
+                ? "bg-brand text-coal shadow-md shadow-brand/20"
+                : "text-sand hover:text-cream hover:bg-panel"
+            }`}
+          >
+            <Camera className="size-4" />
+            <span>Log Absensi Staf</span>
+          </button>
+
           {currentUser?.role === "owner" && (
             <>
+              <button
+                type="button"
+                onClick={() => setActiveTab("outlets")}
+                className={`btn-press px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                  activeTab === "outlets"
+                    ? "bg-brand text-coal shadow-md shadow-brand/20"
+                    : "text-sand hover:text-cream hover:bg-panel"
+                }`}
+              >
+                <Building2 className="size-4" />
+                <span>Kelola Cabang / Outlet</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1522,7 +1591,9 @@ export default function SettingsPage() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[10px] text-faint">ID Staf #{staff.id}</span>
+                                  <span className="text-[10px] text-faint">
+                                    ID Staf #{staff.id} • {staff.outletName || (staff.role === "cashier" ? "Cabang Pusat (HQ)" : "Semua Cabang")}
+                                  </span>
                                 </div>
                               </div>
                             </td>
@@ -1600,6 +1671,27 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ===================================================================
+            TAB: KELOLA DISKON & PROMO MASTER (OWNER & MANAJER)
+           =================================================================== */}
+        {activeTab === "discounts" && (
+          <DiscountManager userRole={currentUser?.role} onToast={showToast} />
+        )}
+
+        {/* ===================================================================
+            TAB: KELOLA CABANG / OUTLET (KHUSUS ROLE OWNER)
+           =================================================================== */}
+        {activeTab === "outlets" && currentUser?.role === "owner" && (
+          <BranchManager />
+        )}
+
+        {/* ===================================================================
+            TAB: LOG ABSENSI FOTO STAF (OWNER & MANAJER)
+           =================================================================== */}
+        {activeTab === "attendance" && (
+          <AttendanceLogsTable />
         )}
 
         {/* ===================================================================

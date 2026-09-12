@@ -20,11 +20,12 @@ import {
   Award,
   Loader2,
   Split,
+  Camera,
 } from "lucide-react";
-import type { CartLine, OrderTotals } from "@/lib/cart";
-import { cartTotal, calculateOrderTotals } from "@/lib/cart";
+import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
+import { cartTotal, calculateOrderTotals, type CartLine, type OrderTotals } from "@/lib/cart";
 import { formatIDR } from "@/lib/format";
-import type { StoreSettingDto, OrderType, DiscountType } from "@/lib/types";
+import type { StoreSettingDto, OrderType, DiscountType, DiscountDto } from "@/lib/types";
 
 interface TicketPaneProps {
   lines: CartLine[];
@@ -37,8 +38,8 @@ interface TicketPaneProps {
   setOrderType: (type: OrderType) => void;
   tableNumber: string;
   setTableNumber: (table: string) => void;
-  discount: { type: DiscountType; value: number } | null;
-  setDiscount: (discount: { type: DiscountType; value: number } | null) => void;
+  discount: { type: DiscountType; value: number; name?: string; id?: number; minOrder?: number } | null;
+  setDiscount: (discount: { type: DiscountType; value: number; name?: string; id?: number; minOrder?: number } | null) => void;
   onQty: (key: string, delta: number) => void;
   onRemove: (key: string) => void;
   onClear: () => void;
@@ -77,6 +78,7 @@ export default function TicketPane({
 }: TicketPaneProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   const rawSubtotal = cartTotal(lines);
   const taxPct = storeSettings?.taxPercentage ?? 10;
@@ -112,6 +114,7 @@ export default function TicketPane({
           onOpenHistory={onOpenHistory}
           onCloseShift={onCloseShift}
           onCashMovement={onCashMovement}
+          onOpenAttendance={() => setAttendanceModalOpen(true)}
           onClear={onClear}
         />
 
@@ -130,6 +133,7 @@ export default function TicketPane({
 
         <TicketSummary
           totals={totals}
+          discount={discount}
           servicePct={servicePct}
           taxPct={taxPct}
           totalItems={totalItems}
@@ -233,6 +237,10 @@ export default function TicketPane({
                 onOpenHistory={onOpenHistory}
                 onCloseShift={onCloseShift}
                 onCashMovement={onCashMovement}
+                onOpenAttendance={() => {
+                  setMobileOpen(false);
+                  setAttendanceModalOpen(true);
+                }}
                 onClear={onClear}
                 onClose={() => setMobileOpen(false)}
                 isMobile
@@ -253,6 +261,7 @@ export default function TicketPane({
 
               <TicketSummary
                 totals={totals}
+                discount={discount}
                 servicePct={servicePct}
                 taxPct={taxPct}
                 totalItems={totalItems}
@@ -270,8 +279,8 @@ export default function TicketPane({
         )}
       </AnimatePresence>
 
-      {/* Modal Diskon */}
-      <DiscountModal
+      {/* Modal Pilihan Diskon & Promo */}
+      <PromoSelectModal
         open={discountModalOpen}
         subtotal={rawSubtotal}
         currentDiscount={discount}
@@ -280,6 +289,12 @@ export default function TicketPane({
           setDiscount(d);
           setDiscountModalOpen(false);
         }}
+      />
+
+      {/* Modal Absensi Selfie Kasir */}
+      <SelfieAttendanceModal
+        isOpen={attendanceModalOpen}
+        onClose={() => setAttendanceModalOpen(false)}
       />
     </>
   );
@@ -469,6 +484,7 @@ function TicketHeader({
   onOpenHistory,
   onCloseShift,
   onCashMovement,
+  onOpenAttendance,
   onClear,
   onClose,
   isMobile = false,
@@ -481,6 +497,7 @@ function TicketHeader({
   onOpenHistory: () => void;
   onCloseShift?: () => void;
   onCashMovement?: () => void;
+  onOpenAttendance?: () => void;
   onClear: () => void;
   onClose?: () => void;
   isMobile?: boolean;
@@ -526,6 +543,17 @@ function TicketHeader({
             title="Tutup Shift (Blind Z-Report)"
           >
             <Scale className="size-4" />
+          </button>
+        )}
+
+        {onOpenAttendance && (
+          <button
+            type="button"
+            onClick={onOpenAttendance}
+            className="btn-press relative grid size-8 sm:size-9 place-items-center rounded-xl border border-line bg-panel text-sand hover:text-brand hover:border-brand/40"
+            title="Absensi Foto Selfie Wajah"
+          >
+            <Camera className="size-4" />
           </button>
         )}
 
@@ -675,6 +703,7 @@ function TicketItemList({
 
 function TicketSummary({
   totals,
+  discount,
   servicePct,
   taxPct,
   totalItems = 0,
@@ -685,6 +714,13 @@ function TicketSummary({
   onPay,
 }: {
   totals: OrderTotals;
+  discount?: {
+    id?: number;
+    name?: string;
+    type: DiscountType;
+    value: number;
+    minOrder?: number;
+  } | null;
   servicePct: number;
   taxPct: number;
   totalItems?: number;
@@ -705,27 +741,29 @@ function TicketSummary({
         {/* Diskon Transaksi */}
         {totals.discountAmount > 0 ? (
           <div className="flex items-center justify-between text-amber-400">
-            <div className="flex items-center gap-1.5">
-              <span>
-                Diskon {totals.discountType === "percentage" ? `(${totals.discountValue}%)` : "(Nominal)"}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="truncate">
+                {discount?.name
+                  ? discount.name
+                  : `Diskon ${totals.discountType === "percentage" ? `(${totals.discountValue}%)` : "(Nominal)"}`}
               </span>
               <button
                 type="button"
                 onClick={onOpenDiscount}
-                className="text-[10px] text-faint hover:text-cream underline"
+                className="text-[10px] text-faint hover:text-cream underline shrink-0"
               >
                 Ubah
               </button>
               <button
                 type="button"
                 onClick={onRemoveDiscount}
-                className="text-[10px] text-red-400 hover:text-red-300 ml-0.5"
+                className="text-[10px] text-red-400 hover:text-red-300 ml-0.5 shrink-0"
                 title="Hapus diskon"
               >
                 <Trash2 className="size-3" />
               </button>
             </div>
-            <p className="tabular font-semibold">- {formatIDR(totals.discountAmount)}</p>
+            <p className="tabular font-semibold shrink-0">- {formatIDR(totals.discountAmount)}</p>
           </div>
         ) : (
           <div className="flex items-center justify-between">
@@ -736,7 +774,7 @@ function TicketSummary({
               className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline disabled:opacity-40"
             >
               <Tag className="size-3.5" />
-              <span>+ Tambah Diskon</span>
+              <span>+ Pilih Promo / Diskon</span>
             </button>
           </div>
         )}
@@ -807,40 +845,72 @@ function TicketSummary({
 }
 
 /* -----------------------------------------------------------------------------
- * MODAL INPUT DISKON
+ * MODAL PILIH PROMO & DISKON (MASTER PROMO)
  * -------------------------------------------------------------------------- */
 
-function DiscountModal({
+interface PromoSelectModalProps {
+  open: boolean;
+  subtotal: number;
+  currentDiscount: {
+    id?: number;
+    name?: string;
+    type: DiscountType;
+    value: number;
+    minOrder?: number;
+  } | null;
+  onClose: () => void;
+  onApply: (d: {
+    id?: number;
+    name?: string;
+    type: DiscountType;
+    value: number;
+    minOrder?: number;
+  } | null) => void;
+}
+
+function PromoSelectModal({
   open,
   subtotal,
   currentDiscount,
   onClose,
   onApply,
-}: {
-  open: boolean;
-  subtotal: number;
-  currentDiscount: { type: DiscountType; value: number } | null;
-  onClose: () => void;
-  onApply: (d: { type: DiscountType; value: number } | null) => void;
-}) {
-  const [type, setType] = useState<DiscountType>(currentDiscount?.type ?? "percentage");
-  const [valueStr, setValueStr] = useState<string>(
-    currentDiscount ? String(currentDiscount.value) : "10"
-  );
+}: PromoSelectModalProps) {
+  const [promos, setPromos] = useState<DiscountDto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const numVal = Math.max(0, parseFloat(valueStr) || 0);
-
-  const discountAmount =
-    type === "percentage"
-      ? Math.min(subtotal, Math.round((subtotal * Math.min(100, numVal)) / 100))
-      : Math.min(subtotal, Math.round(numVal));
-
-  const handleSave = () => {
-    if (numVal <= 0) {
-      onApply(null);
-      return;
+  useEffect(() => {
+    if (!open) return;
+    async function fetchPromos() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/discounts?activeOnly=true");
+        if (!res.ok) throw new Error("Gagal mengambil data promo");
+        const json = await res.json();
+        setPromos(json.data || []);
+      } catch (err: any) {
+        setError(err.message || "Gagal memuat daftar promo");
+      } finally {
+        setLoading(false);
+      }
     }
-    onApply({ type, value: numVal });
+    fetchPromos();
+  }, [open]);
+
+  const handleApply = (promo: DiscountDto) => {
+    if (subtotal < promo.minOrder) return;
+    onApply({
+      id: promo.id,
+      name: promo.name,
+      type: promo.type,
+      value: promo.value,
+      minOrder: promo.minOrder,
+    });
+  };
+
+  const handleClear = () => {
+    onApply(null);
   };
 
   return (
@@ -851,12 +921,13 @@ function DiscountModal({
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full max-w-sm rounded-3xl border border-line bg-coal-2 p-5 shadow-2xl space-y-4"
+            className="w-full max-w-md rounded-3xl border border-line bg-coal-2 p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-line">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-line shrink-0">
               <div className="flex items-center gap-2">
                 <Tag className="size-4 text-brand" />
-                <h3 className="font-display text-base font-bold text-cream">Diskon Transaksi</h3>
+                <h3 className="font-display text-base font-bold text-cream">Pilih Promo / Diskon</h3>
               </div>
               <button
                 type="button"
@@ -867,105 +938,150 @@ function DiscountModal({
               </button>
             </div>
 
-            {/* Pilihan Jenis Diskon */}
-            <div className="grid grid-cols-2 p-1 rounded-2xl bg-panel border border-line">
-              <button
-                type="button"
-                onClick={() => setType("percentage")}
-                className={`py-2 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 ${
-                  type === "percentage"
-                    ? "bg-brand text-coal shadow-sm"
-                    : "text-faint hover:text-cream"
-                }`}
-              >
-                <Percent className="size-3.5" />
-                <span>Persen (%)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType("fixed")}
-                className={`py-2 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 ${
-                  type === "fixed"
-                    ? "bg-brand text-coal shadow-sm"
-                    : "text-faint hover:text-cream"
-                }`}
-              >
-                <span>Nominal (Rp)</span>
-              </button>
-            </div>
-
-            {/* Input Nilai Diskon */}
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
-                {type === "percentage" ? "Persentase Diskon (%)" : "Nominal Potongan (Rp)"}
-              </label>
-              <div className="flex items-center gap-2 rounded-2xl border border-line bg-panel px-3.5 py-2.5">
-                <span className="text-xs text-sand font-bold font-display">
-                  {type === "percentage" ? "%" : "Rp"}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={type === "percentage" ? 100 : subtotal}
-                  value={valueStr}
-                  onChange={(e) => setValueStr(e.target.value)}
-                  placeholder={type === "percentage" ? "10" : "5000"}
-                  className="w-full bg-transparent font-display text-lg font-bold tabular outline-none text-cream"
-                />
-              </div>
-            </div>
-
-            {/* Quick Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {type === "percentage"
-                ? [5, 10, 15, 20, 50].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setValueStr(String(p))}
-                      className="btn-press rounded-xl border border-line bg-panel px-2.5 py-1 text-xs font-semibold text-sand hover:text-cream hover:border-brand/40"
-                    >
-                      {p}%
-                    </button>
-                  ))
-                : [5000, 10000, 20000, 50000].map((nom) => (
-                    <button
-                      key={nom}
-                      type="button"
-                      onClick={() => setValueStr(String(nom))}
-                      className="btn-press rounded-xl border border-line bg-panel px-2.5 py-1 text-xs font-semibold text-sand hover:text-cream hover:border-brand/40"
-                    >
-                      {formatIDR(nom)}
-                    </button>
-                  ))}
-            </div>
-
-            {/* Preview Potongan */}
-            <div className="rounded-2xl border border-line bg-panel/70 p-3 flex items-center justify-between text-xs">
-              <span className="text-faint">Potongan Diskon:</span>
-              <span className="font-display text-sm font-bold text-amber-400 tabular">
-                - {formatIDR(discountAmount)}
+            {/* Info Belanja Saat Ini */}
+            <div className="rounded-2xl border border-line bg-panel/70 px-4 py-2.5 flex items-center justify-between text-xs shrink-0">
+              <span className="text-faint">Subtotal Belanja:</span>
+              <span className="font-display text-sm font-bold text-cream tabular">
+                {formatIDR(subtotal)}
               </span>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 pt-1">
+            {/* Promo List */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[220px]">
+              {loading ? (
+                <div className="py-12 text-center text-faint flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="size-6 animate-spin text-brand" />
+                  <p className="text-xs">Memuat daftar promo aktif...</p>
+                </div>
+              ) : error ? (
+                <div className="py-8 text-center text-red-400 text-xs bg-red-500/10 rounded-2xl border border-red-500/20 p-4">
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading(true);
+                      fetch("/api/discounts?activeOnly=true")
+                        .then((r) => r.json())
+                        .then((j) => {
+                          setPromos(j.data || []);
+                          setError(null);
+                        })
+                        .catch((e) => setError(e.message))
+                        .finally(() => setLoading(false));
+                    }}
+                    className="mt-2 text-xs font-semibold text-brand underline"
+                  >
+                    Coba Lagi
+                  </button>
+                </div>
+              ) : promos.length === 0 ? (
+                <div className="py-12 text-center text-faint space-y-2">
+                  <Tag className="size-8 mx-auto opacity-40 text-sand" />
+                  <p className="text-xs text-sand font-medium">Belum ada promo aktif</p>
+                  <p className="text-[11px] text-faint">
+                    Buat dan aktifkan promo di menu Pengaturan &gt; Kelola Diskon & Promo.
+                  </p>
+                </div>
+              ) : (
+                promos.map((promo) => {
+                  const eligible = subtotal >= promo.minOrder;
+                  const isSelected =
+                    currentDiscount?.id === promo.id ||
+                    (!currentDiscount?.id && currentDiscount?.name === promo.name);
+
+                  // Calculate estimated savings
+                  const estimatedDiscount =
+                    promo.type === "percentage"
+                      ? Math.min(subtotal, Math.round((subtotal * Math.min(100, promo.value)) / 100))
+                      : Math.min(subtotal, Math.round(promo.value));
+
+                  return (
+                    <div
+                      key={promo.id}
+                      onClick={() => {
+                        if (eligible) {
+                          handleApply(promo);
+                        }
+                      }}
+                      className={`relative rounded-2xl border p-3.5 transition-all text-left flex flex-col justify-between gap-2.5 ${
+                        isSelected
+                          ? "border-brand bg-brand/10 shadow-[0_0_15px_-3px] shadow-brand/20"
+                          : eligible
+                          ? "border-line bg-panel hover:border-brand/40 hover:bg-panel/90 cursor-pointer"
+                          : "border-line/40 bg-panel/30 opacity-60 cursor-not-allowed"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-display text-sm font-bold text-cream truncate">
+                              {promo.name}
+                            </h4>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold ${
+                                promo.type === "percentage"
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              }`}
+                            >
+                              {promo.type === "percentage" ? (
+                                <>
+                                  <Percent className="size-2.5" />
+                                  <span>{promo.value}%</span>
+                                </>
+                              ) : (
+                                <span>Potongan {formatIDR(promo.value)}</span>
+                              )}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-faint mt-1">
+                            {promo.minOrder > 0
+                              ? `Min. belanja ${formatIDR(promo.minOrder)}`
+                              : "Tanpa minimum belanja"}
+                          </p>
+                        </div>
+
+                        {isSelected ? (
+                          <div className="flex items-center gap-1 rounded-full bg-brand px-2 py-1 text-[10px] font-bold text-coal shrink-0">
+                            <CircleCheck className="size-3" />
+                            <span>Terpasang</span>
+                          </div>
+                        ) : eligible ? (
+                          <span className="text-xs font-bold text-amber-400 tabular shrink-0">
+                            Hemat {formatIDR(estimatedDiscount)}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* Warning if not eligible */}
+                      {!eligible && (
+                        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 text-[10px] text-amber-300 font-medium">
+                          Belanja kurang {formatIDR(promo.minOrder - subtotal)} untuk promo ini
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center gap-2 pt-2 border-t border-line shrink-0">
+              {currentDiscount && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="btn-press flex-1 rounded-xl border border-line py-2.5 text-xs font-semibold text-faint hover:text-red-400"
+                >
+                  Hapus Promo
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  onApply(null);
-                  onClose();
-                }}
-                className="btn-press flex-1 rounded-xl border border-line py-2.5 text-xs font-semibold text-faint hover:text-red-400"
+                onClick={onClose}
+                className="btn-press flex-1 rounded-xl bg-panel border border-line py-2.5 text-xs font-bold text-sand hover:text-cream"
               >
-                Hapus Diskon
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="btn-press flex-1 rounded-xl bg-brand py-2.5 text-xs font-bold text-coal hover:brightness-110 shadow-sm"
-              >
-                Terapkan
+                Tutup
               </button>
             </div>
           </motion.div>

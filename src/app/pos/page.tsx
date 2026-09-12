@@ -41,7 +41,13 @@ export default function PosPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [orderType, setOrderType] = useState<OrderType>("dine-in");
   const [tableNumber, setTableNumber] = useState("");
-  const [discount, setDiscount] = useState<{ type: DiscountType; value: number } | null>(null);
+  const [discount, setDiscount] = useState<{
+    type: DiscountType;
+    value: number;
+    name?: string;
+    id?: number;
+    minOrder?: number;
+  } | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
   const [splitBillOpen, setSplitBillOpen] = useState(false);
@@ -279,6 +285,7 @@ export default function PosPage() {
       discountType: discount?.type ?? null,
       discountValue: discount?.value ?? 0,
       discountAmount: totals.discountAmount,
+      discountName: discount?.name ?? null,
       tax: totals.tax,
       serviceCharge: totals.serviceCharge,
       total: grandTotal,
@@ -331,6 +338,7 @@ export default function PosPage() {
           tableNumber: tableNumber.trim() || undefined,
           discountType: discount?.type,
           discountValue: discount?.value,
+          discountName: discount?.name,
           paymentReference: paymentReference?.trim() || undefined,
           lines: payloadLines,
         }),

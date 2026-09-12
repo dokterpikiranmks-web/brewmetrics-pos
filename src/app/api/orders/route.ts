@@ -28,6 +28,7 @@ export async function GET() {
     orderType: (o.orderType as any) ?? "dine-in",
     tableNumber: o.tableNumber ?? "",
     discountAmount: o.discountAmount ?? 0,
+    discountName: o.discountName ?? "",
     total: o.total || (o.subtotal + (o.tax ?? 0) + (o.serviceCharge ?? 0)),
     itemCount: o.itemCount,
     status: o.status as "paid" | "void",

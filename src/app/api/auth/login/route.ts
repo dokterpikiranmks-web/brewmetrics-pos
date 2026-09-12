@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, outlets } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { setSessionCookie } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
@@ -19,7 +19,22 @@ export async function POST(req: Request) {
     if (!user) {
       return Response.json({ error: "PIN salah atau akun nonaktif." }, { status: 401 });
     }
-    const session: SessionUser = { id: user.id, name: user.name, role: user.role };
+
+    let outletName: string | null = null;
+    if (user.outletId) {
+      const outlet = await db.query.outlets.findFirst({
+        where: eq(outlets.id, user.outletId),
+      });
+      outletName = outlet?.name ?? null;
+    }
+
+    const session: SessionUser = {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      outletId: user.outletId,
+      outletName,
+    };
     await setSessionCookie(session);
     return Response.json({ user: session });
   } catch (e) {

@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Clock,
 } from "lucide-react";
+import { useBranch } from "@/context/BranchContext";
 
 interface ExportReportModalProps {
   open: boolean;
@@ -39,6 +40,7 @@ export default function ExportReportModal({
   const today = new Date();
   const todayStr = toDateInputValue(today);
 
+  const { activeOutletId } = useBranch();
   const [activePreset, setActivePreset] = useState<PresetType>("today");
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
@@ -86,6 +88,9 @@ export default function ExportReportModal({
       }
       params.set("startDate", startDate);
       params.set("endDate", endDate);
+      if (activeOutletId && activeOutletId !== "all") {
+        params.set("outletId", String(activeOutletId));
+      }
 
       const res = await fetch(`/api/reports/export?${params.toString()}`);
 

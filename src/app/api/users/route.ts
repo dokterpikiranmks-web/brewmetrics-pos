@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, outlets } from "@/db/schema";
 import { eq, and, ne, asc } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
@@ -24,13 +24,26 @@ export async function GET() {
         id: users.id,
         name: users.name,
         role: users.role,
+        outletId: users.outletId,
+        outletName: outlets.name,
         active: users.active,
         createdAt: users.createdAt,
       })
       .from(users)
+      .leftJoin(outlets, eq(outlets.id, users.outletId))
       .orderBy(asc(users.id));
 
-    return Response.json({ users: list });
+    return Response.json({
+      users: list.map((u) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        outletId: u.outletId ?? null,
+        outletName: u.outletName ?? null,
+        active: u.active,
+        createdAt: u.createdAt.toISOString(),
+      })),
+    });
   } catch (err) {
     console.error("fetch users error:", err);
     return Response.json({ error: "Gagal mengambil data staf pengguna." }, { status: 500 });
@@ -39,7 +52,7 @@ export async function GET() {
 
 /**
  * POST /api/users
- * Mendaftarkan akun staf baru dengan Nama, Role, dan PIN 4 digit.
+ * Mendaftarkan akun staf baru dengan Nama, Role, PIN 4 digit, dan Cabang (Outlet).
  * Memvalidasi agar PIN tidak boleh kembar dengan staf lain yang aktif.
  */
 export async function POST(req: Request) {
@@ -53,6 +66,7 @@ export async function POST(req: Request) {
       name?: string;
       role?: Role;
       pin?: string;
+      outletId?: number | null;
     };
 
     const name = (body.name ?? "").trim();
@@ -68,6 +82,11 @@ export async function POST(req: Request) {
     const pin = (body.pin ?? "").trim();
     if (!/^\d{4}$/.test(pin)) {
       return Response.json({ error: "PIN wajib berupa 4 digit angka (0-9)." }, { status: 400 });
+    }
+
+    const outletId = body.outletId ? Number(body.outletId) : null;
+    if (role === "cashier" && (!outletId || isNaN(outletId))) {
+      return Response.json({ error: "Akun kasir wajib ditugaskan pada salah satu cabang / outlet." }, { status: 400 });
     }
 
     // Validasi keunikan PIN: PIN tidak boleh kembar dengan staf lain yang masih aktif
@@ -90,21 +109,34 @@ export async function POST(req: Request) {
         name,
         role,
         pin,
+        outletId,
         active: true,
       })
       .returning({
         id: users.id,
         name: users.name,
         role: users.role,
+        outletId: users.outletId,
         active: users.active,
         createdAt: users.createdAt,
       });
+
+    // Ambil nama cabang jika ada
+    let outletName: string | null = null;
+    if (created.outletId) {
+      const o = await db.query.outlets.findFirst({ where: eq(outlets.id, created.outletId) });
+      outletName = o?.name ?? null;
+    }
 
     return Response.json(
       {
         success: true,
         message: `Staf baru "${created.name}" berhasil didaftarkan.`,
-        user: created,
+        user: {
+          ...created,
+          outletName,
+          createdAt: created.createdAt.toISOString(),
+        },
       },
       { status: 201 }
     );
@@ -131,6 +163,7 @@ export async function PATCH(req: Request) {
       role?: Role;
       pin?: string;
       active?: boolean;
+      outletId?: number | null;
     };
 
     const id = Number(body.id);
@@ -151,6 +184,7 @@ export async function PATCH(req: Request) {
       role?: Role;
       pin?: string;
       active?: boolean;
+      outletId?: number | null;
     } = {};
 
     if (body.name !== undefined) {
@@ -179,6 +213,10 @@ export async function PATCH(req: Request) {
         }
       }
       updateData.role = body.role;
+    }
+
+    if (body.outletId !== undefined) {
+      updateData.outletId = body.outletId ? Number(body.outletId) : null;
     }
 
     if (body.active !== undefined) {
@@ -233,14 +271,25 @@ export async function PATCH(req: Request) {
         id: users.id,
         name: users.name,
         role: users.role,
+        outletId: users.outletId,
         active: users.active,
         createdAt: users.createdAt,
       });
 
+    let outletName: string | null = null;
+    if (updated.outletId) {
+      const o = await db.query.outlets.findFirst({ where: eq(outlets.id, updated.outletId) });
+      outletName = o?.name ?? null;
+    }
+
     return Response.json({
       success: true,
       message: `Data staf "${updated.name}" berhasil diperbarui.`,
-      user: updated,
+      user: {
+        ...updated,
+        outletName,
+        createdAt: updated.createdAt.toISOString(),
+      },
     });
   } catch (err) {
     console.error("update user error:", err);
