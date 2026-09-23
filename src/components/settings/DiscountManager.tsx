@@ -34,6 +34,7 @@ export default function DiscountManager({
   const [discounts, setDiscounts] = useState<DiscountDto[]>([]);
   const [availableProducts, setAvailableProducts] = useState<{ id: number; name: string }[]>([]);
   const [availableOutlets, setAvailableOutlets] = useState<OutletDto[]>([]);
+  const [outlets, setOutlets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
@@ -52,6 +53,23 @@ export default function DiscountManager({
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const formData = {
+    outletId: formOutletId,
+  };
+  const setFormData = (
+    next: { outletId?: number | null } | ((prev: typeof formData) => { outletId?: number | null })
+  ) => {
+    const val = typeof next === "function" ? next(formData) : next;
+    setFormOutletId(val.outletId ?? null);
+  };
+
+  useEffect(() => {
+    fetch("/api/outlets")
+      .then((res) => res.json())
+      .then((data) => setOutlets(Array.isArray(data) ? data : data.outlets || data.data || []))
+      .catch((err) => console.error("Gagal load outlets:", err));
+  }, []);
 
   // Modal State Konfirmasi Hapus
   const [deleteTarget, setDeleteTarget] = useState<DiscountDto | null>(null);
@@ -76,7 +94,9 @@ export default function DiscountManager({
       }
       if (outRes.ok) {
         const outData = await outRes.json();
-        setAvailableOutlets(outData.outlets || []);
+        const loadedOutlets = Array.isArray(outData) ? outData : outData.outlets || outData.data || [];
+        setAvailableOutlets(loadedOutlets);
+        setOutlets(loadedOutlets);
       }
     } catch (err) {
       console.error("fetch discounts error:", err);
@@ -712,15 +732,15 @@ export default function DiscountManager({
                   <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
                     Cabang Outlet Berlaku
                   </label>
-                  <select
-                    value={formOutletId ?? ""}
-                    onChange={(e) => setFormOutletId(e.target.value ? Number(e.target.value) : null)}
+                  <select 
+                    value={formData.outletId || ''} 
+                    onChange={(e) => setFormData({ ...formData, outletId: e.target.value ? Number(e.target.value) : null })}
                     className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-xs sm:text-sm text-cream outline-none focus:border-brand/50 transition font-medium"
                   >
                     <option value="">Semua Cabang (Global)</option>
-                    {availableOutlets.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        [{o.code}] {o.name}
+                    {outlets.map((outlet) => (
+                      <option key={outlet.id} value={outlet.id}>
+                        {outlet.name} ({outlet.code || outlet.brandName || 'Cabang'})
                       </option>
                     ))}
                   </select>
