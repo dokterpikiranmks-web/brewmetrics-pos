@@ -7,9 +7,6 @@ import type { AttendanceDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/attendance
- */
 export async function GET(req: Request) {
   await ensureSeeded();
   const { searchParams } = new URL(req.url);
@@ -20,9 +17,7 @@ export async function GET(req: Request) {
     const conditions = [];
     if (outletIdParam && outletIdParam !== "all") {
       const oid = Number(outletIdParam);
-      if (!isNaN(oid)) {
-        conditions.push(eq(attendances.outletId, oid));
-      }
+      if (!isNaN(oid)) conditions.push(eq(attendances.outletId, oid));
     }
 
     if (period === "today") {
@@ -80,10 +75,6 @@ export async function GET(req: Request) {
   }
 }
 
-/**
- * POST /api/attendance
- * Eksekusi simpan langsung tanpa dependensi storage eksternal
- */
 export async function POST(req: Request) {
   await ensureSeeded();
   try {
@@ -92,7 +83,7 @@ export async function POST(req: Request) {
     const outletId = Number(body.outletId ?? body.outlet_id) || 1;
     const type = String(body.type || "in").toLowerCase().trim() === "out" ? "out" : "in";
     const photo = String(body.photo || body.photoUrl || body.photo_url || "");
-    const notes = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : null;
+    const notesValue = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : null;
 
     if (!userId || isNaN(userId)) {
       return NextResponse.json({ error: "User ID kasir wajib valid." }, { status: 400 });
@@ -101,46 +92,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Foto selfie wajib disertakan." }, { status: 400 });
     }
 
-    const clockInVal = type === "in" ? new Date() : null;
-    const clockOutVal = type === "out" ? new Date() : null;
-
-    // Gunakan kueri SQL murni: membiarkan database mengurus sequence 'id' secara otomatis
-    await db.execute(sql`
-      INSERT INTO public.attendances (
-        user_id, 
-        outlet_id, 
-        type, 
-        status, 
-        clock_in_at, 
-        clock_out_at, 
-        photo_url, 
-        notes, 
-        note, 
-        created_at, 
-        updated_at
-      ) VALUES (
-        ${userId}, 
-        ${outletId}, 
-        ${type}, 
-        'present', 
-        ${clockInVal}, 
-        ${clockOutVal}, 
-        ${photo}, 
-        ${notes}, 
-        ${notes}, 
-        NOW(), 
-        NOW()
-      );
-    `);
+    // Gunakan Drizzle ORM standar yang akan mengkonversi format Date secara aman ke PostgreSQL
+    await db.insert(attendances).values({
+      userId: userId,
+      outletId: outletId,
+      type: type,
+      status: "present",
+      clockInAt: type === "in" ? new Date() : null,
+      clockOutAt: type === "out" ? new Date() : null,
+      photoUrl: photo,
+      notes: notesValue,
+      note: notesValue,
+    });
 
     return NextResponse.json({ success: true, message: "Absensi berhasil dicatat." });
   } catch (err: unknown) {
     console.error("POST /api/attendance error:", err);
-
-    // Filter pesan error agar teks Base64 yang panjang tidak menutupi penyebab error sebenarnya di layar UI
-    let rawError = err instanceof Error ? err.message : "Terjadi kesalahan pada database.";
+    const rawError = err instanceof Error ? err.message : "Terjadi kesalahan pada database.";
     const cleanError = rawError.replace(/data:image\/[^;]+;base64,[a-zA-Z0-9+/=]+/g, "[DATA_FOTO]");
-
     return NextResponse.json({ error: cleanError }, { status: 500 });
   }
 }
