@@ -57,6 +57,9 @@ export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt
     paymentReference: found.paymentReference ?? "",
     outletId: found.outletId ?? null,
     outletName: outletRow?.name ?? null,
+    outletBrandName: outletRow?.brandName ?? null,
+    outletReceiptHeader: outletRow?.receiptHeader ?? null,
+    outletReceiptFooter: outletRow?.receiptFooter ?? null,
     subtotal: found.subtotal,
     tax: found.tax ?? 0,
     serviceCharge: found.serviceCharge ?? 0,
@@ -171,11 +174,26 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
 
   // Kalkulasi Diskon Transaksi
   let discountAmount = 0;
-  if (payload.discountType === "percentage") {
-    const pct = Math.max(0, Math.min(100, Math.floor(payload.discountValue ?? 0)));
-    discountAmount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
-  } else if (payload.discountType === "fixed") {
-    discountAmount = Math.min(subtotal, Math.max(0, Math.floor(payload.discountValue ?? 0)));
+  if (payload.discountType && (payload.discountValue ?? 0) > 0) {
+    if (payload.discountScope === "product" && payload.targetProductId) {
+      const matchingItems = normalized.filter((l) => l.product.id === payload.targetProductId);
+      const targetSubtotal = matchingItems.reduce((s, l) => s + l.totalPrice, 0);
+      if (targetSubtotal > 0) {
+        if (payload.discountType === "percentage") {
+          const pct = Math.max(0, Math.min(100, Math.floor(payload.discountValue ?? 0)));
+          discountAmount = Math.min(targetSubtotal, Math.round((targetSubtotal * pct) / 100));
+        } else if (payload.discountType === "fixed") {
+          discountAmount = Math.min(targetSubtotal, Math.max(0, Math.floor(payload.discountValue ?? 0)));
+        }
+      }
+    } else {
+      if (payload.discountType === "percentage") {
+        const pct = Math.max(0, Math.min(100, Math.floor(payload.discountValue ?? 0)));
+        discountAmount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
+      } else if (payload.discountType === "fixed") {
+        discountAmount = Math.min(subtotal, Math.max(0, Math.floor(payload.discountValue ?? 0)));
+      }
+    }
   }
 
   const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
@@ -308,6 +326,11 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     return inserted;
   });
 
+  const effectiveOutletId = receipt.outletId ?? (user as any).outletId ?? payload.outletId ?? 1;
+  const outletRow = effectiveOutletId
+    ? await db.query.outlets.findFirst({ where: eq(outlets.id, effectiveOutletId) })
+    : null;
+
   return {
     id: receipt.id,
     orderNumber: receipt.orderNumber,
@@ -325,6 +348,10 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     discountName: receipt.discountName ?? "",
     paymentReference: receipt.paymentReference ?? "",
     outletId: receipt.outletId ?? null,
+    outletName: outletRow?.name ?? null,
+    outletBrandName: outletRow?.brandName ?? null,
+    outletReceiptHeader: outletRow?.receiptHeader ?? null,
+    outletReceiptFooter: outletRow?.receiptFooter ?? null,
     subtotal: receipt.subtotal,
     tax: receipt.tax,
     serviceCharge: receipt.serviceCharge,

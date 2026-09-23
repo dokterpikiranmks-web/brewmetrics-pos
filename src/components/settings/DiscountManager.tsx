@@ -18,9 +18,11 @@ import {
   ToggleLeft,
   ToggleRight,
   ShieldAlert,
+  Building2,
+  UtensilsCrossed,
 } from "lucide-react";
 import { formatIDR } from "@/lib/format";
-import type { DiscountDto, DiscountType } from "@/lib/types";
+import type { DiscountDto, DiscountType, DiscountScope, OutletDto } from "@/lib/types";
 
 export default function DiscountManager({
   userRole = "owner",
@@ -30,6 +32,8 @@ export default function DiscountManager({
   onToast?: (msg: string, kind?: "ok" | "warn") => void;
 }) {
   const [discounts, setDiscounts] = useState<DiscountDto[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<{ id: number; name: string }[]>([]);
+  const [availableOutlets, setAvailableOutlets] = useState<OutletDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
@@ -42,6 +46,9 @@ export default function DiscountManager({
   const [formType, setFormType] = useState<DiscountType>("percentage");
   const [formValue, setFormValue] = useState<string>("10");
   const [formMinOrder, setFormMinOrder] = useState<string>("0");
+  const [formScope, setFormScope] = useState<DiscountScope>("cart");
+  const [formTargetProductId, setFormTargetProductId] = useState<number | null>(null);
+  const [formOutletId, setFormOutletId] = useState<number | null>(null);
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -53,10 +60,24 @@ export default function DiscountManager({
   const fetchDiscounts = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/discounts");
-      if (!res.ok) throw new Error("Gagal mengambil master diskon.");
-      const data = await res.json();
-      setDiscounts(data.discounts || []);
+      const [discRes, prodRes, outRes] = await Promise.all([
+        fetch("/api/discounts"),
+        fetch("/api/products"),
+        fetch("/api/outlets?activeOnly=true"),
+      ]);
+
+      if (!discRes.ok) throw new Error("Gagal mengambil master diskon.");
+      const discData = await discRes.json();
+      setDiscounts(discData.discounts || discData.data || []);
+
+      if (prodRes.ok) {
+        const prodData = await prodRes.json();
+        setAvailableProducts(prodData.products || []);
+      }
+      if (outRes.ok) {
+        const outData = await outRes.json();
+        setAvailableOutlets(outData.outlets || []);
+      }
     } catch (err) {
       console.error("fetch discounts error:", err);
       onToast?.("Gagal memuat daftar promo dari server.", "warn");
@@ -90,6 +111,9 @@ export default function DiscountManager({
     setFormType("percentage");
     setFormValue("10");
     setFormMinOrder("0");
+    setFormScope("cart");
+    setFormTargetProductId(null);
+    setFormOutletId(null);
     setFormIsActive(true);
     setFormError(null);
     setModalOpen(true);
@@ -101,6 +125,9 @@ export default function DiscountManager({
     setFormType(d.type);
     setFormValue(String(d.value));
     setFormMinOrder(String(d.minOrder));
+    setFormScope(d.scope || "cart");
+    setFormTargetProductId(d.targetProductId ?? null);
+    setFormOutletId(d.outletId ?? null);
     setFormIsActive(d.isActive);
     setFormError(null);
     setModalOpen(true);
@@ -159,6 +186,11 @@ export default function DiscountManager({
       return;
     }
 
+    if (formScope === "product" && (!formTargetProductId || formTargetProductId <= 0)) {
+      setFormError("Pilih menu/produk target promo per menu/unit.");
+      return;
+    }
+
     const numMinOrder = Math.max(0, Number(formMinOrder) || 0);
 
     setFormSubmitting(true);
@@ -173,6 +205,9 @@ export default function DiscountManager({
           type: formType,
           value: numValue,
           minOrder: numMinOrder,
+          scope: formScope,
+          targetProductId: formScope === "product" ? formTargetProductId : null,
+          outletId: formOutletId || null,
           isActive: formIsActive,
         }),
       });
@@ -426,6 +461,33 @@ export default function DiscountManager({
                     {d.name}
                   </h4>
 
+                  {/* Badges Cakupan & Cabang */}
+                  <div className="flex items-center gap-1.5 flex-wrap my-1.5">
+                    {d.scope === "product" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                        <UtensilsCrossed className="size-2.5" />
+                        <span>Menu: {d.targetProductName || `Produk #${d.targetProductId}`}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        <Tag className="size-2.5" />
+                        <span>Total Transaksi (Cart)</span>
+                      </span>
+                    )}
+
+                    {d.outletId ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        <Building2 className="size-2.5" />
+                        <span>Cabang: {d.outletName || `#${d.outletId}`}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-800 text-faint border border-line">
+                        <Building2 className="size-2.5" />
+                        <span>Semua Cabang (Global)</span>
+                      </span>
+                    )}
+                  </div>
+
                   {/* Syarat Minimal Belanja */}
                   <div className="text-xs text-sand flex items-center gap-1.5 mt-2">
                     <span className="text-faint">Syarat:</span>
@@ -582,6 +644,89 @@ export default function DiscountManager({
                       className="w-full bg-transparent font-display text-base font-bold tabular outline-none text-cream"
                     />
                   </div>
+                </div>
+
+                {/* Cakupan Diskon: Total Cart vs Per Produk */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
+                    Cakupan Promo
+                  </label>
+                  <div className="grid grid-cols-2 p-1 rounded-xl bg-coal border border-line">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormScope("cart");
+                        setFormTargetProductId(null);
+                      }}
+                      className={`py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                        formScope === "cart"
+                          ? "bg-brand text-coal shadow-sm"
+                          : "text-sand hover:text-cream"
+                      }`}
+                    >
+                      <Tag className="size-3.5" />
+                      <span>Total Transaksi (Cart)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormScope("product")}
+                      className={`py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                        formScope === "product"
+                          ? "bg-brand text-coal shadow-sm"
+                          : "text-sand hover:text-cream"
+                      }`}
+                    >
+                      <UtensilsCrossed className="size-3.5" />
+                      <span>Per Menu/Produk (Unit)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dropdown Produk Target (Khusus jika scope === 'product') */}
+                {formScope === "product" && (
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
+                      Pilih Menu / Produk Sasaran Promo
+                    </label>
+                    <select
+                      value={formTargetProductId ?? ""}
+                      onChange={(e) => setFormTargetProductId(Number(e.target.value) || null)}
+                      required={formScope === "product"}
+                      className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-xs sm:text-sm text-cream outline-none focus:border-brand/50 transition font-medium"
+                    >
+                      <option value="">-- Pilih Menu Sasaran --</option>
+                      {availableProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-faint mt-1">
+                      Potongan diskon hanya akan dipotong dari harga menu yang dipilih ini.
+                    </p>
+                  </div>
+                )}
+
+                {/* Target Cabang / Outlet */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
+                    Cabang Outlet Berlaku
+                  </label>
+                  <select
+                    value={formOutletId ?? ""}
+                    onChange={(e) => setFormOutletId(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-xs sm:text-sm text-cream outline-none focus:border-brand/50 transition font-medium"
+                  >
+                    <option value="">Semua Cabang (Global)</option>
+                    {availableOutlets.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        [{o.code}] {o.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-faint mt-1">
+                    Pilih &quot;Semua Cabang&quot; jika promo berlaku nasional, atau pilih outlet tertentu.
+                  </p>
                 </div>
 
                 {/* Syarat Minimal Belanja */}

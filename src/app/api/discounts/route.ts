@@ -1,9 +1,9 @@
 import { db } from "@/db";
-import { discounts } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { discounts, products, outlets } from "@/db/schema";
+import { desc, eq, and, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
-import type { DiscountDto, DiscountType } from "@/lib/types";
+import type { DiscountDto, DiscountType, DiscountScope } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
  * Kasir, manajer, dan owner berhak mengakses.
  * Parameter query:
  *   - activeOnly: "true" | "false" (jika true, hanya mengambil promo yang is_active = true)
+ *   - outletId: number (jika diberikan, hanya tampilkan promo global (outletId IS NULL) atau cabang tersebut)
  */
 export async function GET(req: Request) {
   const { error } = await requireRole(["cashier", "manager", "owner"]);
@@ -23,10 +24,42 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const activeOnly = url.searchParams.get("activeOnly") === "true" || url.searchParams.get("active") === "true";
+    const outletIdParam = url.searchParams.get("outletId") ?? url.searchParams.get("outlet_id");
+    const parsedOutletId = outletIdParam && outletIdParam !== "all" ? Number(outletIdParam) : null;
 
-    const rows = activeOnly
-      ? await db.select().from(discounts).where(eq(discounts.isActive, true)).orderBy(desc(discounts.id))
+    let conditions: any[] = [];
+    if (activeOnly) {
+      conditions.push(eq(discounts.isActive, true));
+    }
+    if (parsedOutletId && !isNaN(parsedOutletId)) {
+      conditions.push(or(isNull(discounts.outletId), eq(discounts.outletId, parsedOutletId)));
+    }
+
+    const whereClause = conditions.length > 1
+      ? and(...conditions)
+      : conditions.length === 1
+        ? conditions[0]
+        : undefined;
+
+    const rows = whereClause
+      ? await db.select().from(discounts).where(whereClause).orderBy(desc(discounts.id))
       : await db.select().from(discounts).orderBy(desc(discounts.id));
+
+    // Ambil metadata produk & outlet untuk memperkaya DTO
+    const productIds = rows.map((r) => r.targetProductId).filter((id): id is number => typeof id === "number");
+    const outletIds = rows.map((r) => r.outletId).filter((id): id is number => typeof id === "number");
+
+    const [allProducts, allOutlets] = await Promise.all([
+      productIds.length > 0
+        ? db.select({ id: products.id, name: products.name }).from(products)
+        : Promise.resolve([]),
+      outletIds.length > 0
+        ? db.select({ id: outlets.id, name: outlets.name }).from(outlets)
+        : Promise.resolve([]),
+    ]);
+
+    const productMap = new Map(allProducts.map((p) => [p.id, p.name]));
+    const outletMap = new Map(allOutlets.map((o) => [o.id, o.name]));
 
     const dtoList: DiscountDto[] = rows.map((r) => ({
       id: r.id,
@@ -34,12 +67,17 @@ export async function GET(req: Request) {
       type: r.type as DiscountType,
       value: r.value,
       minOrder: r.minOrder,
+      scope: (r.scope as DiscountScope) || "cart",
+      targetProductId: r.targetProductId ?? null,
+      targetProductName: r.targetProductId ? (productMap.get(r.targetProductId) ?? null) : null,
+      outletId: r.outletId ?? null,
+      outletName: r.outletId ? (outletMap.get(r.outletId) ?? null) : null,
       isActive: r.isActive,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
 
-    return Response.json({ discounts: dtoList });
+    return Response.json({ discounts: dtoList, data: dtoList });
   } catch (err) {
     console.error("fetch discounts error:", err);
     return Response.json({ error: "Gagal memuat master diskon." }, { status: 500 });
@@ -62,6 +100,9 @@ export async function POST(req: Request) {
       type?: DiscountType;
       value?: number;
       minOrder?: number;
+      scope?: DiscountScope;
+      targetProductId?: number | null;
+      outletId?: number | null;
       isActive?: boolean;
     };
 
@@ -84,6 +125,24 @@ export async function POST(req: Request) {
       return Response.json({ error: "Diskon persentase maksimal 100%." }, { status: 400 });
     }
 
+    const scope: DiscountScope = body.scope === "product" ? "product" : "cart";
+    let targetProductId: number | null = null;
+    if (scope === "product") {
+      const prodId = Number(body.targetProductId);
+      if (!prodId || isNaN(prodId)) {
+        return Response.json({ error: "Pilih produk target untuk promo bertipe unit/menu." }, { status: 400 });
+      }
+      targetProductId = prodId;
+    }
+
+    let outletId: number | null = null;
+    if (body.outletId !== undefined && body.outletId !== null) {
+      const parsedOutId = Number(body.outletId);
+      if (!isNaN(parsedOutId) && parsedOutId > 0) {
+        outletId = parsedOutId;
+      }
+    }
+
     const value = Math.round(rawValue);
     const minOrder = Math.max(0, Math.round(Number(body.minOrder) || 0));
     const isActive = body.isActive ?? true;
@@ -95,9 +154,29 @@ export async function POST(req: Request) {
         type,
         value,
         minOrder,
+        scope,
+        targetProductId,
+        outletId,
         isActive,
       })
       .returning();
+
+    // Ambil nama produk dan outlet jika terhubung
+    let targetProductName: string | null = null;
+    if (created.targetProductId) {
+      const p = await db.query.products.findFirst({
+        where: eq(products.id, created.targetProductId),
+      });
+      targetProductName = p?.name ?? null;
+    }
+
+    let outletName: string | null = null;
+    if (created.outletId) {
+      const o = await db.query.outlets.findFirst({
+        where: eq(outlets.id, created.outletId),
+      });
+      outletName = o?.name ?? null;
+    }
 
     const dto: DiscountDto = {
       id: created.id,
@@ -105,6 +184,11 @@ export async function POST(req: Request) {
       type: created.type as DiscountType,
       value: created.value,
       minOrder: created.minOrder,
+      scope: (created.scope as DiscountScope) || "cart",
+      targetProductId: created.targetProductId ?? null,
+      targetProductName,
+      outletId: created.outletId ?? null,
+      outletName,
       isActive: created.isActive,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString(),
@@ -134,6 +218,9 @@ export async function PATCH(req: Request) {
       type?: DiscountType;
       value?: number;
       minOrder?: number;
+      scope?: DiscountScope;
+      targetProductId?: number | null;
+      outletId?: number | null;
       isActive?: boolean;
     };
 
@@ -155,6 +242,9 @@ export async function PATCH(req: Request) {
       type?: DiscountType;
       value?: number;
       minOrder?: number;
+      scope?: "cart" | "product";
+      targetProductId?: number | null;
+      outletId?: number | null;
       isActive?: boolean;
       updatedAt: Date;
     } = {
@@ -196,6 +286,28 @@ export async function PATCH(req: Request) {
       updateData.minOrder = Math.round(minOrd);
     }
 
+    if (body.scope !== undefined) {
+      const scopeVal: DiscountScope = body.scope === "product" ? "product" : "cart";
+      updateData.scope = scopeVal;
+      if (scopeVal === "product") {
+        const prodId = Number(body.targetProductId ?? existing.targetProductId);
+        if (!prodId || isNaN(prodId)) {
+          return Response.json({ error: "Pilih produk target untuk promo bertipe unit/menu." }, { status: 400 });
+        }
+        updateData.targetProductId = prodId;
+      } else {
+        updateData.targetProductId = null;
+      }
+    } else if (body.targetProductId !== undefined) {
+      const prodId = Number(body.targetProductId);
+      updateData.targetProductId = isNaN(prodId) || prodId <= 0 ? null : prodId;
+    }
+
+    if (body.outletId !== undefined) {
+      const outId = Number(body.outletId);
+      updateData.outletId = isNaN(outId) || outId <= 0 ? null : outId;
+    }
+
     if (body.isActive !== undefined) {
       updateData.isActive = Boolean(body.isActive);
     }
@@ -206,12 +318,33 @@ export async function PATCH(req: Request) {
       .where(eq(discounts.id, id))
       .returning();
 
+    let targetProductName: string | null = null;
+    if (updated.targetProductId) {
+      const p = await db.query.products.findFirst({
+        where: eq(products.id, updated.targetProductId),
+      });
+      targetProductName = p?.name ?? null;
+    }
+
+    let outletName: string | null = null;
+    if (updated.outletId) {
+      const o = await db.query.outlets.findFirst({
+        where: eq(outlets.id, updated.outletId),
+      });
+      outletName = o?.name ?? null;
+    }
+
     const dto: DiscountDto = {
       id: updated.id,
       name: updated.name,
       type: updated.type as DiscountType,
       value: updated.value,
       minOrder: updated.minOrder,
+      scope: (updated.scope as DiscountScope) || "cart",
+      targetProductId: updated.targetProductId ?? null,
+      targetProductName,
+      outletId: updated.outletId ?? null,
+      outletName,
       isActive: updated.isActive,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),

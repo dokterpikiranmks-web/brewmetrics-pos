@@ -191,23 +191,32 @@ export function SelfieAttendanceModal({
     };
   }, [isOpen]);
 
-  // Capture frame from video
+  // Capture frame from video with 400x400 square center-crop and JPEG 0.6 compression (<50KB)
   const capturePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    canvas.width = 400;
+    canvas.height = 400;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     // Flip horizontally for natural mirror selfie
-    ctx.translate(canvas.width, 0);
+    ctx.translate(400, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    // Center-crop video ke area bujur sangkar 400x400
+    const videoWidth = video.videoWidth || 640;
+    const videoHeight = video.videoHeight || 480;
+    const minDim = Math.min(videoWidth, videoHeight);
+    const sx = (videoWidth - minDim) / 2;
+    const sy = (videoHeight - minDim) / 2;
+
+    ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 400, 400);
+
+    // Kompresi resolusi 400x400 dengan kualitas JPEG 0.6 (ukuran berkas di bawah 50 KB)
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
     setCapturedPhoto(dataUrl);
     stopCamera();
   };
@@ -552,3 +561,5 @@ export function SelfieAttendanceModal({
     </div>
   );
 }
+
+export default SelfieAttendanceModal;

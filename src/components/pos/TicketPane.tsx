@@ -21,11 +21,13 @@ import {
   Loader2,
   Split,
   Camera,
+  UtensilsCrossed,
+  Building2,
 } from "lucide-react";
 import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
 import { cartTotal, calculateOrderTotals, type CartLine, type OrderTotals } from "@/lib/cart";
 import { formatIDR } from "@/lib/format";
-import type { StoreSettingDto, OrderType, DiscountType, DiscountDto, SessionUser } from "@/lib/types";
+import type { StoreSettingDto, OrderType, DiscountType, DiscountDto, DiscountScope, SessionUser } from "@/lib/types";
 
 interface TicketPaneProps {
   lines: CartLine[];
@@ -38,8 +40,26 @@ interface TicketPaneProps {
   setOrderType: (type: OrderType) => void;
   tableNumber: string;
   setTableNumber: (table: string) => void;
-  discount: { type: DiscountType; value: number; name?: string; id?: number; minOrder?: number } | null;
-  setDiscount: (discount: { type: DiscountType; value: number; name?: string; id?: number; minOrder?: number } | null) => void;
+  discount: {
+    type: DiscountType;
+    value: number;
+    name?: string;
+    id?: number;
+    minOrder?: number;
+    scope?: DiscountScope;
+    targetProductId?: number | null;
+  } | null;
+  setDiscount: (
+    discount: {
+      type: DiscountType;
+      value: number;
+      name?: string;
+      id?: number;
+      minOrder?: number;
+      scope?: DiscountScope;
+      targetProductId?: number | null;
+    } | null
+  ) => void;
   onQty: (key: string, delta: number) => void;
   onRemove: (key: string) => void;
   onClear: () => void;
@@ -91,7 +111,10 @@ export default function TicketPane({
     taxPct,
     servicePct,
     discount?.type,
-    discount?.value ?? 0
+    discount?.value ?? 0,
+    discount?.scope ?? "cart",
+    discount?.targetProductId,
+    lines
   );
 
   const totalItems = lines.reduce((s, l) => s + l.qty, 0);
@@ -284,7 +307,9 @@ export default function TicketPane({
       {/* Modal Pilihan Diskon & Promo */}
       <PromoSelectModal
         open={discountModalOpen}
+        lines={lines}
         subtotal={rawSubtotal}
+        outletId={currentUser?.outletId}
         currentDiscount={discount}
         onClose={() => setDiscountModalOpen(false)}
         onApply={(d) => {
@@ -723,6 +748,8 @@ function TicketSummary({
     type: DiscountType;
     value: number;
     minOrder?: number;
+    scope?: DiscountScope;
+    targetProductId?: number | null;
   } | null;
   servicePct: number;
   taxPct: number;
@@ -747,7 +774,7 @@ function TicketSummary({
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="truncate">
                 {discount?.name
-                  ? discount.name
+                  ? `${discount.name}${discount.scope === "product" ? " (Per Menu)" : ""}`
                   : `Diskon ${totals.discountType === "percentage" ? `(${totals.discountValue}%)` : "(Nominal)"}`}
               </span>
               <button
@@ -853,13 +880,17 @@ function TicketSummary({
 
 interface PromoSelectModalProps {
   open: boolean;
+  lines: CartLine[];
   subtotal: number;
+  outletId?: number | null;
   currentDiscount: {
     id?: number;
     name?: string;
     type: DiscountType;
     value: number;
     minOrder?: number;
+    scope?: DiscountScope;
+    targetProductId?: number | null;
   } | null;
   onClose: () => void;
   onApply: (d: {
@@ -868,12 +899,16 @@ interface PromoSelectModalProps {
     type: DiscountType;
     value: number;
     minOrder?: number;
+    scope?: DiscountScope;
+    targetProductId?: number | null;
   } | null) => void;
 }
 
 function PromoSelectModal({
   open,
+  lines,
   subtotal,
+  outletId,
   currentDiscount,
   onClose,
   onApply,
@@ -888,10 +923,12 @@ function PromoSelectModal({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/discounts?activeOnly=true");
+        const endpoint = `/api/discounts?activeOnly=true${outletId ? `&outletId=${outletId}` : ""}`;
+        const res = await fetch(endpoint);
         if (!res.ok) throw new Error("Gagal mengambil data promo");
         const json = await res.json();
-        setPromos(json.data || []);
+        const list = json.discounts || json.data || [];
+        setPromos(list);
       } catch (err: any) {
         setError(err.message || "Gagal memuat daftar promo");
       } finally {
@@ -899,16 +936,18 @@ function PromoSelectModal({
       }
     }
     fetchPromos();
-  }, [open]);
+  }, [open, outletId]);
 
-  const handleApply = (promo: DiscountDto) => {
-    if (subtotal < promo.minOrder) return;
+  const handleApply = (promo: DiscountDto, eligible: boolean) => {
+    if (!eligible) return;
     onApply({
       id: promo.id,
       name: promo.name,
       type: promo.type,
       value: promo.value,
       minOrder: promo.minOrder,
+      scope: promo.scope || "cart",
+      targetProductId: promo.targetProductId ?? null,
     });
   };
 
@@ -963,10 +1002,11 @@ function PromoSelectModal({
                     type="button"
                     onClick={() => {
                       setLoading(true);
-                      fetch("/api/discounts?activeOnly=true")
+                      const endpoint = `/api/discounts?activeOnly=true${outletId ? `&outletId=${outletId}` : ""}`;
+                      fetch(endpoint)
                         .then((r) => r.json())
                         .then((j) => {
-                          setPromos(j.data || []);
+                          setPromos(j.discounts || j.data || []);
                           setError(null);
                         })
                         .catch((e) => setError(e.message))
@@ -987,23 +1027,37 @@ function PromoSelectModal({
                 </div>
               ) : (
                 promos.map((promo) => {
-                  const eligible = subtotal >= promo.minOrder;
+                  const meetsMinOrder = subtotal >= promo.minOrder;
+                  const isProductScope = promo.scope === "product";
+                  const matchingLines = isProductScope && promo.targetProductId
+                    ? lines.filter((l) => l.productId === promo.targetProductId)
+                    : [];
+                  const targetInCart = !isProductScope || matchingLines.length > 0;
+                  const targetSubtotal = isProductScope
+                    ? matchingLines.reduce((s, l) => s + l.unitPrice * l.qty, 0)
+                    : subtotal;
+
+                  const eligible = meetsMinOrder && targetInCart;
                   const isSelected =
                     currentDiscount?.id === promo.id ||
                     (!currentDiscount?.id && currentDiscount?.name === promo.name);
 
                   // Calculate estimated savings
-                  const estimatedDiscount =
-                    promo.type === "percentage"
-                      ? Math.min(subtotal, Math.round((subtotal * Math.min(100, promo.value)) / 100))
-                      : Math.min(subtotal, Math.round(promo.value));
+                  let estimatedDiscount = 0;
+                  if (eligible) {
+                    if (promo.type === "percentage") {
+                      estimatedDiscount = Math.min(targetSubtotal, Math.round((targetSubtotal * Math.min(100, promo.value)) / 100));
+                    } else {
+                      estimatedDiscount = Math.min(targetSubtotal, Math.round(promo.value));
+                    }
+                  }
 
                   return (
                     <div
                       key={promo.id}
                       onClick={() => {
                         if (eligible) {
-                          handleApply(promo);
+                          handleApply(promo, eligible);
                         }
                       }}
                       className={`relative rounded-2xl border p-3.5 transition-all text-left flex flex-col justify-between gap-2.5 ${
@@ -1016,7 +1070,7 @@ function PromoSelectModal({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <h4 className="font-display text-sm font-bold text-cream truncate">
                               {promo.name}
                             </h4>
@@ -1037,6 +1091,29 @@ function PromoSelectModal({
                               )}
                             </span>
                           </div>
+
+                          {/* Scope & Branch Tags */}
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                            {isProductScope ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                                <UtensilsCrossed className="size-2.5" />
+                                <span>Menu: {promo.targetProductName || `Item #${promo.targetProductId}`}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                <Tag className="size-2.5" />
+                                <span>Total Belanja</span>
+                              </span>
+                            )}
+
+                            {promo.outletId && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                <Building2 className="size-2.5" />
+                                <span>Cabang: {promo.outletName || `#${promo.outletId}`}</span>
+                              </span>
+                            )}
+                          </div>
+
                           <p className="text-[11px] text-faint mt-1">
                             {promo.minOrder > 0
                               ? `Min. belanja ${formatIDR(promo.minOrder)}`
@@ -1056,10 +1133,15 @@ function PromoSelectModal({
                         ) : null}
                       </div>
 
-                      {/* Warning if not eligible */}
-                      {!eligible && (
+                      {/* Warnings if not eligible */}
+                      {!meetsMinOrder && (
                         <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 text-[10px] text-amber-300 font-medium">
                           Belanja kurang {formatIDR(promo.minOrder - subtotal)} untuk promo ini
+                        </div>
+                      )}
+                      {meetsMinOrder && !targetInCart && (
+                        <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 text-[10px] text-purple-300 font-medium">
+                          Menu {promo.targetProductName || "khusus"} belum ada di keranjang kasir
                         </div>
                       )}
                     </div>

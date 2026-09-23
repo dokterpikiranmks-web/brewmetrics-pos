@@ -25,8 +25,8 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const periodParam = url.searchParams.get("period") || "today";
-    const period: "today" | "last7days" | "thisMonth" =
-      periodParam === "last7days" || periodParam === "thisMonth" ? periodParam : "today";
+    const startDateParam = url.searchParams.get("startDate");
+    const endDateParam = url.searchParams.get("endDate");
 
     const outletParam = url.searchParams.get("outletId");
     const outletId =
@@ -37,8 +37,24 @@ export async function GET(req: Request) {
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
+    let period: "today" | "last7days" | "thisMonth" | "custom" =
+      periodParam === "last7days" || periodParam === "thisMonth" || periodParam === "custom"
+        ? (periodParam as any)
+        : "today";
 
-    if (period === "today") {
+    if (startDateParam && endDateParam) {
+      period = "custom";
+      // Parsing rentang tanggal YYYY-MM-DD
+      const [sYear, sMonth, sDay] = startDateParam.includes("-")
+        ? startDateParam.split("T")[0].split("-").map(Number)
+        : [now.getFullYear(), now.getMonth() + 1, now.getDate()];
+      startDate = new Date(sYear, sMonth - 1, sDay, 0, 0, 0, 0);
+
+      const [eYear, eMonth, eDay] = endDateParam.includes("-")
+        ? endDateParam.split("T")[0].split("-").map(Number)
+        : [now.getFullYear(), now.getMonth() + 1, now.getDate()];
+      endDate = new Date(eYear, eMonth - 1, eDay, 23, 59, 59, 999);
+    } else if (period === "today") {
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     } else if (period === "last7days") {

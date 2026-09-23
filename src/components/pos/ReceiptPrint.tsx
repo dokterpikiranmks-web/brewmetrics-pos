@@ -61,7 +61,16 @@ export default function ReceiptPrint({
 
   // Ambil profil toko dari receipt atau props fallback ke default
   const settings = receipt?.storeSettings ?? storeSettings;
-  const cafeName = settings?.cafeName ?? "BREWMETRICS Specialty Coffee";
+  const cafeName =
+    receipt?.outletBrandName ||
+    settings?.brandName ||
+    receipt?.outletName ||
+    settings?.cafeName ||
+    "DOI TA";
+  const receiptHeader =
+    receipt?.outletReceiptHeader ||
+    settings?.receiptHeader ||
+    "";
   const address = settings?.address ?? "Jl. Pengayoman No. 12, Panakkukang, Makassar";
   const phone = settings?.phone ?? "0812-3456-7890";
   const paperSize = settings?.printerPaperSize ?? "58mm";
@@ -69,8 +78,10 @@ export default function ReceiptPrint({
   const taxPct = settings?.taxPercentage ?? 10;
   const servicePct = settings?.serviceChargePercentage ?? 0;
   const footerMessage =
-    settings?.receiptFooterMessage ??
-    "Terima kasih atas kunjungan Anda!\nFollow IG kami @brewmetrics.coffee";
+    receipt?.outletReceiptFooter ||
+    settings?.receiptFooter ||
+    settings?.receiptFooterMessage ||
+    "Terima kasih atas kunjungan Anda!\nFollow IG kami @doita.pos";
 
   const displayOrderNumber =
     receipt?.orderNumber ??
@@ -305,6 +316,11 @@ export default function ReceiptPrint({
             >
               {cafeName}
             </h1>
+            {receiptHeader && (
+              <p className="text-[9px] mt-0.5 font-semibold text-gray-800 leading-tight italic">
+                {receiptHeader}
+              </p>
+            )}
             <p className="text-[9px] mt-1 text-gray-700 leading-tight">{address}</p>
             <p className="text-[8.5px] text-gray-700 mt-0.5">Telp: {phone}</p>
             <div className="inline-block mt-1 px-1.5 py-0.2 bg-gray-100 rounded text-[7.5px] text-gray-500 font-sans">
@@ -525,7 +541,7 @@ export default function ReceiptPrint({
               {footerMessage}
             </div>
             <p className="text-[8px] pt-1 text-gray-500">
-              Powered by BrewMetrics POS System
+              Powered by DOI TA POS System
             </p>
           </div>
         </div>

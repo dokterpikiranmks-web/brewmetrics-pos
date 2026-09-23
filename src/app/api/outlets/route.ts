@@ -25,6 +25,9 @@ export async function GET(req: Request) {
         code: outlets.code,
         address: outlets.address,
         phone: outlets.phone,
+        brandName: outlets.brandName,
+        receiptHeader: outlets.receiptHeader,
+        receiptFooter: outlets.receiptFooter,
         isActive: outlets.isActive,
         createdAt: outlets.createdAt,
         updatedAt: outlets.updatedAt,
@@ -41,6 +44,9 @@ export async function GET(req: Request) {
       code: o.code,
       address: o.address,
       phone: o.phone,
+      brandName: o.brandName,
+      receiptHeader: o.receiptHeader,
+      receiptFooter: o.receiptFooter,
       isActive: o.isActive,
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
@@ -69,6 +75,9 @@ export async function POST(req: Request) {
     const code = (body.code ?? "").trim().toUpperCase();
     const address = (body.address ?? "").trim();
     const phone = (body.phone ?? "").trim();
+    const brandName = (body.brandName ?? "").trim();
+    const receiptHeader = (body.receiptHeader ?? "").trim();
+    const receiptFooter = (body.receiptFooter ?? "").trim();
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : true;
 
     if (!name || name.length < 2) {
@@ -98,6 +107,9 @@ export async function POST(req: Request) {
         code,
         address,
         phone,
+        brandName,
+        receiptHeader,
+        receiptFooter,
         isActive,
       })
       .returning();
@@ -112,6 +124,9 @@ export async function POST(req: Request) {
           code: created.code,
           address: created.address,
           phone: created.phone,
+          brandName: created.brandName,
+          receiptHeader: created.receiptHeader,
+          receiptFooter: created.receiptFooter,
           isActive: created.isActive,
           createdAt: created.createdAt.toISOString(),
           updatedAt: created.updatedAt.toISOString(),
@@ -189,6 +204,18 @@ export async function PATCH(req: Request) {
       updateData.phone = body.phone.trim();
     }
 
+    if (body.brandName !== undefined) {
+      updateData.brandName = body.brandName.trim();
+    }
+
+    if (body.receiptHeader !== undefined) {
+      updateData.receiptHeader = body.receiptHeader.trim();
+    }
+
+    if (body.receiptFooter !== undefined) {
+      updateData.receiptFooter = body.receiptFooter.trim();
+    }
+
     if (body.isActive !== undefined) {
       updateData.isActive = Boolean(body.isActive);
     }
@@ -208,6 +235,9 @@ export async function PATCH(req: Request) {
         code: updated.code,
         address: updated.address,
         phone: updated.phone,
+        brandName: updated.brandName,
+        receiptHeader: updated.receiptHeader,
+        receiptFooter: updated.receiptFooter,
         isActive: updated.isActive,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),

@@ -137,22 +137,30 @@ export async function ensureDiscountsTable() {
         type text NOT NULL,
         value integer NOT NULL,
         min_order integer NOT NULL DEFAULT 0,
+        scope text NOT NULL DEFAULT 'cart',
+        target_product_id integer REFERENCES products(id),
+        outlet_id integer REFERENCES outlets(id),
         is_active boolean NOT NULL DEFAULT true,
         created_at timestamp with time zone NOT NULL DEFAULT now(),
         updated_at timestamp with time zone NOT NULL DEFAULT now()
       );
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_name text DEFAULT '';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'cart';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS target_product_id integer REFERENCES products(id);
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      CREATE INDEX IF NOT EXISTS discounts_target_prod_idx ON discounts(target_product_id);
+      CREATE INDEX IF NOT EXISTS discounts_outlet_idx ON discounts(outlet_id);
     `);
 
     const existing = await db.execute(sql`SELECT count(*)::int AS cnt FROM discounts`);
     const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
     if (count === 0) {
       await db.execute(sql`
-        INSERT INTO discounts (name, type, value, min_order, is_active) VALUES
-        ('Diskon Member 10%', 'percentage', 10, 30000, true),
-        ('Jumat Berkah Rp 5.000', 'fixed', 5000, 25000, true),
-        ('Promo Ngopi Hemat 15%', 'percentage', 15, 60000, true),
-        ('Voucher Karyawan Rp 10.000', 'fixed', 10000, 50000, true);
+        INSERT INTO discounts (name, type, value, min_order, scope, is_active) VALUES
+        ('Diskon Member 10%', 'percentage', 10, 30000, 'cart', true),
+        ('Jumat Berkah Rp 5.000', 'fixed', 5000, 25000, 'cart', true),
+        ('Promo Ngopi Hemat 15%', 'percentage', 15, 60000, 'cart', true),
+        ('Voucher Karyawan Rp 10.000', 'fixed', 10000, 50000, 'cart', true);
       `);
     }
   } catch (err) {
@@ -169,15 +177,23 @@ export async function ensureOutletsAndMultiBranchSchema() {
         code text NOT NULL UNIQUE,
         address text NOT NULL DEFAULT '',
         phone text NOT NULL DEFAULT '',
+        brand_name text NOT NULL DEFAULT '',
+        receipt_header text NOT NULL DEFAULT '',
+        receipt_footer text NOT NULL DEFAULT '',
         is_active boolean NOT NULL DEFAULT true,
         created_at timestamp with time zone NOT NULL DEFAULT now(),
         updated_at timestamp with time zone NOT NULL DEFAULT now()
       );
 
+      ALTER TABLE outlets ADD COLUMN IF NOT EXISTS brand_name text NOT NULL DEFAULT '';
+      ALTER TABLE outlets ADD COLUMN IF NOT EXISTS receipt_header text NOT NULL DEFAULT '';
+      ALTER TABLE outlets ADD COLUMN IF NOT EXISTS receipt_footer text NOT NULL DEFAULT '';
+
       ALTER TABLE users ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
     `);
 
     // Seed default outlets if none exist
@@ -185,11 +201,44 @@ export async function ensureOutletsAndMultiBranchSchema() {
     const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
     if (count === 0) {
       await db.execute(sql`
-        INSERT INTO outlets (name, code, address, phone, is_active) VALUES
-        ('Cabang Pusat (HQ)', 'HQ', 'Jl. Metro Tanjung Bunga No. 8, Makassar', '0812-4455-6677', true),
-        ('Cabang Pettarani', 'CBG-PTR', 'Jl. A.P. Pettarani No. 24, Makassar', '0812-9988-7766', true);
+        INSERT INTO outlets (name, code, address, phone, brand_name, receipt_header, receipt_footer, is_active) VALUES
+        ('Cabang Pusat (HQ)', 'HQ', 'Jl. Metro Tanjung Bunga No. 8, Makassar', '0812-4455-6677', 'DOI TA', 'Pusat Kopi & Kuliner Nusantara', 'Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos', true),
+        ('Cabang Pettarani', 'CBG-PTR', 'Jl. A.P. Pettarani No. 24, Makassar', '0812-9988-7766', 'DOI TA Pettarani', '', 'Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos', true);
       `);
     }
+
+    // Pastikan cabang Nasi Kebuli Mandhi (KBL-01) terdaftar dan terdeteksi
+    const kebuliCheck = await db.execute(sql`SELECT count(*)::int AS cnt FROM outlets WHERE code = 'KBL-01'`);
+    const kebuliCount = (kebuliCheck as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+    if (kebuliCount === 0) {
+      await db.execute(sql`
+        INSERT INTO outlets (name, code, address, phone, brand_name, receipt_header, receipt_footer, is_active)
+        VALUES (
+          'Nasi Kebuli Mandhi',
+          'KBL-01',
+          'Jl. Sunu No. 15, Makassar',
+          '0813-8899-0011',
+          'Nasi Kebuli Mandhi',
+          'Khas Rempah Arab & Timur Tengah Asli',
+          'Terima kasih atas kunjungan Anda!\nFollow IG: @nasikebuli.mandhi',
+          true
+        );
+      `);
+    } else {
+      // Perbarui brand_name & receipt_header jika masih kosong
+      await db.execute(sql`
+        UPDATE outlets
+        SET brand_name = 'Nasi Kebuli Mandhi',
+            receipt_header = 'Khas Rempah Arab & Timur Tengah Asli',
+            receipt_footer = 'Terima kasih atas kunjungan Anda!\nFollow IG: @nasikebuli.mandhi'
+        WHERE code = 'KBL-01' AND (brand_name = '' OR receipt_header = '');
+      `);
+    }
+
+    // Set fallback branding untuk cabang HQ jika masih kosong
+    await db.execute(sql`
+      UPDATE outlets SET brand_name = 'DOI TA' WHERE code = 'HQ' AND (brand_name IS NULL OR brand_name = '');
+    `);
 
     // Assign default outlet_id = 1 to existing users, orders, shifts that have null outlet_id
     await db.execute(sql`

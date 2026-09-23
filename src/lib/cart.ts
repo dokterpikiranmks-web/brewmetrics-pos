@@ -1,4 +1,4 @@
-import type { CartLinePayload, DiscountType } from "./types";
+import type { CartLinePayload, DiscountType, DiscountScope } from "./types";
 
 export interface CartLine {
   key: string;
@@ -48,8 +48,8 @@ export interface OrderTotals {
  * Kalkulasi Standar Pajak Restoran (PB1) & Biaya Layanan Kafe dengan Diskon:
  * - Subtotal = total harga seluruh menu pesanan
  * - Diskon:
- *   - Persentase: Subtotal * (discountValue / 100)
- *   - Nominal Tetap: discountValue
+ *   - Scope 'product': Hanya mengurangi harga dari baris menu yang sesuai targetProductId
+ *   - Scope 'cart': Mengurangi subtotal total keranjang
  * - Subtotal Setelah Diskon = max(0, Subtotal - Diskon)
  * - Service Charge = Subtotal Setelah Diskon * (serviceChargePercentage / 100)
  * - Pajak Restoran (PB1) = (Subtotal Setelah Diskon + Service Charge) * (taxPercentage / 100)
@@ -60,16 +60,37 @@ export function calculateOrderTotals(
   taxPercentage = 10,
   serviceChargePercentage = 0,
   discountType?: DiscountType | null,
-  discountValue = 0
+  discountValue = 0,
+  discountScope: DiscountScope = "cart",
+  targetProductId?: number | null,
+  lines?: CartLine[]
 ): OrderTotals {
   const safeSubtotal = Math.max(0, Math.round(subtotal));
 
   let discountAmount = 0;
-  if (discountType === "percentage") {
-    const pct = Math.max(0, Math.min(100, discountValue));
-    discountAmount = Math.min(safeSubtotal, Math.round((safeSubtotal * pct) / 100));
-  } else if (discountType === "fixed") {
-    discountAmount = Math.min(safeSubtotal, Math.max(0, Math.round(discountValue)));
+  if (discountType && discountValue > 0) {
+    if (discountScope === "product" && targetProductId && lines && lines.length > 0) {
+      // Diskon berlaku eksklusif untuk produk spesifik
+      const matchingLines = lines.filter((l) => l.productId === targetProductId);
+      const targetSubtotal = matchingLines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
+
+      if (targetSubtotal > 0) {
+        if (discountType === "percentage") {
+          const pct = Math.max(0, Math.min(100, discountValue));
+          discountAmount = Math.min(targetSubtotal, Math.round((targetSubtotal * pct) / 100));
+        } else if (discountType === "fixed") {
+          discountAmount = Math.min(targetSubtotal, Math.max(0, Math.round(discountValue)));
+        }
+      }
+    } else {
+      // Diskon global transaksi / cart
+      if (discountType === "percentage") {
+        const pct = Math.max(0, Math.min(100, discountValue));
+        discountAmount = Math.min(safeSubtotal, Math.round((safeSubtotal * pct) / 100));
+      } else if (discountType === "fixed") {
+        discountAmount = Math.min(safeSubtotal, Math.max(0, Math.round(discountValue)));
+      }
+    }
   }
 
   const subtotalAfterDiscount = Math.max(0, safeSubtotal - discountAmount);

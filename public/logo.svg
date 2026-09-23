@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <!-- Gold Linear Gradient -->
+    <linearGradient id="goldGrad" x1="10" y1="10" x2="110" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDE68A" />
+      <stop offset="25%" stop-color="#F59E0B" />
+      <stop offset="60%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+
+    <!-- Emerald Accent Gradient -->
+    <linearGradient id="emeraldGrad" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="50%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Coin Glow & Shadow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#F59E0B" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Outer Coin Rim (Dark Metallic Border) -->
+  <circle cx="60" cy="60" r="54" fill="#18181B" stroke="url(#goldGrad)" stroke-width="4.5" filter="url(#glow)" />
+
+  <!-- Inner Coin Ring (Emerald Accent) -->
+  <circle cx="60" cy="60" r="46" fill="#09090B" stroke="url(#emeraldGrad)" stroke-width="2" stroke-dasharray="4 2" />
+
+  <!-- Subtle Coin Texture / Grip Dots -->
+  <circle cx="60" cy="18" r="1.5" fill="#F59E0B" />
+  <circle cx="60" cy="102" r="1.5" fill="#F59E0B" />
+  <circle cx="18" cy="60" r="1.5" fill="#F59E0B" />
+  <circle cx="102" cy="60" r="1.5" fill="#F59E0B" />
+
+  <!-- Monogram Letter 'D' Bold Form -->
+  <!-- Left Vertical Spine of 'D' -->
+  <rect x="36" y="32" width="13" height="56" rx="4" fill="url(#goldGrad)" />
+
+  <!-- Curved Arch of 'D' -->
+  <path d="M47 32 H65 C78.5 32 89 42.5 89 60 C89 77.5 78.5 88 65 88 H47 V75 H63 C71 75 76 69 76 60 C76 51 71 45 63 45 H47 V32 Z" fill="url(#goldGrad)" />
+
+  <!-- Digital POS Receipt Strip Lines (Cutting Accents) -->
+  <!-- Line 1: Upper Receipt Segment -->
+  <rect x="52" y="52" width="16" height="3" rx="1.5" fill="#10B981" />
+  <!-- Line 2: Middle Receipt Segment -->
+  <rect x="52" y="58" width="22" height="3" rx="1.5" fill="#34D399" />
+  <!-- Line 3: Lower Receipt Segment (Slightly Shorter) -->
+  <rect x="52" y="64" width="12" height="3" rx="1.5" fill="#10B981" />
+
+  <!-- Digital Slip Jagged Cut Teeth Accent at bottom -->
+  <path d="M49 88 L52 83 L55 88 L58 83 L61 88" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

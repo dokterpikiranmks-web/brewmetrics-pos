@@ -11,6 +11,7 @@ import {
 import { HOME_BY_ROLE } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
+import Logo from "@/components/Logo";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -110,15 +111,7 @@ export default function LoginScreen() {
           animate={{ opacity: 1, y: 0 }}
           className="relative flex items-center gap-3"
         >
-          <div className="grid size-11 place-items-center rounded-2xl bg-brand text-coal shadow-[0_0_40px_-6px] shadow-brand/60">
-            <Coffee className="size-6" strokeWidth={2.4} />
-          </div>
-          <div>
-            <p className="font-display text-xl font-bold tracking-tight leading-none">
-              BrewMetrics<span className="text-brand">.</span>
-            </p>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-sand mt-1">POS &amp; Analytics</p>
-          </div>
+          <Logo size="md" showText subtitle="Smart POS & Management" />
         </motion.div>
 
         <div className="relative max-w-xl">
@@ -191,13 +184,8 @@ export default function LoginScreen() {
         <div className="absolute bottom-[-160px] left-[-120px] size-[380px] rounded-full bg-brand-2/8 blur-[110px]" />
 
         {/* Mobile brand */}
-        <div className="lg:hidden flex items-center gap-3 mb-8 relative">
-          <div className="grid size-10 place-items-center rounded-xl bg-brand text-coal">
-            <Coffee className="size-5" strokeWidth={2.4} />
-          </div>
-          <p className="font-display text-lg font-bold tracking-tight">
-            BrewMetrics<span className="text-brand">.</span>
-          </p>
+        <div className="lg:hidden flex items-center mb-8 relative">
+          <Logo size="sm" showText subtitle="Smart POS" />
         </div>
 
         <motion.div

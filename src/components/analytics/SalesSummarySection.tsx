@@ -22,10 +22,18 @@ import type { SalesSummaryPeriodDto, PaymentChannelMetric, ProductSalesMetric } 
 import { useBranch } from "@/context/BranchContext";
 
 interface SalesSummarySectionProps {
-  initialPeriod?: "today" | "last7days" | "thisMonth";
+  initialPeriod?: "today" | "last7days" | "thisMonth" | "custom";
   compact?: boolean;
   className?: string;
 }
+
+const getLocalTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function SalesSummarySection({
   initialPeriod = "today",
@@ -33,18 +41,30 @@ export default function SalesSummarySection({
   className = "",
 }: SalesSummarySectionProps) {
   const { activeOutletId } = useBranch();
-  const [period, setPeriod] = useState<"today" | "last7days" | "thisMonth">(initialPeriod);
+  const [period, setPeriod] = useState<"today" | "last7days" | "thisMonth" | "custom">(initialPeriod);
+  const [startDate, setStartDate] = useState(getLocalTodayString());
+  const [endDate, setEndDate] = useState(getLocalTodayString());
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<SalesSummaryPeriodDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSummary = async (selectedPeriod: "today" | "last7days" | "thisMonth") => {
+  const fetchSummary = async (
+    selectedPeriod: "today" | "last7days" | "thisMonth" | "custom",
+    customStart?: string,
+    customEnd?: string
+  ) => {
     setLoading(true);
     setError(null);
     try {
       const outletParam =
         activeOutletId && activeOutletId !== "all" ? `&outletId=${activeOutletId}` : "";
-      const res = await fetch(`/api/reports/sales-summary?period=${selectedPeriod}${outletParam}`);
+      let endpoint = `/api/reports/sales-summary?period=${selectedPeriod}${outletParam}`;
+      if (selectedPeriod === "custom") {
+        const s = customStart || startDate;
+        const e = customEnd || endDate;
+        endpoint = `/api/reports/sales-summary?period=custom&startDate=${s}&endDate=${e}${outletParam}`;
+      }
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error("Gagal mengambil ringkasan penjualan.");
       const data = await res.json();
       if (data.summary) {
@@ -59,7 +79,9 @@ export default function SalesSummarySection({
   };
 
   useEffect(() => {
-    fetchSummary(period);
+    if (period !== "custom") {
+      fetchSummary(period);
+    }
   }, [period, activeOutletId]);
 
   const channelIcon = (ch: "cash" | "qris" | "debit" | "transfer") => {
@@ -104,65 +126,121 @@ export default function SalesSummarySection({
   return (
     <div className={`space-y-4 ${className}`}>
       {/* HEADER SECTION & FILTER RANGE BUTTONS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl border border-line bg-panel">
-        <div className="flex items-center gap-2.5">
-          <div className="grid size-9 place-items-center rounded-xl bg-brand/15 text-brand border border-brand/30">
-            <TrendingUp className="size-4.5" />
+      <div className="flex flex-col gap-3 p-3.5 sm:p-4 rounded-2xl border border-line bg-panel">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="grid size-9 place-items-center rounded-xl bg-brand/15 text-brand border border-brand/30">
+              <TrendingUp className="size-4.5" />
+            </div>
+            <div>
+              <h3 className="font-display text-sm sm:text-base font-bold text-cream">
+                Ringkasan Penjualan &amp; Arus Kanal
+              </h3>
+              <p className="text-[11px] text-faint">
+                Rekonsiliasi multi-kanal dan performa menu kopi &amp; makanan
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-display text-sm sm:text-base font-bold text-cream">
-              Ringkasan Penjualan &amp; Arus Kanal
-            </h3>
-            <p className="text-[11px] text-faint">
-              Rekonsiliasi multi-kanal dan performa menu kopi &amp; makanan
-            </p>
+
+          {/* Filter Cepat: Hari Ini, 7 Hari, Bulan Ini */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-coal border border-line self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setPeriod("today")}
+              className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                period === "today"
+                  ? "bg-brand text-coal shadow-sm"
+                  : "text-sand hover:text-cream hover:bg-panel"
+              }`}
+            >
+              Hari Ini
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("last7days")}
+              className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                period === "last7days"
+                  ? "bg-brand text-coal shadow-sm"
+                  : "text-sand hover:text-cream hover:bg-panel"
+              }`}
+            >
+              7 Hari
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("thisMonth")}
+              className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                period === "thisMonth"
+                  ? "bg-brand text-coal shadow-sm"
+                  : "text-sand hover:text-cream hover:bg-panel"
+              }`}
+            >
+              Bulan Ini
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fetchSummary(period, startDate, endDate)}
+              disabled={loading}
+              className="btn-press ml-1 p-1.5 rounded-lg text-faint hover:text-cream border border-line hover:bg-panel transition"
+              title="Segarkan data ringkasan"
+            >
+              <RefreshCw className={`size-3.5 ${loading ? "animate-spin text-brand" : ""}`} />
+            </button>
           </div>
         </div>
 
-        {/* Filter Rentang Tanggal: Hari Ini, 7 Hari, Bulan Ini */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-coal border border-line">
-          <button
-            type="button"
-            onClick={() => setPeriod("today")}
-            className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              period === "today"
-                ? "bg-brand text-coal shadow-sm"
-                : "text-sand hover:text-cream hover:bg-panel"
-            }`}
-          >
-            Hari Ini
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriod("last7days")}
-            className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              period === "last7days"
-                ? "bg-brand text-coal shadow-sm"
-                : "text-sand hover:text-cream hover:bg-panel"
-            }`}
-          >
-            7 Hari
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriod("thisMonth")}
-            className={`btn-press px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              period === "thisMonth"
-                ? "bg-brand text-coal shadow-sm"
-                : "text-sand hover:text-cream hover:bg-panel"
-            }`}
-          >
-            Bulan Ini
-          </button>
+        {/* PEMILIH TANGGAL KUSTOM (KALENDER RENTANG TANGGAL) */}
+        <div className="flex flex-wrap items-center gap-2.5 pt-3 border-t border-line/60">
+          <div className="flex items-center gap-1.5 text-sand">
+            <Calendar className="size-4 text-brand shrink-0" />
+            <span className="text-xs font-semibold">Rentang Tanggal:</span>
+          </div>
 
+          {/* Dari Tanggal (startDate) */}
+          <div className="flex items-center gap-1.5 bg-coal px-2.5 py-1.5 rounded-xl border border-line">
+            <label htmlFor="sales-start-date" className="text-[11px] text-faint font-medium">
+              Dari:
+            </label>
+            <input
+              id="sales-start-date"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-transparent text-xs text-cream font-medium focus:outline-none [color-scheme:dark]"
+            />
+          </div>
+
+          {/* Sampai Tanggal (endDate) */}
+          <div className="flex items-center gap-1.5 bg-coal px-2.5 py-1.5 rounded-xl border border-line">
+            <label htmlFor="sales-end-date" className="text-[11px] text-faint font-medium">
+              Sampai:
+            </label>
+            <input
+              id="sales-end-date"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-transparent text-xs text-cream font-medium focus:outline-none [color-scheme:dark]"
+            />
+          </div>
+
+          {/* Tombol Terapkan Filter */}
           <button
             type="button"
-            onClick={() => fetchSummary(period)}
+            onClick={() => {
+              setPeriod("custom");
+              fetchSummary("custom", startDate, endDate);
+            }}
             disabled={loading}
-            className="btn-press ml-1 p-1.5 rounded-lg text-faint hover:text-cream border border-line hover:bg-panel transition"
-            title="Segarkan data ringkasan"
+            className="btn-press px-3.5 py-1.5 rounded-xl bg-brand text-coal text-xs font-bold shadow-md shadow-brand/10 hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5"
           >
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin text-brand" : ""}`} />
+            {loading && period === "custom" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Calendar className="size-3.5" />
+            )}
+            Terapkan Filter
           </button>
         </div>
       </div>
@@ -178,6 +256,55 @@ export default function SalesSummarySection({
         </div>
       ) : summary ? (
         <>
+          {/* =================================================================
+              BANNER: AKUMULASI TOTAL OMZET & STATISTIK PERIODE
+             ================================================================= */}
+          <div className="p-4 rounded-2xl border border-brand/40 bg-gradient-to-r from-brand/15 via-panel to-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-sand flex items-center gap-1.5">
+                <Trophy className="size-3.5 text-brand" />
+                Akumulasi Total Omzet
+              </span>
+              <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-cream tabular tracking-tight">
+                {formatIDR(summary.totalGrossSales)}
+              </h2>
+              <p className="text-[11px] text-faint">
+                Periode Aktif:{" "}
+                <span className="text-sand font-semibold">
+                  {new Date(summary.startDate).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                  {" s/d "}
+                  {new Date(summary.endDate).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+                {period === "custom" && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-brand/20 text-brand text-[10px] font-bold">
+                    Rentang Kustom
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="px-3.5 py-2 rounded-xl bg-coal/80 border border-line text-right">
+                <p className="text-[10px] text-faint uppercase font-bold">Total Transaksi</p>
+                <p className="font-display text-base font-bold text-cream tabular">
+                  {summary.totalOrders} Pesanan
+                </p>
+              </div>
+              <div className="px-3.5 py-2 rounded-xl bg-coal/80 border border-line text-right">
+                <p className="text-[10px] text-faint uppercase font-bold">Total Penerimaan Kanal</p>
+                <p className="font-display text-base font-bold text-emerald-400 tabular">
+                  {formatIDR(summary.channels.total)}
+                </p>
+              </div>
+            </div>
+          </div>
           {/* =================================================================
               SEKSI 1: RINGKASAN METODE BAYAR (4 KARTU METRIK KANAL)
              ================================================================= */}

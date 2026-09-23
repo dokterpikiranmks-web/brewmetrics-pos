@@ -17,9 +17,9 @@ const grotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "BrewMetrics — POS & Analytics",
+  title: "DOI TA — Smart POS & Management",
   description:
-    "Sistem kasir F&B tanpa langganan: POS cepat, resep Bill of Materials, stok bahan presisi gram/ml, dan AI sales forecasting.",
+    "Sistem kasir F&B cerdas: POS multi-brand cepat, resep Bill of Materials, stok bahan presisi gram/ml, dan analitik multi-outlet.",
 };
 
 export const viewport: Viewport = {

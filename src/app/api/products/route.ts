@@ -7,23 +7,46 @@ import {
   categories,
   bundleItems,
 } from "@/db/schema";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { invalidateRecipeCache } from "@/lib/recipes";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const { error } = await requireRole(["cashier", "manager", "owner"]);
+export async function GET(req: Request) {
+  const { user, error } = await requireRole(["cashier", "manager", "owner"]);
   if (error) return error;
 
   await ensureSeeded();
 
   try {
+    const url = new URL(req.url);
+    const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId");
+
+    // Tentukan filter outlet:
+    // 1. Dari query parameter outlet_id (jika diberikan dan bukan "all")
+    // 2. Jika tidak ada parameter spesifik, gunakan outlet_id kasir yang sedang aktif
+    let targetOutletId: number | null = null;
+    if (outletParam && outletParam !== "all") {
+      const parsed = Number(outletParam);
+      if (!isNaN(parsed)) {
+        targetOutletId = parsed;
+      }
+    } else if (!outletParam && user?.outletId) {
+      targetOutletId = user.outletId;
+    }
+
+    // Filter produk berdasarkan outlet_id kasir aktif ATAU produk global (outlet_id IS NULL)
+    const productWhere = targetOutletId
+      ? or(eq(products.outletId, targetOutletId), isNull(products.outletId))
+      : undefined;
+
     const [allProducts, allVariants, allRecipes, allIngredients, allCategories, allBundleItems] =
       await Promise.all([
-        db.select().from(products).orderBy(asc(products.id)),
+        productWhere
+          ? db.select().from(products).where(productWhere).orderBy(asc(products.id))
+          : db.select().from(products).orderBy(asc(products.id)),
         db.select().from(variants),
         db.select().from(recipeItems),
         db.select().from(ingredients),
@@ -96,6 +119,7 @@ export async function GET() {
         imageUrl: p.imageUrl ?? "",
         isActive: p.isActive,
         isBundle: p.isBundle ?? false,
+        outletId: p.outletId ?? null,
         bundleItems: (bundlesByProd.get(p.id) ?? []).map((b) => ({
           productId: b.subProductId,
           productName: prodMap.get(b.subProductId)?.name ?? "Produk",
@@ -118,7 +142,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { error } = await requireRole(["manager", "owner"]);
+  const { user, error } = await requireRole(["manager", "owner"]);
   if (error) return error;
 
   await ensureSeeded();
@@ -134,6 +158,8 @@ export async function POST(req: Request) {
       imageUrl?: string;
       isActive?: boolean;
       isBundle?: boolean;
+      outletId?: number | null;
+      outlet_id?: number | null;
       bundleItems?: { productId: number; qty: number }[];
       variants?: { name: string; priceDelta: number }[];
       recipe?: {
@@ -231,6 +257,12 @@ export async function POST(req: Request) {
 
     const finalHpp = Math.round(serverCalculatedHpp);
 
+    const rawOutletId = body.outletId ?? body.outlet_id;
+    const outletId =
+      rawOutletId !== undefined && rawOutletId !== null && !isNaN(Number(rawOutletId))
+        ? Number(rawOutletId)
+        : (user?.outletId ?? null);
+
     // 3. DATABASE TRANSACTION
     const createdProduct = await db.transaction(async (tx) => {
       // Simpan Produk
@@ -247,6 +279,7 @@ export async function POST(req: Request) {
           imageUrl,
           isActive,
           isBundle,
+          outletId,
         })
         .returning();
 

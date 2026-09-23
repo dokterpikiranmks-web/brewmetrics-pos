@@ -23,6 +23,7 @@ import type {
   StoreSettingDto,
   OrderType,
   DiscountType,
+  DiscountScope,
   PaymentBreakdownItem,
 } from "@/lib/types";
 import { cartLineKey, cartTotal, calculateOrderTotals, toPayloadLines, type CartLine } from "@/lib/cart";
@@ -47,6 +48,8 @@ export default function PosPage() {
     name?: string;
     id?: number;
     minOrder?: number;
+    scope?: DiscountScope;
+    targetProductId?: number | null;
   } | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
@@ -258,7 +261,10 @@ export default function PosPage() {
     settings?.taxPercentage ?? 10,
     settings?.serviceChargePercentage ?? 0,
     discount?.type,
-    discount?.value ?? 0
+    discount?.value ?? 0,
+    discount?.scope ?? "cart",
+    discount?.targetProductId,
+    lines
   );
 
   /* ------------------------------- SUBMIT ORDER ------------------------------ */
@@ -339,6 +345,8 @@ export default function PosPage() {
           discountType: discount?.type,
           discountValue: discount?.value,
           discountName: discount?.name,
+          discountScope: discount?.scope,
+          targetProductId: discount?.targetProductId,
           paymentReference: paymentReference?.trim() || undefined,
           lines: payloadLines,
         }),

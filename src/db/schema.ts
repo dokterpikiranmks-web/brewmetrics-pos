@@ -20,6 +20,9 @@ export const outlets = pgTable("outlets", {
   code: text("code").notNull().unique(),
   address: text("address").notNull().default(""),
   phone: text("phone").notNull().default(""),
+  brandName: text("brand_name").notNull().default(""),
+  receiptHeader: text("receipt_header").notNull().default(""),
+  receiptFooter: text("receipt_footer").notNull().default(""),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -62,8 +65,12 @@ export const products = pgTable(
     imageUrl: text("image_url").default(""),
     isBundle: boolean("is_bundle").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
+    outletId: integer("outlet_id").references(() => outlets.id),
   },
-  (t) => [index("products_category_idx").on(t.categoryId)]
+  (t) => [
+    index("products_category_idx").on(t.categoryId),
+    index("products_outlet_idx").on(t.outletId),
+  ]
 );
 
 export const variants = pgTable(
@@ -276,16 +283,26 @@ export const shiftReports = pgTable(
 
 /* -------------------------------- DISCOUNTS -------------------------------- */
 
-export const discounts = pgTable("discounts", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  type: text("type", { enum: ["percentage", "fixed"] }).notNull(),
-  value: integer("value").notNull(),
-  minOrder: integer("min_order").notNull().default(0),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const discounts = pgTable(
+  "discounts",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    type: text("type", { enum: ["percentage", "fixed"] }).notNull(),
+    value: integer("value").notNull(),
+    minOrder: integer("min_order").notNull().default(0),
+    scope: text("scope", { enum: ["cart", "product"] }).notNull().default("cart"),
+    targetProductId: integer("target_product_id").references(() => products.id),
+    outletId: integer("outlet_id").references(() => outlets.id),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("discounts_target_prod_idx").on(t.targetProductId),
+    index("discounts_outlet_idx").on(t.outletId),
+  ]
+);
 
 /* ----------------------------- STORE SETTINGS ------------------------------ */
 
@@ -356,6 +373,10 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],
+  }),
+  outlet: one(outlets, {
+    fields: [products.outletId],
+    references: [outlets.id],
   }),
   variants: many(variants),
   recipeItems: many(recipeItems),
@@ -467,6 +488,17 @@ export const attendancesRelations = relations(attendances, ({ one }) => ({
   }),
   outlet: one(outlets, {
     fields: [attendances.outletId],
+    references: [outlets.id],
+  }),
+}));
+
+export const discountsRelations = relations(discounts, ({ one }) => ({
+  targetProduct: one(products, {
+    fields: [discounts.targetProductId],
+    references: [products.id],
+  }),
+  outlet: one(outlets, {
+    fields: [discounts.outletId],
     references: [outlets.id],
   }),
 }));

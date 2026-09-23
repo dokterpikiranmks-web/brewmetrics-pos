@@ -47,6 +47,7 @@ export interface CartLinePayload {
 
 export type OrderType = "dine-in" | "take-away";
 export type DiscountType = "percentage" | "fixed";
+export type DiscountScope = "cart" | "product";
 export type PaymentMethod = "cash" | "qris" | "debit" | "transfer" | "split";
 
 export interface PaymentBreakdownItem {
@@ -68,6 +69,8 @@ export interface CreateOrderPayload {
   discountType?: DiscountType | null;
   discountValue?: number;
   discountName?: string;
+  discountScope?: DiscountScope;
+  targetProductId?: number | null;
   paymentReference?: string;
   outletId?: number | null;
   lines: CartLinePayload[];
@@ -85,6 +88,9 @@ export interface OrderReceiptItem {
 export interface StoreSettingDto {
   id: number;
   cafeName: string;
+  brandName?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   logoUrl: string | null;
   address: string;
   phone: string;
@@ -114,6 +120,9 @@ export interface OrderReceipt {
   paymentReference?: string | null;
   outletId?: number | null;
   outletName?: string | null;
+  outletBrandName?: string | null;
+  outletReceiptHeader?: string | null;
+  outletReceiptFooter?: string | null;
   subtotal: number;
   tax?: number;
   serviceCharge?: number;
@@ -271,6 +280,11 @@ export interface DiscountDto {
   type: DiscountType;
   value: number;
   minOrder: number;
+  scope: DiscountScope;
+  targetProductId?: number | null;
+  targetProductName?: string | null;
+  outletId?: number | null;
+  outletName?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -282,6 +296,9 @@ export interface AppliedPromo {
   type: DiscountType;
   value: number;
   minOrder: number;
+  scope: DiscountScope;
+  targetProductId?: number | null;
+  outletId?: number | null;
 }
 
 /* -------------------------- SALES SUMMARY & METRICS ------------------------- */
@@ -305,7 +322,7 @@ export interface ProductSalesMetric {
 }
 
 export interface SalesSummaryPeriodDto {
-  period: "today" | "last7days" | "thisMonth";
+  period: "today" | "last7days" | "thisMonth" | "custom" | string;
   startDate: string;
   endDate: string;
   totalGrossSales: number;
@@ -337,6 +354,9 @@ export interface OutletDto {
   code: string;
   address: string;
   phone: string;
+  brandName?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -347,6 +367,9 @@ export interface CreateOutletPayload {
   code: string;
   address?: string;
   phone?: string;
+  brandName?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   isActive?: boolean;
 }
 
@@ -356,6 +379,9 @@ export interface UpdateOutletPayload {
   code?: string;
   address?: string;
   phone?: string;
+  brandName?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   isActive?: boolean;
 }
 

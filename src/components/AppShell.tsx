@@ -22,6 +22,7 @@ import { NAV_TABS, ROLE_ACCENT, ROLE_LABEL } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { formatDateID } from "@/lib/format";
 import { BranchSwitcher } from "@/components/branch/BranchSwitcher";
+import Logo from "@/components/Logo";
 
 const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, ReceiptText };
 
@@ -143,8 +144,8 @@ export default function AppShell({
     return (
       <div className="min-h-dvh grid place-items-center bg-coal">
         <div className="flex flex-col items-center gap-4">
-          <div className="grid size-14 place-items-center rounded-2xl bg-brand text-coal animate-pulse-soft">
-            <Coffee className="size-7" strokeWidth={2.4} />
+          <div className="grid size-14 place-items-center rounded-2xl bg-panel border border-brand/30 shadow-[0_0_32px_-8px] shadow-brand/40 animate-pulse-soft">
+            <Logo size="md" iconOnly />
           </div>
           <Loader2 className="size-5 animate-spin text-faint" />
         </div>
@@ -157,19 +158,9 @@ export default function AppShell({
       {/* ---------------------------- MAIN HEADER ---------------------------- */}
       <header className="sticky top-0 z-40 border-b border-line bg-coal-2/90 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 h-[58px] sm:h-[68px]">
-          {/* Sisi Kiri: Logo Ringkas */}
-          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            <div className="grid size-8 sm:size-9 place-items-center rounded-xl bg-brand text-coal shadow-[0_0_24px_-8px] shadow-brand/70">
-              <Coffee className="size-4 sm:size-5" strokeWidth={2.5} />
-            </div>
-            <div className="leading-none">
-              <p className="font-display text-[15px] font-bold tracking-tight text-cream">
-                BrewMetrics<span className="text-brand">.</span>
-              </p>
-              <p className="text-[9px] uppercase tracking-[0.22em] text-faint mt-0.5 hidden sm:block">
-                POS &amp; Analytics
-              </p>
-            </div>
+          {/* Sisi Kiri: Logo Ringkas DOI TA */}
+          <Link href="/" className="flex items-center shrink-0 hover:opacity-95 transition-opacity">
+            <Logo size="sm" showText subtitle="Smart POS" />
           </Link>
 
           {/* Sisi Tengah: Tab Navigasi Desktop (HANYA tampil di layar >= md) */}
