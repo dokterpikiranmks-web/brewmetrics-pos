@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { attendances, users, outlets } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -85,16 +86,16 @@ export async function GET(req: Request) {
       };
     });
 
-    return Response.json({ attendances: dto });
+    return NextResponse.json({ attendances: dto });
   } catch (err) {
     console.error("GET /api/attendance error:", err);
-    return Response.json({ error: "Gagal memuat riwayat absensi staf." }, { status: 500 });
+    return NextResponse.json({ error: "Gagal memuat riwayat absensi staf." }, { status: 500 });
   }
 }
 
 /**
  * POST /api/attendance
- * Merekam absensi foto selfie (Masuk / Pulang) dari staf kasir.
+ * Merekam absensi foto selfie (Masuk / Pulang) dari staf kasir dengan mekanisme Fail-Safe Dual Layer.
  */
 export async function POST(req: Request) {
   await ensureSeeded();
@@ -109,49 +110,58 @@ export async function POST(req: Request) {
     const notes = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : null;
 
     if (!userId) {
-      return Response.json({ error: "User ID diperlukan." }, { status: 400 });
+      return NextResponse.json({ error: "User ID diperlukan." }, { status: 400 });
     }
 
     if (!photo) {
-      return Response.json({ error: "Foto wajah selfie wajib dikirim." }, { status: 400 });
+      return NextResponse.json({ error: "Foto wajah selfie wajib dikirim." }, { status: 400 });
     }
 
-    // a. Konversi base64 photo menjadi Buffer biner
-    const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
-    const fileName = `attendances/${userId}_${Date.now()}.jpg`;
+    // 1. Mekanisme Fail-Safe Dual Layer untuk Foto
+    let finalPhotoUrl = photo;
 
-    // b. Upload buffer ke Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from("attendance-photos")
-      .upload(fileName, buffer, { contentType: "image/jpeg", upsert: true });
+    try {
+      const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      const fileName = `attendances/${userId}_${Date.now()}.jpg`;
 
-    if (uploadError) {
-      throw new Error(`Upload Storage Gagal: ${uploadError.message}`);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("attendance-photos")
+        .upload(fileName, buffer, { contentType: "image/jpeg", upsert: true });
+
+      if (uploadError) {
+        console.warn("Upload Storage Gagal (fallback base64):", uploadError.message);
+      } else if (uploadData) {
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("attendance-photos").getPublicUrl(fileName);
+        if (publicUrl) {
+          finalPhotoUrl = publicUrl;
+        }
+      }
+    } catch (storageErr: unknown) {
+      console.warn("Storage exception (fallback base64):", storageErr);
+      // Fallback otomatis: gunakan photo base64 langsung sebagai finalPhotoUrl
     }
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("attendance-photos").getPublicUrl(fileName);
-
-    // c. Insert ke Drizzle ORM dengan sanitasi nilai null (hindari undefined)
+    // 2. Simpan ke database via Drizzle ORM dengan sanitasi nilai null
     await db.insert(attendances).values({
       userId: Number(userId),
       outletId: Number(outletId) || 1,
       type: type === "out" ? "out" : "in",
       clockInAt: type === "in" ? new Date() : null,
       clockOutAt: type === "out" ? new Date() : null,
-      photoUrl: publicUrl,
+      photoUrl: finalPhotoUrl,
       status: "present",
       notes: notes || null,
       note: notes || null,
     });
 
-    // d. Bungkus dalam try-catch yang rapi dan kembalikan response JSON { success: true }
-    return Response.json({ success: true });
+    // 3. Selalu kembalikan respons sukses HTTP 200
+    return NextResponse.json({ success: true, message: "Absensi berhasil disimpan" });
   } catch (err: unknown) {
     console.error("POST /api/attendance error:", err);
-    return Response.json(
+    return NextResponse.json(
       {
         error: err instanceof Error ? err.message : "Terjadi kesalahan saat memproses absensi.",
       },
