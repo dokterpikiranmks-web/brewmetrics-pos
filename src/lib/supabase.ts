@@ -20,7 +20,7 @@ export const supabase = createClient(
 export async function uploadProductImage(
   file: File | Blob, 
   fileName?: string
-): Promise<{ url: string | null; error: Error | null }> {
+): Promise<{ url: string | null; error: string | null }> {
   try {
     const name = fileName || `product_${Date.now()}`;
     
@@ -34,7 +34,7 @@ export async function uploadProductImage(
 
     if (error) {
       console.error("Gagal upload gambar produk:", error.message);
-      return { url: null, error: new Error(error.message) };
+      return { url: null, error: error.message };
     }
 
     const { data: { publicUrl } } = supabase.storage
@@ -46,7 +46,7 @@ export async function uploadProductImage(
     console.error("Error pada uploadProductImage:", error);
     return { 
       url: null, 
-      error: error instanceof Error ? error : new Error("Unknown error occurred") 
+      error: error instanceof Error ? error.message : "Unknown error occurred" 
     };
   }
 }

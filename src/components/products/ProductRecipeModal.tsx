@@ -291,8 +291,16 @@ export default function ProductRecipeModal({
     setUploadingImage(true);
     setUploadError(null);
 
-    const { url, error: uploadErr } = await uploadProductImage(file);
+    const res = await uploadProductImage(file);
     setUploadingImage(false);
+
+    const url = typeof res === "string" ? res : res?.url;
+    const uploadErr =
+      typeof res === "object" && res && "error" in res
+        ? typeof (res as any).error === "string"
+          ? (res as any).error
+          : (res as any).error?.message || "Gagal mengunggah foto ke Supabase Storage."
+        : null;
 
     if (uploadErr || !url) {
       setUploadError(uploadErr || "Gagal mengunggah foto ke Supabase Storage.");
