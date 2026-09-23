@@ -3,15 +3,12 @@ import { db } from "@/db";
 import { attendances, users, outlets } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { ensureSeeded } from "@/lib/seed";
-import { supabase } from "@/lib/supabase";
-import { Buffer } from "node:buffer";
 import type { AttendanceDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/attendance
- * Mengambil log riwayat absensi staf.
  */
 export async function GET(req: Request) {
   await ensureSeeded();
@@ -21,8 +18,6 @@ export async function GET(req: Request) {
 
   try {
     const conditions = [];
-
-    // Filter Outlet
     if (outletIdParam && outletIdParam !== "all") {
       const oid = Number(outletIdParam);
       if (!isNaN(oid)) {
@@ -30,7 +25,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // Filter Periode Waktu
     if (period === "today") {
       conditions.push(sql`${attendances.createdAt} >= date_trunc('day', now())`);
     } else if (period === "last7days") {
@@ -53,7 +47,6 @@ export async function GET(req: Request) {
         clockOutAt: attendances.clockOutAt,
         photoUrl: attendances.photoUrl,
         notes: attendances.notes,
-        note: attendances.note,
         createdAt: attendances.createdAt,
       })
       .from(attendances)
@@ -63,31 +56,25 @@ export async function GET(req: Request) {
       .orderBy(desc(attendances.createdAt))
       .limit(100);
 
-    const dto: AttendanceDto[] = rows.map((r) => {
-      const rawName = r.userName?.trim() || "";
-      const rawUsername = (r as Record<string, unknown>).username as string | undefined;
-      const finalName = rawName || rawUsername?.trim() || "Kasir Aktif";
-
-      return {
-        id: r.id,
-        userId: r.userId,
-        userName: finalName,
-        userRole: r.userRole ?? "cashier",
-        outletId: r.outletId ?? null,
-        outletName: r.outletName ?? "Cabang Pusat",
-        type: r.type,
-        status: r.status ?? "present",
-        clockInAt: r.clockInAt ? r.clockInAt.toISOString() : null,
-        clockOutAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
-        photoUrl: r.photoUrl,
-        notes: r.notes || r.note || "",
-        note: r.notes || r.note || "",
-        createdAt: r.createdAt.toISOString(),
-      };
-    });
+    const dto: AttendanceDto[] = rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: r.userName?.trim() || "Kasir Aktif",
+      userRole: r.userRole ?? "cashier",
+      outletId: r.outletId ?? null,
+      outletName: r.outletName ?? "Cabang Pusat",
+      type: r.type,
+      status: r.status ?? "present",
+      clockInAt: r.clockInAt ? r.clockInAt.toISOString() : null,
+      clockOutAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
+      photoUrl: r.photoUrl,
+      notes: r.notes || "",
+      note: r.notes || "",
+      createdAt: r.createdAt.toISOString(),
+    }));
 
     return NextResponse.json({ attendances: dto });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("GET /api/attendance error:", err);
     return NextResponse.json({ error: "Gagal memuat riwayat absensi staf." }, { status: 500 });
   }
@@ -95,77 +82,65 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/attendance
- * Merekam absensi foto selfie (Masuk / Pulang) dari staf kasir dengan mekanisme Fail-Safe Dual Layer.
+ * Eksekusi simpan langsung tanpa dependensi storage eksternal
  */
 export async function POST(req: Request) {
   await ensureSeeded();
-
   try {
     const body = (await req.json()) as Record<string, unknown>;
-
-    const userId = body.userId ?? body.user_id;
-    const outletId = body.outletId ?? body.outlet_id;
-    const type = (typeof body.type === "string" ? body.type : "in").toLowerCase().trim();
+    const userId = Number(body.userId ?? body.user_id);
+    const outletId = Number(body.outletId ?? body.outlet_id) || 1;
+    const type = String(body.type || "in").toLowerCase().trim() === "out" ? "out" : "in";
     const photo = String(body.photo || body.photoUrl || body.photo_url || "");
     const notes = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : null;
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID diperlukan." }, { status: 400 });
+    if (!userId || isNaN(userId)) {
+      return NextResponse.json({ error: "User ID kasir wajib valid." }, { status: 400 });
     }
-
     if (!photo) {
-      return NextResponse.json({ error: "Foto wajah selfie wajib dikirim." }, { status: 400 });
+      return NextResponse.json({ error: "Foto selfie wajib disertakan." }, { status: 400 });
     }
 
-    // 1. Mekanisme Fail-Safe Dual Layer untuk Foto
-    let finalPhotoUrl = photo;
+    const clockInVal = type === "in" ? new Date() : null;
+    const clockOutVal = type === "out" ? new Date() : null;
 
-    try {
-      const base64Data = photo.replace(/^data:image\/\w+;base64,/, "");
-      const buffer = Buffer.from(base64Data, "base64");
-      const fileName = `attendances/${userId}_${Date.now()}.jpg`;
+    // Gunakan kueri SQL murni: membiarkan database mengurus sequence 'id' secara otomatis
+    await db.execute(sql`
+      INSERT INTO public.attendances (
+        user_id, 
+        outlet_id, 
+        type, 
+        status, 
+        clock_in_at, 
+        clock_out_at, 
+        photo_url, 
+        notes, 
+        note, 
+        created_at, 
+        updated_at
+      ) VALUES (
+        ${userId}, 
+        ${outletId}, 
+        ${type}, 
+        'present', 
+        ${clockInVal}, 
+        ${clockOutVal}, 
+        ${photo}, 
+        ${notes}, 
+        ${notes}, 
+        NOW(), 
+        NOW()
+      );
+    `);
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("attendance-photos")
-        .upload(fileName, buffer, { contentType: "image/jpeg", upsert: true });
-
-      if (uploadError) {
-        console.warn("Upload Storage Gagal (fallback base64):", uploadError.message);
-      } else if (uploadData) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("attendance-photos").getPublicUrl(fileName);
-        if (publicUrl) {
-          finalPhotoUrl = publicUrl;
-        }
-      }
-    } catch (storageErr: unknown) {
-      console.warn("Storage exception (fallback base64):", storageErr);
-      // Fallback otomatis: gunakan photo base64 langsung sebagai finalPhotoUrl
-    }
-
-    // 2. Simpan ke database via Drizzle ORM dengan sanitasi nilai null
-    await db.insert(attendances).values({
-      userId: Number(userId),
-      outletId: Number(outletId) || 1,
-      type: type === "out" ? "out" : "in",
-      clockInAt: type === "in" ? new Date() : null,
-      clockOutAt: type === "out" ? new Date() : null,
-      photoUrl: finalPhotoUrl,
-      status: "present",
-      notes: notes || null,
-      note: notes || null,
-    });
-
-    // 3. Selalu kembalikan respons sukses HTTP 200
-    return NextResponse.json({ success: true, message: "Absensi berhasil disimpan" });
+    return NextResponse.json({ success: true, message: "Absensi berhasil dicatat." });
   } catch (err: unknown) {
     console.error("POST /api/attendance error:", err);
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Terjadi kesalahan saat memproses absensi.",
-      },
-      { status: 500 }
-    );
+
+    // Filter pesan error agar teks Base64 yang panjang tidak menutupi penyebab error sebenarnya di layar UI
+    let rawError = err instanceof Error ? err.message : "Terjadi kesalahan pada database.";
+    const cleanError = rawError.replace(/data:image\/[^;]+;base64,[a-zA-Z0-9+/=]+/g, "[DATA_FOTO]");
+
+    return NextResponse.json({ error: cleanError }, { status: 500 });
   }
 }
