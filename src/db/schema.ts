@@ -351,6 +351,7 @@ export const attendances = pgTable(
     notes: text("notes").default(""),
     note: text("note").default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("attendances_user_idx").on(t.userId),

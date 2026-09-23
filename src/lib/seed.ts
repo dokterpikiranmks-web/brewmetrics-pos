@@ -286,6 +286,10 @@ export async function ensureAttendancesTable() {
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS note text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT now();
+      ALTER TABLE attendances DROP CONSTRAINT IF EXISTS attendances_type_check;
+      ALTER TABLE attendances ADD CONSTRAINT attendances_type_check 
+        CHECK (type = ANY (ARRAY['in'::text, 'out'::text, 'clock_in'::text, 'clock_out'::text]));
       CREATE INDEX IF NOT EXISTS attendances_user_idx ON attendances(user_id);
       CREATE INDEX IF NOT EXISTS attendances_outlet_idx ON attendances(outlet_id);
       CREATE INDEX IF NOT EXISTS attendances_created_idx ON attendances(created_at);

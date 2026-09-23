@@ -3,7 +3,6 @@ import { db } from "@/db";
 import { attendances, users, outlets } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { ensureSeeded } from "@/lib/seed";
-import { supabase } from "@/lib/supabase"; // KUNCI SOLUSI: Kita pakai Supabase API langsung
 import type { AttendanceDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -82,9 +81,11 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Record<string, unknown>;
     const userId = Number(body.userId ?? body.user_id);
     const outletId = Number(body.outletId ?? body.outlet_id) || 1;
-    const type = String(body.type || "in").toLowerCase().trim() === "out" ? "out" : "in";
+    const rawType = String(body.type || "in").toLowerCase().trim();
+    const isClockIn = rawType === "in" || rawType === "clock_in";
+    const type = isClockIn ? "in" : "out";
     const photo = String(body.photo || body.photoUrl || body.photo_url || "");
-    const notesValue = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : null;
+    const notesValue = typeof body.notes === "string" ? body.notes : typeof body.note === "string" ? body.note : "";
 
     if (!userId || isNaN(userId)) {
       return NextResponse.json({ error: "User ID kasir wajib valid." }, { status: 400 });
@@ -93,32 +94,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Foto selfie wajib disertakan." }, { status: 400 });
     }
 
-    // BYPASS DRIZZLE ORM: Gunakan Supabase API langsung yang 100% kebal terhadap error pemetaan parameter SQL
-    const payload: Record<string, any> = {
-      user_id: userId,
-      outlet_id: outletId,
-      type: type,
+    const clockInVal = isClockIn ? new Date() : null;
+    const clockOutVal = !isClockIn ? new Date() : null;
+
+    // Simpan langsung ke database PostgreSQL via Drizzle ORM
+    // Menggunakan koneksi DATABASE_URL terautentikasi (bebas dari error Invalid API Key Supabase REST)
+    await db.insert(attendances).values({
+      userId,
+      outletId,
+      type,
       status: "present",
-      photo_url: photo,
-    };
-
-    // Format ISO string secara eksplisit yang pasti diterima Supabase API
-    if (type === "in") {
-      payload.clock_in_at = new Date().toISOString();
-    } else {
-      payload.clock_out_at = new Date().toISOString();
-    }
-
-    // Hanya kirim notes jika ada isinya
-    if (notesValue) {
-      payload.notes = notesValue;
-    }
-
-    const { error } = await supabase.from("attendances").insert([payload]);
-
-    if (error) {
-      throw new Error(error.message);
-    }
+      clockInAt: clockInVal,
+      clockOutAt: clockOutVal,
+      photoUrl: photo,
+      notes: notesValue,
+      note: notesValue,
+      updatedAt: new Date(),
+    });
 
     return NextResponse.json({ success: true, message: "Absensi berhasil dicatat." });
   } catch (err: unknown) {
