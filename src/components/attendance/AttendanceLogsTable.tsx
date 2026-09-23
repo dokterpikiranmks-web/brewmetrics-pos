@@ -68,8 +68,8 @@ export function AttendanceLogsTable() {
       .catch((e) => console.error(e));
   }, []);
 
-  const clockInCount = attendances.filter((a) => a.type === "clock_in").length;
-  const clockOutCount = attendances.filter((a) => a.type === "clock_out").length;
+  const clockInCount = attendances.filter((a) => a.type === "clock_in" || a.type === "in").length;
+  const clockOutCount = attendances.filter((a) => a.type === "clock_out" || a.type === "out").length;
 
   return (
     <div className="space-y-6">
@@ -243,7 +243,7 @@ export function AttendanceLogsTable() {
                               url: att.photoUrl,
                               userName: att.userName,
                               time: `${dateFormatted} ${timeFormatted}`,
-                              type: att.type === "clock_in" ? "Masuk" : "Pulang",
+                              type: att.type === "clock_in" || att.type === "in" ? "Masuk" : "Pulang",
                               outlet: att.outletName || "Cabang Pusat",
                             })
                           }
@@ -273,7 +273,7 @@ export function AttendanceLogsTable() {
 
                       {/* Type Badge */}
                       <td className="py-3 px-4">
-                        {att.type === "clock_in" ? (
+                        {att.type === "clock_in" || att.type === "in" ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-[10px]">
                             <CheckCircle2 className="size-3" />
                             Masuk

@@ -242,7 +242,7 @@ export async function GET(req: Request) {
     // Output binary buffer
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-    const filename = `Laporan_Penjualan_BREWMETRICS_${labelPeriod}.xlsx`;
+    const filename = `Laporan_Penjualan_DOITA_${labelPeriod}.xlsx`;
 
     return new Response(buffer, {
       status: 200,

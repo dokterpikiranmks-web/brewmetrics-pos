@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import type { SessionUser, Role } from "./types";
 
 const COOKIE_NAME = "bm_session";
-const SECRET = process.env.SESSION_SECRET || "brewmetrics-local-dev-secret";
+const SECRET = process.env.SESSION_SECRET || "doita-local-dev-secret";
 const MAX_AGE = 60 * 60 * 14; // 14 jam shift
 
 function b64url(input: string | Buffer): string {

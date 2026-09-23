@@ -38,7 +38,7 @@ export function SelfieAttendanceModal({
   const [outlets, setOutlets] = useState<OutletDto[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | "">("");
   const [selectedOutletId, setSelectedOutletId] = useState<number | "">("");
-  const [type, setType] = useState<"clock_in" | "clock_out">("clock_in");
+  const [type, setType] = useState<"in" | "out">("in");
   const [note, setNote] = useState("");
 
   // Camera & Photo states
@@ -248,7 +248,7 @@ export function SelfieAttendanceModal({
     setSuccessMsg("");
 
     try {
-      // Pastikan payload menyertakan user_id: currentUser.id dan outlet_id: currentUser.outletId || 1
+      const isClockIn = type === "in" || (type as string) === "clock_in";
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -257,15 +257,21 @@ export function SelfieAttendanceModal({
           user_id: Number(resolvedUserId),
           outletId: Number(resolvedOutletId),
           outlet_id: Number(resolvedOutletId),
-          type,
+          type: isClockIn ? "in" : "out",
+          status: "present",
           photoUrl: capturedPhoto,
+          photo_url: capturedPhoto,
+          notes: note.trim(),
           note: note.trim(),
+          clock_in_at: isClockIn ? new Date().toISOString() : undefined,
+          clock_out_at: !isClockIn ? new Date().toISOString() : undefined,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Gagal mencatat absensi.");
+        const errorDetail = data.details ? `${data.error} — ${data.details}` : data.error;
+        throw new Error(errorDetail || "Gagal mencatat absensi.");
       }
 
       setSuccessMsg(data.message || "Absensi berhasil dicatat!");
@@ -340,9 +346,9 @@ export function SelfieAttendanceModal({
           <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-coal border border-line">
             <button
               type="button"
-              onClick={() => setType("clock_in")}
+              onClick={() => setType("in")}
               className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                type === "clock_in"
+                type === "in"
                   ? "bg-emerald-500 text-coal shadow-md"
                   : "text-sand hover:text-cream"
               }`}
@@ -352,9 +358,9 @@ export function SelfieAttendanceModal({
             </button>
             <button
               type="button"
-              onClick={() => setType("clock_out")}
+              onClick={() => setType("out")}
               className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                type === "clock_out"
+                type === "out"
                   ? "bg-amber-500 text-coal shadow-md"
                   : "text-sand hover:text-cream"
               }`}

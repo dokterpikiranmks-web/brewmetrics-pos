@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
   const waHref = useMemo(() => {
     if (!summary || summary.forecast.length === 0) return null;
     const lines = [
-      "*BrewMetrics — Low-Stock AI Alert*", "",
+      "*DOI TA — Low-Stock AI Alert*", "",
       ...summary.forecast.slice(0, 6).map(
         (f) => `• ${f.name}: sisa *${formatQty(f.stockQty, f.unit)}* ≈ *${f.daysLeft} hari* (pakai ${formatQty(f.dailyUsage, f.unit)}/hari)`
       ),

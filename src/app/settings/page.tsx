@@ -33,14 +33,14 @@ export default function SettingsPage() {
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
 
   // Store Settings State
-  const [cafeName, setCafeName] = useState("BREWMETRICS Specialty Coffee");
+  const [cafeName, setCafeName] = useState("DOI TA");
   const [address, setAddress] = useState("Jl. Metro Tanjung Bunga No. 8, Makassar");
   const [phone, setPhone] = useState("0812-4455-6677");
   const [logoUrl, setLogoUrl] = useState("");
   const [taxPercentage, setTaxPercentage] = useState<number>(10);
   const [serviceChargePercentage, setServiceChargePercentage] = useState<number>(0);
   const [receiptFooterMessage, setReceiptFooterMessage] = useState(
-    "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"
+    "Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos"
   );
   // Printer Configuration State
   const [printerPaperSize, setPrinterPaperSize] = useState<"58mm" | "80mm">("58mm");
@@ -115,7 +115,7 @@ export default function SettingsPage() {
           setServiceChargePercentage(data.settings.serviceChargePercentage ?? 0);
           setReceiptFooterMessage(
             data.settings.receiptFooterMessage ||
-              "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"
+              "Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos"
           );
           setPrinterPaperSize(data.settings.printerPaperSize ?? "58mm");
           setAutoPrintReceipt(data.settings.autoPrintReceipt ?? true);
@@ -314,7 +314,7 @@ export default function SettingsPage() {
       const a = document.createElement("a");
       a.href = url;
       const cd = res.headers.get("Content-Disposition");
-      let filename = `brewmetrics-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      let filename = `doita-backup-${new Date().toISOString().slice(0, 10)}.json`;
       if (cd && cd.includes("filename=")) {
         filename = cd.split("filename=")[1].replace(/["']/g, "").trim();
       }
@@ -782,7 +782,7 @@ export default function SettingsPage() {
                         type="text"
                         value={cafeName}
                         onChange={(e) => setCafeName(e.target.value)}
-                        placeholder="cth: BREWMETRICS Specialty Coffee"
+                        placeholder="cth: DOI TA Coffee & Eatery"
                         className="input-dark text-sm"
                         required
                       />
@@ -917,7 +917,7 @@ export default function SettingsPage() {
                       rows={3}
                       value={receiptFooterMessage}
                       onChange={(e) => setReceiptFooterMessage(e.target.value)}
-                      placeholder="cth: Terima kasih atas kunjungan Anda!\nFollow Instagram kami: @brewmetrics.coffee"
+                      placeholder="cth: Terima kasih atas kunjungan Anda!\nFollow Instagram kami: @doita.pos"
                       className="input-dark text-xs sm:text-sm resize-none font-mono"
                     />
                     <p className="text-[11px] text-faint mt-1">
@@ -1110,7 +1110,7 @@ export default function SettingsPage() {
                     <div className="text-[9px] space-y-0.5 py-1">
                       <div className="flex justify-between">
                         <span>No. Struk:</span>
-                        <span className="font-bold">#BM-SAMPLE-01</span>
+                        <span className="font-bold">#DT-SAMPLE-01</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Waktu:</span>
@@ -1196,7 +1196,7 @@ export default function SettingsPage() {
                         {receiptFooterMessage || "Terima kasih atas kunjungan Anda!"}
                       </p>
                       <p className="text-[8px] pt-1 text-gray-500">
-                        Powered by BrewMetrics POS System
+                        Powered by DOI TA POS System
                       </p>
                     </div>
                   </div>
@@ -1830,7 +1830,7 @@ export default function SettingsPage() {
                             Klik atau seret file <span className="text-brand">.json</span> ke sini
                           </p>
                           <p className="text-[10.5px] text-faint">
-                            Hanya menerima file JSON cadangan resmi BrewMetrics POS
+                            Hanya menerima file JSON cadangan resmi DOI TA POS
                           </p>
                         </div>
                       )}

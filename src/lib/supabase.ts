@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { Buffer } from "node:buffer";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -95,53 +96,60 @@ export async function uploadAttendancePhoto(
   userId: number
 ): Promise<{ url: string | null; error: string | null }> {
   try {
-    let blob: Blob;
-    let base64Fallback: string = "";
+    let buffer: Buffer;
+    let mimeType = "image/jpeg";
+    let base64Fallback = "";
 
     if (typeof fileOrBlob === "string") {
       base64Fallback = fileOrBlob;
       if (fileOrBlob.startsWith("data:")) {
-        const parts = fileOrBlob.split(",");
-        const mime = parts[0].match(/:(.*?);/)?.[1] || "image/jpeg";
-        const bstr = atob(parts[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
+        const commaIndex = fileOrBlob.indexOf(",");
+        if (commaIndex !== -1) {
+          const metaPart = fileOrBlob.slice(0, commaIndex);
+          const dataPart = fileOrBlob.slice(commaIndex + 1);
+          const mimeMatch = metaPart.match(/^data:([^;]+);base64/);
+          if (mimeMatch && mimeMatch[1]) {
+            mimeType = mimeMatch[1];
+          }
+          buffer = Buffer.from(dataPart, "base64");
+        } else {
+          buffer = Buffer.from(fileOrBlob, "base64");
         }
-        blob = new Blob([u8arr], { type: mime });
       } else {
         return { url: fileOrBlob, error: null };
       }
     } else {
-      blob = fileOrBlob;
+      const arrayBuffer = await fileOrBlob.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+      if (fileOrBlob.type) {
+        mimeType = fileOrBlob.type;
+      }
     }
 
-    // Jika Supabase belum dikonfigurasi langsung dengan API key asli, gunakan fallback
+    // Jika Supabase belum dikonfigurasi langsung dengan API key asli di environment
     if (!isSupabaseConfigured()) {
       if (base64Fallback) return { url: base64Fallback, error: null };
-      const buffer = await blob.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString("base64");
-      return { url: `data:${blob.type || "image/jpeg"};base64,${base64}`, error: null };
+      const fallbackUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+      return { url: fallbackUrl, error: null };
     }
 
-    const ext = blob.type === "image/png" ? "png" : "jpg";
+    const ext = mimeType === "image/png" ? "png" : "jpg";
     const filePath = `selfie/user-${userId}-${Date.now()}.${ext}`;
 
     const { data, error } = await supabase.storage
       .from("attendance-photos")
-      .upload(filePath, blob, {
-        contentType: blob.type || "image/jpeg",
+      .upload(filePath, buffer, {
+        contentType: mimeType,
         cacheControl: "3600",
         upsert: true,
       });
 
     if (error) {
-      console.warn("Supabase attendance-photos upload warning, using fallback:", error.message);
-      if (base64Fallback) return { url: base64Fallback, error: null };
-      const buffer = await blob.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString("base64");
-      return { url: `data:${blob.type || "image/jpeg"};base64,${base64}`, error: null };
+      console.error("Supabase attendance-photos upload error:", error);
+      return {
+        url: null,
+        error: `Supabase Storage (attendance-photos): ${error.message || "Gagal mengunggah berkas foto."}`,
+      };
     }
 
     const { data: publicUrlData } = supabase.storage
@@ -149,14 +157,14 @@ export async function uploadAttendancePhoto(
       .getPublicUrl(data.path);
 
     return { url: publicUrlData.publicUrl, error: null };
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("uploadAttendancePhoto exception:", err);
-    if (typeof fileOrBlob === "string" && fileOrBlob.startsWith("data:")) {
-      return { url: fileOrBlob, error: null };
-    }
     return {
       url: null,
-      error: err instanceof Error ? err.message : "Gagal mengunggah foto absensi.",
+      error:
+        err instanceof Error
+          ? `Gagal memproses unggah foto: ${err.message}`
+          : "Terjadi kesalahan internal saat memproses foto absensi.",
     };
   }
 }

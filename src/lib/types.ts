@@ -394,16 +394,27 @@ export interface AttendanceDto {
   userRole: Role;
   outletId: number | null;
   outletName: string | null;
-  type: "clock_in" | "clock_out";
+  type: "in" | "out" | "clock_in" | "clock_out" | string;
+  status: string;
+  clockInAt?: string | null;
+  clockOutAt?: string | null;
   photoUrl: string;
+  notes?: string | null;
   note?: string | null;
   createdAt: string;
 }
 
 export interface CreateAttendancePayload {
-  userId: number;
+  userId?: number;
+  user_id?: number;
   outletId?: number | null;
-  type: "clock_in" | "clock_out";
-  photoUrl: string;
+  outlet_id?: number | null;
+  type: "in" | "out" | "clock_in" | "clock_out" | string;
+  status?: string;
+  photoUrl?: string;
+  photo_url?: string;
+  notes?: string;
   note?: string;
+  clock_in_at?: string | Date;
+  clock_out_at?: string | Date;
 }

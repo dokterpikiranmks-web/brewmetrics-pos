@@ -45,13 +45,13 @@ export async function ensureStoreSettingsTable() {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS store_settings (
         id serial PRIMARY KEY,
-        cafe_name text NOT NULL DEFAULT 'BREWMETRICS Specialty Coffee',
+        cafe_name text NOT NULL DEFAULT 'DOI TA',
         logo_url text NOT NULL DEFAULT '',
         address text NOT NULL DEFAULT 'Jl. Metro Tanjung Bunga No. 8, Makassar',
         phone text NOT NULL DEFAULT '0812-4455-6677',
         tax_percentage double precision NOT NULL DEFAULT 10,
         service_charge_percentage double precision NOT NULL DEFAULT 0,
-        receipt_footer_message text NOT NULL DEFAULT 'Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee',
+        receipt_footer_message text NOT NULL DEFAULT 'Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos',
         updated_at timestamp with time zone NOT NULL DEFAULT now()
       );
     `);
@@ -66,13 +66,13 @@ export async function ensureStoreSettingsTable() {
     if (existing.length === 0) {
       await db.insert(storeSettings).values({
         id: 1,
-        cafeName: "BREWMETRICS Specialty Coffee",
+        cafeName: "DOI TA",
         logoUrl: "",
         address: "Jl. Metro Tanjung Bunga No. 8, Makassar",
         phone: "0812-4455-6677",
         taxPercentage: 10,
         serviceChargePercentage: 0,
-        receiptFooterMessage: "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee",
+        receiptFooterMessage: "Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos",
       });
     }
   } catch (err) {
@@ -191,9 +191,21 @@ export async function ensureOutletsAndMultiBranchSchema() {
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
+
       ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+
       ALTER TABLE products ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
+
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
     `);
 
     // Seed default outlets if none exist
@@ -260,13 +272,24 @@ export async function ensureAttendancesTable() {
         user_id integer NOT NULL REFERENCES users(id),
         outlet_id integer REFERENCES outlets(id),
         type text NOT NULL,
+        status text DEFAULT 'present',
+        clock_in_at timestamp with time zone,
+        clock_out_at timestamp with time zone,
         photo_url text NOT NULL,
+        notes text DEFAULT '',
         note text DEFAULT '',
         created_at timestamp with time zone NOT NULL DEFAULT now()
       );
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS status text DEFAULT 'present';
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS clock_in_at timestamp with time zone;
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS clock_out_at timestamp with time zone;
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS note text DEFAULT '';
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       CREATE INDEX IF NOT EXISTS attendances_user_idx ON attendances(user_id);
       CREATE INDEX IF NOT EXISTS attendances_outlet_idx ON attendances(outlet_id);
       CREATE INDEX IF NOT EXISTS attendances_created_idx ON attendances(created_at);
+      CREATE INDEX IF NOT EXISTS attendances_type_idx ON attendances(type);
     `);
   } catch (err) {
     console.error("ensureAttendancesTable error:", err);

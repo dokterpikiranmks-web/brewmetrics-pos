@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       if (storeSettingsData.length > 0) {
         const rows = storeSettingsData.map((ss) => ({
           id: ss.id,
-          cafeName: ss.cafeName || "BREWMETRICS Specialty Coffee",
+          cafeName: ss.cafeName || "DOI TA",
           logoUrl: ss.logoUrl || "",
           address: ss.address || "",
           phone: ss.phone || "",
@@ -123,14 +123,14 @@ export async function POST(req: Request) {
         // Jika tidak ada store settings di backup, buat default 1 baris
         await tx.insert(storeSettings).values({
           id: 1,
-          cafeName: "BREWMETRICS Specialty Coffee",
+          cafeName: "DOI TA",
           logoUrl: "",
           address: "Jl. Metro Tanjung Bunga No. 8, Makassar",
           phone: "0812-4455-6677",
           taxPercentage: 10,
           serviceChargePercentage: 0,
           receiptFooterMessage:
-            "Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee",
+            "Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos",
         });
       }
 

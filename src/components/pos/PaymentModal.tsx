@@ -470,7 +470,7 @@ export default function PaymentModal({
                                 1234-567-890
                               </p>
                               <p className="text-[11px] text-faint">
-                                a/n BREWMETRICS Specialty Coffee
+                                a/n DOI TA POS
                               </p>
                             </div>
                             <button

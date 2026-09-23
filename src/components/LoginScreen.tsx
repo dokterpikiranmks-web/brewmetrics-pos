@@ -98,7 +98,7 @@ export default function LoginScreen() {
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden p-12 grain">
         <Image
           src="/images/login-hero.jpg"
-          alt="BrewMetrics coffee bar"
+          alt="DOI TA POS"
           fill
           priority
           className="object-cover opacity-70"
@@ -294,7 +294,7 @@ export default function LoginScreen() {
           </div>
 
           <p className="text-center text-[11px] text-faint mt-5">
-            BrewMetrics v2.4 — build lisensi <span className="text-sand font-semibold">PERPETUAL</span>
+            DOI TA v2.4 — build lisensi <span className="text-sand font-semibold">PERPETUAL</span>
           </p>
 
           <SelfieAttendanceModal

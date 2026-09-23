@@ -66,6 +66,9 @@ export const products = pgTable(
     isBundle: boolean("is_bundle").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     outletId: integer("outlet_id").references(() => outlets.id),
+    brandName: text("brand_name").default(""),
+    receiptHeader: text("receipt_header").default(""),
+    receiptFooter: text("receipt_footer").default(""),
   },
   (t) => [
     index("products_category_idx").on(t.categoryId),
@@ -207,6 +210,9 @@ export const orders = pgTable(
     change: integer("change"),
     itemCount: integer("item_count").notNull().default(0),
     outletId: integer("outlet_id").references(() => outlets.id),
+    brandName: text("brand_name").default(""),
+    receiptHeader: text("receipt_header").default(""),
+    receiptFooter: text("receipt_footer").default(""),
     isOfflineSync: boolean("is_offline_sync").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -294,6 +300,9 @@ export const discounts = pgTable(
     scope: text("scope", { enum: ["cart", "product"] }).notNull().default("cart"),
     targetProductId: integer("target_product_id").references(() => products.id),
     outletId: integer("outlet_id").references(() => outlets.id),
+    brandName: text("brand_name").default(""),
+    receiptHeader: text("receipt_header").default(""),
+    receiptFooter: text("receipt_footer").default(""),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -308,7 +317,7 @@ export const discounts = pgTable(
 
 export const storeSettings = pgTable("store_settings", {
   id: serial("id").primaryKey(),
-  cafeName: text("cafe_name").notNull().default("BREWMETRICS Specialty Coffee"),
+  cafeName: text("cafe_name").notNull().default("DOI TA"),
   logoUrl: text("logo_url").notNull().default(""),
   address: text("address").notNull().default("Jl. Metro Tanjung Bunga No. 8, Makassar"),
   phone: text("phone").notNull().default("0812-4455-6677"),
@@ -320,7 +329,7 @@ export const storeSettings = pgTable("store_settings", {
   autoPrintReceipt: boolean("auto_print_receipt").notNull().default(true),
   receiptFooterMessage: text("receipt_footer_message")
     .notNull()
-    .default("Terima kasih atas kunjungan Anda!\nFollow IG: @brewmetrics.coffee"),
+    .default("Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -334,8 +343,12 @@ export const attendances = pgTable(
       .notNull()
       .references(() => users.id),
     outletId: integer("outlet_id").references(() => outlets.id),
-    type: text("type", { enum: ["clock_in", "clock_out"] }).notNull(),
+    type: text("type").notNull(),
+    status: text("status").notNull().default("present"),
+    clockInAt: timestamp("clock_in_at", { withTimezone: true }),
+    clockOutAt: timestamp("clock_out_at", { withTimezone: true }),
     photoUrl: text("photo_url").notNull(),
+    notes: text("notes").default(""),
     note: text("note").default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -343,6 +356,7 @@ export const attendances = pgTable(
     index("attendances_user_idx").on(t.userId),
     index("attendances_outlet_idx").on(t.outletId),
     index("attendances_created_idx").on(t.createdAt),
+    index("attendances_type_idx").on(t.type),
   ]
 );
 

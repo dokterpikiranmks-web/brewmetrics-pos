@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Coffee,
   MonitorSmartphone,
   Boxes,
   ChartSpline,
@@ -264,15 +263,7 @@ export default function AppShell({
               <div>
                 {/* Header Drawer */}
                 <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="grid size-8 place-items-center rounded-xl bg-brand text-coal">
-                      <Coffee className="size-4" strokeWidth={2.5} />
-                    </div>
-                    <div>
-                      <p className="font-display text-sm font-bold text-cream">BrewMetrics</p>
-                      <p className="text-[9px] uppercase tracking-widest text-faint">Navigasi Utama</p>
-                    </div>
-                  </div>
+                  <Logo size="sm" showText subtitle="Navigasi Utama" />
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}

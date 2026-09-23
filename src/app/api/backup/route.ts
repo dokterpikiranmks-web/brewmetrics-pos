@@ -72,7 +72,7 @@ export async function GET() {
 
     const backupPayload = {
       version: "1.0",
-      appName: "BrewMetrics POS",
+      appName: "DOI TA POS",
       exportedAt: new Date().toISOString(),
       metadata: {
         totalUsers: allUsers.length,
@@ -99,7 +99,7 @@ export async function GET() {
     };
 
     const jsonString = JSON.stringify(backupPayload, null, 2);
-    const filename = `brewmetrics-backup-${getTimestampString()}.json`;
+    const filename = `doita-backup-${getTimestampString()}.json`;
 
     return new Response(jsonString, {
       status: 200,

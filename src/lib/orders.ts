@@ -26,7 +26,7 @@ export async function nextOrderNumber(tx: Pick<typeof db, "execute">): Promise<s
   const seq = (row?.c ?? 0) + 1;
   const now = new Date();
   const ymd = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  return `BM-${ymd}-${String(seq).padStart(3, "0")}`;
+  return `DT-${ymd}-${String(seq).padStart(3, "0")}`;
 }
 
 export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt | null> {
@@ -117,9 +117,11 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     throw new OrderError("Keranjang kosong.", 400, "EMPTY_CART");
   }
 
-  const [index, settingsRow] = await Promise.all([
+  const targetOutletId: number = (user as any).outletId ?? payload.outletId ?? 1;
+  const [index, settingsRow, outletRow] = await Promise.all([
     buildRecipeIndex(),
     db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),
+    targetOutletId ? db.query.outlets.findFirst({ where: eq(outlets.id, targetOutletId) }) : Promise.resolve(null),
   ]);
 
   const taxPercentage = settingsRow?.taxPercentage ?? 10;
@@ -279,7 +281,10 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
       .insert(orders)
       .values({
         orderNumber,
-        outletId: (user as any).outletId ?? payload.outletId ?? 1,
+        outletId: targetOutletId,
+        brandName: outletRow?.brandName || (settingsRow as any)?.cafeName || "DOI TA",
+        receiptHeader: outletRow?.receiptHeader || (settingsRow as any)?.receiptHeader || "",
+        receiptFooter: outletRow?.receiptFooter || (settingsRow as any)?.receiptFooter || "",
         offlineId: payload.offlineId ?? null,
         cashierId: user.id,
         cashierName: user.name,
@@ -325,11 +330,6 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
 
     return inserted;
   });
-
-  const effectiveOutletId = receipt.outletId ?? (user as any).outletId ?? payload.outletId ?? 1;
-  const outletRow = effectiveOutletId
-    ? await db.query.outlets.findFirst({ where: eq(outlets.id, effectiveOutletId) })
-    : null;
 
   return {
     id: receipt.id,

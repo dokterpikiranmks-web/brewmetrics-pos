@@ -236,7 +236,7 @@ export default function ReceiptPrint({
           <div className="space-y-0.5 py-1 text-[8.5px]">
             <p className="font-bold uppercase text-[9px] mb-0.5">TES KETAJAMAN TEKS:</p>
             <p>Font Reguler: ABCDEF 1234567890</p>
-            <p className="font-bold">Font Tebal (Bold): BREWMETRICS POS</p>
+            <p className="font-bold">Font Tebal (Bold): DOI TA POS</p>
             <div className="bg-black text-white px-1 py-0.5 text-center font-bold text-[8px] my-1">
               *** BLOK HITAM PEKAT (INVERT TEST) ***
             </div>
@@ -286,7 +286,7 @@ export default function ReceiptPrint({
           {/* FOOTER & CUT MARKS */}
           <div className="text-center pt-1 pb-2 space-y-1 text-[8.5px]">
             <p className="font-bold">Waktu Uji: {formattedDate} {formattedTime}</p>
-            <p className="text-[7.5px] text-gray-600">Hardware Calibration Pass • BrewMetrics POS</p>
+            <p className="text-[7.5px] text-gray-600">Hardware Calibration Pass • DOI TA POS</p>
             <div className="mt-2 text-[8px] tracking-widest font-mono">
               --- [ GUNTING / POTONG DISINI ] ---
             </div>

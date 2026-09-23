@@ -76,7 +76,7 @@ export default function InventoryPage() {
 
   const whatsappHref = useMemo(() => {
     const lines = [
-      "*BrewMetrics — Low-Stock AI Alert*",
+      "*DOI TA — Low-Stock AI Alert*",
       new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
       "",
       ...critical.slice(0, 6).map(

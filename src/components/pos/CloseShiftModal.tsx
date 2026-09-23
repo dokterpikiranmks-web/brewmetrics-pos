@@ -400,7 +400,7 @@ export default function CloseShiftModal({
                     }}
                   >
                     <div className="text-center pb-2">
-                      <h1 className="text-[14px] font-black uppercase">BREWMETRICS</h1>
+                      <h1 className="text-[14px] font-black uppercase">DOI TA</h1>
                       <p className="text-[10px] font-bold uppercase tracking-wider">
                         *** LAPORAN Z-REPORT (TUTUP SHIFT) ***
                       </p>
@@ -487,7 +487,7 @@ export default function CloseShiftModal({
                     <div className="text-center pt-2 pb-1 text-[8.5px] text-gray-600">
                       <p>Tanda Tangan Kasir: ___________________</p>
                       <p className="pt-2">Tanda Tangan Supervisor: _______________</p>
-                      <p className="pt-2">BrewMetrics POS Anti-Fraud Audit System</p>
+                      <p className="pt-2">DOI TA POS Anti-Fraud Audit System</p>
                     </div>
                   </div>
                 </div>
