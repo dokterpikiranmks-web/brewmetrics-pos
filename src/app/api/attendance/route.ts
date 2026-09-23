@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { attendances, users, outlets } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { ensureSeeded } from "@/lib/seed";
+import { supabase } from "@/lib/supabase"; // KUNCI SOLUSI: Kita pakai Supabase API langsung
 import type { AttendanceDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -92,18 +93,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Foto selfie wajib disertakan." }, { status: 400 });
     }
 
-    // Gunakan Drizzle ORM standar yang akan mengkonversi format Date secara aman ke PostgreSQL
-    await db.insert(attendances).values({
-      userId: userId,
-      outletId: outletId,
+    // BYPASS DRIZZLE ORM: Gunakan Supabase API langsung yang 100% kebal terhadap error pemetaan parameter SQL
+    const payload: Record<string, any> = {
+      user_id: userId,
+      outlet_id: outletId,
       type: type,
       status: "present",
-      clockInAt: type === "in" ? new Date() : null,
-      clockOutAt: type === "out" ? new Date() : null,
-      photoUrl: photo,
-      notes: notesValue,
-      note: notesValue,
-    });
+      photo_url: photo,
+    };
+
+    // Format ISO string secara eksplisit yang pasti diterima Supabase API
+    if (type === "in") {
+      payload.clock_in_at = new Date().toISOString();
+    } else {
+      payload.clock_out_at = new Date().toISOString();
+    }
+
+    // Hanya kirim notes jika ada isinya
+    if (notesValue) {
+      payload.notes = notesValue;
+    }
+
+    const { error } = await supabase.from("attendances").insert([payload]);
+
+    if (error) {
+      throw new Error(error.message);
+    }
 
     return NextResponse.json({ success: true, message: "Absensi berhasil dicatat." });
   } catch (err: unknown) {
