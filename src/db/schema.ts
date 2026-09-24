@@ -219,7 +219,9 @@ export const orders = pgTable(
     tendered: integer("tendered"),
     change: integer("change"),
     itemCount: integer("item_count").notNull().default(0),
-    outletId: integer("outlet_id").references(() => outlets.id),
+    outletId: integer("outlet_id")
+      .references(() => outlets.id)
+      .default(1),
     brandName: text("brand_name").default(""),
     receiptHeader: text("receipt_header").default(""),
     receiptFooter: text("receipt_footer").default(""),

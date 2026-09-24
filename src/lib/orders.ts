@@ -117,7 +117,10 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     throw new OrderError("Keranjang kosong.", 400, "EMPTY_CART");
   }
 
-  const targetOutletId: number = (user as any).outletId ?? payload.outletId ?? 1;
+  const targetOutletId: number =
+    user.role === "cashier"
+      ? ((user as any).outletId ?? 1)
+      : (payload.outletId ?? (user as any).outletId ?? 1);
   const [index, settingsRow, outletRow] = await Promise.all([
     buildRecipeIndex(),
     db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),

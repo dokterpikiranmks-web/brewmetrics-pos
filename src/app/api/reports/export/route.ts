@@ -48,9 +48,8 @@ function formatPaymentMethod(m: string): string {
  *  - endDate: YYYY-MM-DD (opsional jika menggunakan preset)
  */
 export async function GET(req: Request) {
-  // Hanya role owner dan manager yang diizinkan mengunduh laporan keuangan
-  const { error } = await requireRole(["owner", "manager"]);
-  if (error) return error;
+  const { user, error } = await requireRole(["owner", "manager", "cashier"]);
+  if (error || !user) return error!;
 
   await ensureSeeded();
 
@@ -90,11 +89,22 @@ export async function GET(req: Request) {
       labelPeriod = `Hari_Ini_${formatDateFile(now)}`;
     }
 
-    const outletParam = url.searchParams.get("outletId");
-    const outletId =
-      outletParam && outletParam !== "all" && !isNaN(Number(outletParam))
-        ? Number(outletParam)
-        : null;
+    const headerOutlet = req.headers.get("x-outlet-id");
+    const outletParam =
+      url.searchParams.get("outlet_id") ??
+      url.searchParams.get("outletId") ??
+      headerOutlet;
+
+    let outletId: number | null = null;
+    if (user.role === "cashier") {
+      outletId = user.outletId ?? 1;
+    } else {
+      if (outletParam && outletParam !== "all" && !isNaN(Number(outletParam))) {
+        outletId = Number(outletParam);
+      } else {
+        outletId = null;
+      }
+    }
 
     // Ambil seluruh order berstatus 'paid' dalam rentang tanggal beserta payment_breakdown
     const whereConditions = [

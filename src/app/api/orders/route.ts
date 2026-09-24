@@ -7,18 +7,42 @@ import type { CreateOrderPayload, TodayOrderDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const { error } = await requireRole(["cashier", "manager", "owner"]);
-  if (error) return error;
+export async function GET(req: Request) {
+  const { user, error } = await requireRole(["cashier", "manager", "owner"]);
+  if (error || !user) return error!;
+
+  const url = new URL(req.url);
+  const headerOutlet = req.headers.get("x-outlet-id");
+  const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
+
+  let targetOutletId: number | null = null;
+  if (user.role === "cashier") {
+    // STRICT OUTLET ISOLATION:
+    // Kasir hanya boleh melihat riwayat pesanan dari cabangnya sendiri
+    targetOutletId = user.outletId ?? 1;
+  } else {
+    // Owner atau Manager
+    if (outletParam && outletParam !== "all") {
+      const parsed = Number(outletParam);
+      if (!isNaN(parsed)) {
+        targetOutletId = parsed;
+      }
+    }
+  }
+
+  const whereConditions = [sql`${orders.createdAt} >= date_trunc('day', now())`];
+  if (targetOutletId !== null) {
+    whereConditions.push(eq(orders.outletId, targetOutletId));
+  }
 
   const rows = await db
     .select()
     .from(orders)
-    .where(sql`${orders.createdAt} >= date_trunc('day', now())`)
+    .where(and(...whereConditions))
     .orderBy(desc(orders.createdAt))
     .limit(60);
 
-  const dto: TodayOrderDto[] = rows.map((o) => ({
+  const dto: (TodayOrderDto & { outletId?: number | null })[] = rows.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
     cashierName: o.cashierName,
@@ -34,6 +58,7 @@ export async function GET() {
     status: o.status as "paid" | "void",
     createdAt: o.createdAt.toISOString(),
     isOfflineSync: o.isOfflineSync,
+    outletId: o.outletId ?? null,
   }));
   return Response.json({ orders: dto });
 }
@@ -63,6 +88,15 @@ export async function POST(req: Request) {
         }
       }
     }
+
+    // STRICT OUTLET ISOLATION:
+    // Pastikan pesanan tercatat dengan outletId cabang kasir yang login
+    if (user.role === "cashier") {
+      payload.outletId = user.outletId ?? 1;
+    } else {
+      payload.outletId = payload.outletId ?? user.outletId ?? 1;
+    }
+
     const receipt = await createOrder(payload, user);
     return Response.json({ receipt });
   } catch (e) {

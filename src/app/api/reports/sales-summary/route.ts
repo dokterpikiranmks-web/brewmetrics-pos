@@ -17,8 +17,8 @@ export const dynamic = "force-dynamic";
  *   - period: 'today' | 'last7days' | 'thisMonth' (default 'today')
  */
 export async function GET(req: Request) {
-  const { error } = await requireRole(["cashier", "manager", "owner"]);
-  if (error) return error;
+  const { user, error } = await requireRole(["cashier", "manager", "owner"]);
+  if (error || !user) return error!;
 
   await ensureSeeded();
 
@@ -28,11 +28,24 @@ export async function GET(req: Request) {
     const startDateParam = url.searchParams.get("startDate");
     const endDateParam = url.searchParams.get("endDate");
 
-    const outletParam = url.searchParams.get("outletId");
-    const outletId =
-      outletParam && outletParam !== "all" && !isNaN(Number(outletParam))
-        ? Number(outletParam)
-        : null;
+    const headerOutlet = req.headers.get("x-outlet-id");
+    const outletParam =
+      url.searchParams.get("outlet_id") ??
+      url.searchParams.get("outletId") ??
+      headerOutlet;
+
+    let outletId: number | null = null;
+    if (user.role === "cashier") {
+      // STRICT OUTLET ISOLATION: Kasir hanya boleh mengakses data cabangnya sendiri
+      outletId = user.outletId ?? 1;
+    } else {
+      // Owner atau Manager
+      if (outletParam && outletParam !== "all" && !isNaN(Number(outletParam))) {
+        outletId = Number(outletParam);
+      } else {
+        outletId = null;
+      }
+    }
 
     const now = new Date();
     let startDate: Date;

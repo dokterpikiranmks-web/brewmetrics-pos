@@ -7,7 +7,7 @@ import {
   BanknoteArrowUp, TriangleAlert, MessageCircleWarning, RefreshCcw, X, Loader2,
   CircleDollarSign, Radio, ArrowDownToLine, ArrowUpFromLine,
   Scale, CheckCircle2, ShieldAlert, FileSpreadsheet, HeartHandshake,
-  Trophy, MessageCircle,
+  Trophy, MessageCircle, Building2, ChevronDown,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { RevenueChart, HourlyChart, TopProducts, PaymentDonut } from "@/components/analytics/Charts";
@@ -24,7 +24,7 @@ interface CashMovementDto {
 }
 
 export default function AnalyticsPage() {
-  const { activeOutletId, activeOutlet } = useBranch();
+  const { outlets, activeOutletId, activeOutlet, setActiveOutletId } = useBranch();
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [movements, setMovements] = useState<CashMovementDto[]>([]);
   const [topCustomers, setTopCustomers] = useState<CustomerDto[]>([]);
@@ -44,7 +44,7 @@ export default function AnalyticsPage() {
         activeOutletId && activeOutletId !== "all" ? `?outletId=${activeOutletId}` : "";
       const [s, m, c] = await Promise.all([
         fetch(`/api/analytics/summary${outletParam}`).then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/cash-movements").then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/cash-movements${outletParam}`).then((r) => (r.ok ? r.json() : null)),
         fetch("/api/customers?sortBy=spend&limit=6").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (s) setSummary(s as AnalyticsSummary);
@@ -99,6 +99,31 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            {/* Dropdown Filter Cabang (Strict Outlet Isolation) */}
+            <div className="relative flex items-center min-w-[180px] sm:min-w-[210px]">
+              <Building2 className="absolute left-3 size-4 text-brand pointer-events-none" />
+              <select
+                aria-label="Filter Cabang"
+                value={activeOutletId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setActiveOutletId(val === "all" ? "all" : Number(val));
+                }}
+                className="w-full appearance-none rounded-xl border border-brand/40 bg-panel pl-9 pr-8 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-cream shadow-sm hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 cursor-pointer transition-all"
+              >
+                <option value="all" className="bg-[#1C1A17] text-cream">
+                  Semua Cabang (Konsolidasi)
+                </option>
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id} className="bg-[#1C1A17] text-cream">
+                    {o.name} {o.brandName ? `(${o.brandName})` : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-faint">
+                <ChevronDown className="size-3.5" />
+              </div>
+            </div>
             {waHref && (
               <a
                 href={waHref}

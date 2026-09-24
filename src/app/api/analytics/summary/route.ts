@@ -20,21 +20,41 @@ async function query<T>(statement: ReturnType<typeof sql>): Promise<T[]> {
 }
 
 export async function GET(req: Request) {
-  const { error } = await requireRole(["owner", "manager"]);
-  if (error) return error;
+  const { user, error } = await requireRole(["owner", "manager", "cashier"]);
+  if (error || !user) return error!;
 
   const url = new URL(req.url);
-  const outletParam = url.searchParams.get("outletId");
-  const outletId =
-    outletParam && outletParam !== "all" && !isNaN(Number(outletParam))
-      ? Number(outletParam)
-      : null;
+  const headerOutlet = req.headers.get("x-outlet-id");
+  const outletParam =
+    url.searchParams.get("outlet_id") ??
+    url.searchParams.get("outletId") ??
+    headerOutlet;
+  const role = user.role;
+
+  let outletId: number | null = null;
+  if (role === "cashier") {
+    // STRICT OUTLET ISOLATION:
+    // Kasir hanya boleh melihat omzet cabangnya sendiri
+    outletId = user.outletId ?? 1;
+  } else {
+    // Role 'owner' atau 'manager':
+    if (outletParam && outletParam !== "all") {
+      const parsed = Number(outletParam);
+      if (!isNaN(parsed)) {
+        outletId = parsed;
+      }
+    } else {
+      // Total gabungan / konsolidasi semua cabang
+      outletId = null;
+    }
+  }
 
   const outletOrderFilter = outletId ? sql`AND outlet_id = ${outletId}` : sql``;
   const outletJoinedOrderFilter = outletId ? sql`AND o.outlet_id = ${outletId}` : sql``;
   const outletCashFilter = outletId
     ? sql`WHERE outlet_id = ${outletId} AND created_at >= date_trunc('day', now())`
     : sql`WHERE created_at >= date_trunc('day', now())`;
+  const outletProductFilter = outletId ? sql`AND p.outlet_id = ${outletId}` : sql``;
 
   const todayRows = await query<{ revenue: number; orders: number; hpp: number; profit: number }>(sql`
     SELECT COALESCE(SUM(subtotal),0)::int AS revenue, COUNT(*)::int AS orders,
@@ -109,7 +129,7 @@ export async function GET(req: Request) {
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN order_items oi ON oi.product_id = p.id
     LEFT JOIN orders o ON o.id = oi.order_id AND o.status = 'paid' AND o.created_at >= now() - interval '30 days' ${outletJoinedOrderFilter}
-    WHERE p.is_active = true
+    WHERE p.is_active = true ${outletProductFilter}
     GROUP BY p.id, p.name, c.name, p.price, p.hpp, p.image_url
     ORDER BY total_qty DESC, p.id ASC
   `);
