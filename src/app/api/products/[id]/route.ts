@@ -85,6 +85,7 @@ export async function GET(
         imageUrl: p.imageUrl ?? "",
         isActive: p.isActive,
         isBundle: p.isBundle ?? false,
+        outletId: p.outletId ?? null,
         bundleItems: allBundleItems.map((b) => ({
           productId: b.subProductId,
           productName: prodMap.get(b.subProductId)?.name ?? "Produk",
@@ -129,6 +130,8 @@ export async function PUT(
       imageUrl?: string;
       isActive?: boolean;
       isBundle?: boolean;
+      outletId?: number | null;
+      outlet_id?: number | null;
       bundleItems?: { productId: number; qty: number }[];
       variants?: { id?: number; name: string; priceDelta: number }[];
       recipe?: {
@@ -236,23 +239,29 @@ export async function PUT(
 
     const finalHpp = Math.round(serverCalculatedHpp);
 
+    const rawOutletId = body.outletId ?? body.outlet_id;
+    const updateProductData: Partial<typeof products.$inferInsert> = {
+      categoryId,
+      name,
+      tagline,
+      price,
+      hpp: finalHpp,
+      color,
+      icon,
+      imageUrl,
+      isActive,
+      isBundle,
+    };
+    if (rawOutletId !== undefined && rawOutletId !== null && !isNaN(Number(rawOutletId))) {
+      updateProductData.outletId = Number(rawOutletId);
+    }
+
     // 4. DATABASE TRANSACTION
     const updated = await db.transaction(async (tx) => {
       // Update data produk
       const [pUpdated] = await tx
         .update(products)
-        .set({
-          categoryId,
-          name,
-          tagline,
-          price,
-          hpp: finalHpp,
-          color,
-          icon,
-          imageUrl,
-          isActive,
-          isBundle,
-        })
+        .set(updateProductData)
         .where(eq(products.id, id))
         .returning();
 

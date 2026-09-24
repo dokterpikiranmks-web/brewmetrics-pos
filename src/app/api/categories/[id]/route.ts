@@ -25,6 +25,8 @@ export async function PUT(
       name?: string;
       icon?: string;
       sortOrder?: number;
+      outletId?: number | null;
+      outlet_id?: number | null;
     };
 
     const name = (body.name ?? "").trim();
@@ -34,14 +36,20 @@ export async function PUT(
 
     const icon = (body.icon ?? "Coffee").trim();
     const sortOrder = Number(body.sortOrder) || 1;
+    const rawOutletId = body.outletId ?? body.outlet_id;
+
+    const updatePayload: Partial<typeof categories.$inferInsert> = {
+      name,
+      icon,
+      sortOrder,
+    };
+    if (rawOutletId !== undefined && rawOutletId !== null && !isNaN(Number(rawOutletId))) {
+      updatePayload.outletId = Number(rawOutletId);
+    }
 
     const [updated] = await db
       .update(categories)
-      .set({
-        name,
-        icon,
-        sortOrder,
-      })
+      .set(updatePayload)
       .where(eq(categories.id, id))
       .returning();
 

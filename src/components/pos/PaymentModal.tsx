@@ -40,6 +40,7 @@ export default function PaymentModal({
   total,
   offline,
   storeSettings,
+  moodTag,
   onClose,
   onSubmit,
   onDone,
@@ -48,6 +49,7 @@ export default function PaymentModal({
   total: number;
   offline: boolean;
   storeSettings?: StoreSettingDto | null;
+  moodTag?: string | null;
   onClose: () => void;
   onSubmit: (
     method: Method,
@@ -848,7 +850,7 @@ export default function PaymentModal({
 
                 {/* Elemen cetak thermal struk lunas (Hanya muncul pada window.print()) */}
                 {completedOrder && (
-                  <ReceiptPrint receipt={completedOrder} storeSettings={storeSettings} />
+                  <ReceiptPrint receipt={completedOrder} storeSettings={storeSettings} moodTag={moodTag} />
                 )}
               </div>
             )}

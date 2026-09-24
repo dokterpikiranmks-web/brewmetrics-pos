@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Coffee, Plus, Trash2, Check, AlertCircle, Sparkles, Scale,
-  DollarSign, TrendingUp, Info, ShieldAlert, Tag,
+  DollarSign, TrendingUp, Info, ShieldAlert, Tag, Store,
   Filter, CupSoda, Flame, Croissant, CakeSlice, Leaf, Milk, Beer,
   UploadCloud, Image as ImageIcon, Loader2,
 } from "lucide-react";
@@ -41,6 +41,7 @@ export interface ProductFormData {
   imageUrl?: string;
   isActive: boolean;
   isBundle?: boolean;
+  outletId?: number | null;
   bundleItems?: { productId: number; productName?: string; qty: number }[];
   variants: VariantData[];
   recipe: RecipeItemData[];
@@ -78,6 +79,7 @@ export default function ProductRecipeModal({
   categories,
   ingredients,
   allProducts = [],
+  outlets = [],
   onClose,
   onSave,
   onDelete,
@@ -87,6 +89,7 @@ export default function ProductRecipeModal({
   categories: { id: number; name: string }[];
   ingredients: IngredientDto[];
   allProducts?: { id: number; name: string; price: number; hpp: number }[];
+  outlets?: { id: number; name: string; brandName?: string; code?: string }[];
   onClose: () => void;
   onSave: (data: ProductFormData) => void;
   onDelete?: (id: number) => void;
@@ -96,6 +99,8 @@ export default function ProductRecipeModal({
   // Form states
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<number>(categories[0]?.id ?? 1);
+  const [outletId, setOutletId] = useState<number>(1);
+  const [outletList, setOutletList] = useState<{ id: number; name: string; brandName?: string; code?: string }[]>(outlets);
   const [tagline, setTagline] = useState("");
   const [price, setPrice] = useState<number>(20000);
   const [color, setColor] = useState("#F59E0B");
@@ -124,6 +129,7 @@ export default function ProductRecipeModal({
       if (initialData) {
         setName(initialData.name);
         setCategoryId(initialData.categoryId);
+        setOutletId(initialData.outletId ?? 1);
         setTagline(initialData.tagline);
         setPrice(initialData.price);
         setColor(initialData.color);
@@ -137,6 +143,7 @@ export default function ProductRecipeModal({
       } else {
         setName("");
         setCategoryId(categories[0]?.id ?? 1);
+        setOutletId(1);
         setTagline("");
         setPrice(22000);
         setColor("#F59E0B");
@@ -160,6 +167,21 @@ export default function ProductRecipeModal({
       setTargetVariant("all");
       if (allProducts.length > 0) setSelectedBundleProdId(allProducts[0].id);
       setBundleItemQty(1);
+
+      // Ambil daftar outlets dari API /api/outlets
+      fetch("/api/outlets")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.outlets && Array.isArray(data.outlets)) {
+            setOutletList(data.outlets);
+            if (!initialData?.outletId && data.outlets.length > 0) {
+              setOutletId((prev) => prev || data.outlets[0].id);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("fetch outlets error in ProductRecipeModal:", err);
+        });
     }
   }, [open, initialData, categories, ingredients, allProducts]);
 
@@ -348,6 +370,7 @@ export default function ProductRecipeModal({
       imageUrl: imageUrl.trim() || undefined,
       isActive,
       isBundle,
+      outletId: Number(outletId) || 1,
       bundleItems: isBundle ? bundleItems : undefined,
       variants: isBundle ? [] : variants,
       recipe: isBundle ? [] : recipe,
@@ -536,7 +559,32 @@ export default function ProductRecipeModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Cabang / Brand */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand mb-1.5 flex items-center gap-1.5">
+                        <Store className="size-3.5 text-brand" />
+                        <span>Cabang / Brand</span>
+                      </label>
+                      <select
+                        value={outletId}
+                        onChange={(e) => setOutletId(Number(e.target.value))}
+                        className="input-dark text-sm w-full"
+                      >
+                        {outletList.length === 0 ? (
+                          <option value={1} className="bg-coal text-cream">
+                            Cabang Pusat / Default (ID: 1)
+                          </option>
+                        ) : (
+                          outletList.map((o) => (
+                            <option key={o.id} value={o.id} className="bg-coal text-cream">
+                              {o.name} {o.brandName ? `(${o.brandName})` : ""} {o.code ? `[${o.code}]` : ""}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
                     {/* Nama Produk */}
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-faint mb-1.5">
@@ -546,7 +594,7 @@ export default function ProductRecipeModal({
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="cth: Caffe Latte, Iced Matcha Espresso"
+                        placeholder="cth: Caffe Latte, Nasi Kebuli Ayam"
                         autoFocus
                         className="input-dark text-sm"
                       />

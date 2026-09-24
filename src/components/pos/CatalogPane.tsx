@@ -13,10 +13,12 @@ export default function CatalogPane({
   catalog,
   onPick,
   onOpenHistory,
+  onOpenMoodScanner,
 }: {
   catalog: CatalogDto;
   onPick: (product: Product) => void;
   onOpenHistory?: () => void;
+  onOpenMoodScanner?: () => void;
 }) {
   const [activeCat, setActiveCat] = useState<number | "all">("all");
   const [query, setQuery] = useState("");
@@ -73,6 +75,19 @@ export default function CatalogPane({
             <p className="text-xs text-faint hidden lg:block">
               <span className="font-display font-semibold text-sand tabular">{filtered.length}</span> menu aktif
             </p>
+
+            {onOpenMoodScanner && (
+              <button
+                type="button"
+                onClick={onOpenMoodScanner}
+                className="btn-press flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-emerald-200 hover:border-emerald-400 hover:bg-emerald-500/20 transition shrink-0 shadow-sm"
+                title="Pindai ekspresi wajah untuk rekomendasi menu AI"
+              >
+                <Sparkles className="size-4 text-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline">AI Mood Scanner</span>
+                <span className="sm:hidden">AI Scan</span>
+              </button>
+            )}
 
             {onOpenHistory && (
               <button

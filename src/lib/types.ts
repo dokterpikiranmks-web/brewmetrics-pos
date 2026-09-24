@@ -21,7 +21,7 @@ export interface StaffUserDto {
 }
 
 export interface CatalogDto {
-  categories: { id: number; name: string; icon: string }[];
+  categories: { id: number; name: string; icon: string; outletId?: number | null }[];
   products: {
     id: number;
     categoryId: number;
@@ -33,6 +33,9 @@ export interface CatalogDto {
     imageUrl?: string | null;
     isBundle?: boolean;
     bundleItems?: { productId: number; productName?: string; qty: number }[];
+    outletId?: number | null;
+    aiMood?: string | null;
+    isActive?: boolean;
   }[];
   variants: { id: number; productId: number; name: string; priceDelta: number }[];
   modifiers: { id: number; name: string; price: number }[];

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, FolderPlus, Trash2, Check,
+  X, FolderPlus, Trash2, Check, Store,
   Coffee, Filter, CupSoda, Flame, Sparkles, Croissant, CakeSlice,
   Utensils, Wine, Milk, Beer, Cookie, Soup, GlassWater, Leaf,
 } from "lucide-react";
@@ -13,6 +13,7 @@ export interface CategoryData {
   name: string;
   icon: string;
   sortOrder: number;
+  outletId?: number;
 }
 
 const AVAILABLE_ICONS = [
@@ -36,12 +37,14 @@ const AVAILABLE_ICONS = [
 export default function CategoryModal({
   open,
   initialData,
+  outlets = [],
   onClose,
   onSave,
   onDelete,
 }: {
   open: boolean;
   initialData?: CategoryData | null;
+  outlets?: { id: number; name: string; brandName?: string; code?: string }[];
   onClose: () => void;
   onSave: (cat: CategoryData) => void;
   onDelete?: (id: number) => void;
@@ -49,6 +52,8 @@ export default function CategoryModal({
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("Coffee");
   const [sortOrder, setSortOrder] = useState(1);
+  const [outletId, setOutletId] = useState<number>(1);
+  const [outletList, setOutletList] = useState<{ id: number; name: string; brandName?: string; code?: string }[]>(outlets);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,12 +62,29 @@ export default function CategoryModal({
         setName(initialData.name);
         setIcon(initialData.icon || "Coffee");
         setSortOrder(initialData.sortOrder || 1);
+        setOutletId(initialData.outletId ?? 1);
       } else {
         setName("");
         setIcon("Coffee");
         setSortOrder(1);
+        setOutletId(1);
       }
       setError(null);
+
+      // Ambil data outlets dari API /api/outlets
+      fetch("/api/outlets")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.outlets && Array.isArray(data.outlets)) {
+            setOutletList(data.outlets);
+            if (!initialData?.outletId && data.outlets.length > 0) {
+              setOutletId((prev) => prev || data.outlets[0].id);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("fetch outlets error in CategoryModal:", err);
+        });
     }
   }, [open, initialData]);
 
@@ -77,6 +99,7 @@ export default function CategoryModal({
       name: name.trim(),
       icon,
       sortOrder: Number(sortOrder) || 1,
+      outletId: Number(outletId) || 1,
     });
     onClose();
   };
@@ -121,6 +144,34 @@ export default function CategoryModal({
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Dropdown Cabang / Brand */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand mb-1.5 flex items-center gap-1.5">
+                  <Store className="size-3.5 text-brand" />
+                  <span>Cabang / Brand</span>
+                </label>
+                <select
+                  value={outletId}
+                  onChange={(e) => setOutletId(Number(e.target.value))}
+                  className="input-dark text-sm w-full"
+                >
+                  {outletList.length === 0 ? (
+                    <option value={1} className="bg-coal text-cream">
+                      Cabang Pusat / Default (ID: 1)
+                    </option>
+                  ) : (
+                    outletList.map((o) => (
+                      <option key={o.id} value={o.id} className="bg-coal text-cream">
+                        {o.name} {o.brandName ? `(${o.brandName})` : ""} {o.code ? `[${o.code}]` : ""}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-[10.5px] text-faint mt-1">
+                  Kategori ini hanya akan dapat diakses oleh kasir cabang yang dipilih.
+                </p>
+              </div>
+
               {/* Nama Kategori */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-faint mb-1.5">
@@ -130,7 +181,7 @@ export default function CategoryModal({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="cth: Espresso Bar, Artisan Tea, Pastry"
+                  placeholder="cth: Espresso Bar, Nasi Rempah, Minuman Dingin"
                   autoFocus
                   className="input-dark text-sm"
                 />

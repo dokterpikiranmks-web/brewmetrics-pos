@@ -136,3 +136,23 @@ export const printRaw = async (data: Uint8Array | string): Promise<{ success: bo
   const ok = await printReceiptBluetooth(bytes);
   return { success: ok, error: ok ? undefined : "Gagal mencetak struk bluetooth." };
 };
+
+/**
+ * 4. Injeksi "Resep Pulih" Personal Berdasarkan AI Mood Scanner untuk Struk Thermal
+ */
+export function getTherapyText(mood: string): string {
+  const normalizedMood = mood?.toLowerCase()?.trim() || "";
+  switch (normalizedMood) {
+    case "tegang":
+      return "\n--- RESEP PULIH PERSONAL ---\nSistem mendeteksi ketegangan fisik.\nSambil menikmati minuman ini:\n1. Rilekskan otot rahang Anda.\n2. Pijat lembut area bahu/leher.\nJeda 5 menit ini adalah milik Anda.";
+    case "cemas":
+      return "\n--- RESEP PULIH PERSONAL ---\nSistem mendeteksi ritme napas cepat.\nSambil menikmati minuman ini:\n1. Tarik napas 4 dtk, tahan 4 dtk, hembuskan 4 dtk.\n2. Pijat lembut titik Shen Men di atas telinga.\nJeda 5 menit ini adalah milik Anda.";
+    case "lelah":
+      return "\n--- RESEP PULIH PERSONAL ---\nSistem mendeteksi kelelahan energi.\nSambil menikmati minuman ini:\n1. Fokuskan pandangan ke titik jauh.\n2. Nikmati aroma minuman sebelum diteguk.\nJeda 5 menit ini adalah milik Anda.";
+    case "optimal":
+      return "\n--- RESEP PULIH PERSONAL ---\nKondisi energi Anda sangat baik hari ini!\nPertahankan momentum positif ini, sebarkan senyum, dan nikmati hari Anda dengan penuh kesadaran.";
+    default:
+      return "";
+  }
+}
+

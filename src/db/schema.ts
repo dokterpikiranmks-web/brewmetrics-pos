@@ -42,12 +42,19 @@ export const users = pgTable("users", {
 
 /* --------------------------------- CATALOG --------------------------------- */
 
-export const categories = pgTable("categories", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  icon: text("icon").notNull().default("Coffee"),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+export const categories = pgTable(
+  "categories",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    icon: text("icon").notNull().default("Coffee"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    outletId: integer("outlet_id")
+      .references(() => outlets.id)
+      .default(1),
+  },
+  (t) => [index("categories_outlet_idx").on(t.outletId)]
+);
 
 export const products = pgTable(
   "products",
@@ -65,10 +72,13 @@ export const products = pgTable(
     imageUrl: text("image_url").default(""),
     isBundle: boolean("is_bundle").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
-    outletId: integer("outlet_id").references(() => outlets.id),
+    outletId: integer("outlet_id")
+      .references(() => outlets.id)
+      .default(1),
     brandName: text("brand_name").default(""),
     receiptHeader: text("receipt_header").default(""),
     receiptFooter: text("receipt_footer").default(""),
+    aiMood: text("ai_mood").default(""),
   },
   (t) => [
     index("products_category_idx").on(t.categoryId),
@@ -365,9 +375,12 @@ export const attendances = pgTable(
 
 export const outletsRelations = relations(outlets, ({ many }) => ({
   users: many(users),
+  categories: many(categories),
+  products: many(products),
   orders: many(orders),
   shiftReports: many(shiftReports),
   attendances: many(attendances),
+  discounts: many(discounts),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -380,7 +393,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   attendances: many(attendances),
 }));
 
-export const categoriesRelations = relations(categories, ({ many }) => ({
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  outlet: one(outlets, {
+    fields: [categories.outletId],
+    references: [outlets.id],
+  }),
   products: many(products),
 }));
 

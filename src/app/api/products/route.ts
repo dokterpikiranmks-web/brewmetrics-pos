@@ -22,25 +22,38 @@ export async function GET(req: Request) {
 
   try {
     const url = new URL(req.url);
-    const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId");
+    const headerOutlet = req.headers.get("x-outlet-id");
+    const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
+    const role = user?.role ?? (req.headers.get("x-user-role") as any);
 
-    // Tentukan filter outlet:
-    // 1. Dari query parameter outlet_id (jika diberikan dan bukan "all")
-    // 2. Jika tidak ada parameter spesifik, gunakan outlet_id kasir yang sedang aktif
+    // Tangkap userOutletId dari token sesi user atau default 1
+    const userOutletId = user?.outletId ?? 1;
+
     let targetOutletId: number | null = null;
-    if (outletParam && outletParam !== "all") {
-      const parsed = Number(outletParam);
-      if (!isNaN(parsed)) {
-        targetOutletId = parsed;
+
+    if (role === "cashier") {
+      // STRICT OUTLET ISOLATION:
+      // Kueri products harus di-filter dengan .where(eq(products.outletId, userOutletId)) jika yang login adalah kasir.
+      // Kasir DILARANG melakukan bypass (parameter query atau header outlet diabaikan total).
+      targetOutletId = userOutletId;
+    } else {
+      // Role 'owner', 'manager', atau 'admin'
+      if (outletParam && outletParam !== "all") {
+        const parsed = Number(outletParam);
+        if (!isNaN(parsed)) {
+          targetOutletId = parsed;
+        }
+      } else if (outletParam === "all") {
+        // Tampilkan semua produk jika role === 'owner' atau 'admin', dan outlet_id === 'all'
+        targetOutletId = null;
+      } else {
+        // Default untuk owner/manager jika tidak ada parameter spesifik: tampilkan semua
+        targetOutletId = null;
       }
-    } else if (!outletParam && user?.outletId) {
-      targetOutletId = user.outletId;
     }
 
-    // Filter produk berdasarkan outlet_id kasir aktif ATAU produk global (outlet_id IS NULL)
-    const productWhere = targetOutletId
-      ? or(eq(products.outletId, targetOutletId), isNull(products.outletId))
-      : undefined;
+    // Filter produk berdasarkan outletId secara ketat
+    const productWhere = targetOutletId !== null ? eq(products.outletId, targetOutletId) : undefined;
 
     const [allProducts, allVariants, allRecipes, allIngredients, allCategories, allBundleItems] =
       await Promise.all([

@@ -198,7 +198,8 @@ export async function ensureOutletsAndMultiBranchSchema() {
       ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
 
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE categories ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id) DEFAULT 1;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id) DEFAULT 1;
       ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
@@ -252,12 +253,14 @@ export async function ensureOutletsAndMultiBranchSchema() {
       UPDATE outlets SET brand_name = 'DOI TA' WHERE code = 'HQ' AND (brand_name IS NULL OR brand_name = '');
     `);
 
-    // Assign default outlet_id = 1 to existing users, orders, shifts that have null outlet_id
+    // Assign default outlet_id = 1 to existing users, orders, shifts, categories, products that have null outlet_id
     await db.execute(sql`
       UPDATE users SET outlet_id = 1 WHERE outlet_id IS NULL AND role = 'cashier';
       UPDATE orders SET outlet_id = 1 WHERE outlet_id IS NULL;
       UPDATE shift_reports SET outlet_id = 1 WHERE outlet_id IS NULL;
       UPDATE cash_movements SET outlet_id = 1 WHERE outlet_id IS NULL;
+      UPDATE categories SET outlet_id = 1 WHERE outlet_id IS NULL;
+      UPDATE products SET outlet_id = 1 WHERE outlet_id IS NULL;
     `);
   } catch (err) {
     console.error("ensureOutletsAndMultiBranchSchema error:", err);
@@ -304,6 +307,38 @@ export async function ensureAttendancesTable() {
  * Idempotent schema verifier — hanya memastikan tabel & kolom yang dibutuhkan aplikasi sudah ada di Supabase.
  * Tidak memasukkan data tiruan / auto-seed sama sekali.
  */
+export async function ensureAiMoodSchema() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS ai_mood text DEFAULT '';
+    `);
+
+    await db.execute(sql`
+      UPDATE products SET ai_mood = 'optimal'
+      WHERE (ai_mood IS NULL OR ai_mood = '') AND (lower(name) LIKE '%v60%' OR lower(name) LIKE '%signature%' OR lower(name) LIKE '%specialty%' OR lower(name) LIKE '%pour over%');
+
+      UPDATE products SET ai_mood = 'lelah'
+      WHERE (ai_mood IS NULL OR ai_mood = '') AND (lower(name) LIKE '%espresso%' OR lower(name) LIKE '%americano%' OR lower(name) LIKE '%cold brew%' OR lower(name) LIKE '%double%' OR lower(name) LIKE '%aren%');
+
+      UPDATE products SET ai_mood = 'tegang'
+      WHERE (ai_mood IS NULL OR ai_mood = '') AND (lower(name) LIKE '%tea%' OR lower(name) LIKE '%teh%' OR lower(name) LIKE '%matcha%' OR lower(name) LIKE '%chocolate%' OR lower(name) LIKE '%cokelat%' OR lower(name) LIKE '%lemon%');
+
+      UPDATE products SET ai_mood = 'cemas'
+      WHERE (ai_mood IS NULL OR ai_mood = '') AND (lower(name) LIKE '%latte%' OR lower(name) LIKE '%cappuccino%' OR lower(name) LIKE '%vanilla%' OR lower(name) LIKE '%caramel%' OR lower(name) LIKE '%susu%');
+
+      UPDATE products SET ai_mood = CASE (id % 4)
+        WHEN 0 THEN 'tegang'
+        WHEN 1 THEN 'cemas'
+        WHEN 2 THEN 'lelah'
+        ELSE 'optimal'
+      END
+      WHERE ai_mood IS NULL OR ai_mood = '';
+    `);
+  } catch (err) {
+    console.error("ensureAiMoodSchema error:", err);
+  }
+}
+
 export async function ensureSchema(): Promise<void> {
   if (!schemaPromise) {
     schemaPromise = (async () => {
@@ -315,6 +350,7 @@ export async function ensureSchema(): Promise<void> {
       await ensureDiscountsTable();
       await ensureOutletsAndMultiBranchSchema();
       await ensureAttendancesTable();
+      await ensureAiMoodSchema();
     })().catch((e) => {
       schemaPromise = null;
       throw e;

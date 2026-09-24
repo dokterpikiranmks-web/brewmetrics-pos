@@ -4,10 +4,12 @@ import React from "react";
 import type { CartLine } from "@/lib/cart";
 import type { OrderReceipt, StoreSettingDto, OrderType, DiscountType, PaymentBreakdownItem } from "@/lib/types";
 import { formatIDR } from "@/lib/format";
+import { getTherapyText } from "@/lib/bluetooth";
 
 export interface ReceiptPrintProps {
   orderNumber?: string;
   cashierName?: string;
+  moodTag?: string | null;
   createdAt?: string | Date;
   lines?: CartLine[];
   receipt?: OrderReceipt | null;
@@ -54,6 +56,7 @@ export default function ReceiptPrint({
   tendered,
   change,
   paymentReference,
+  moodTag,
   isCalibration = false,
 }: ReceiptPrintProps) {
   // Jika ada data receipt resmi dari transaksi tersimpan, prioritaskan data tersebut
@@ -531,6 +534,18 @@ export default function ReceiptPrint({
           </div>
 
           <div className="border-b border-dashed border-black my-1" />
+
+          {/* RESEP PULIH PERSONAL (AI MOOD SCANNER) */}
+          {moodTag && getTherapyText(moodTag) && (
+            <>
+              <div className="py-1 text-center">
+                <div className="whitespace-pre-line text-[8.5px] leading-tight font-bold">
+                  {getTherapyText(moodTag).trim()}
+                </div>
+              </div>
+              <div className="border-b border-dashed border-black my-1" />
+            </>
+          )}
 
           {/* ----------------------------- FOOTER ----------------------------- */}
           <div className="text-center pt-2 pb-2 space-y-1 text-[9px] text-gray-800">

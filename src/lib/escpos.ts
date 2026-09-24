@@ -3,6 +3,9 @@
  * Compatible with Web Bluetooth & Web Serial thermal printers.
  */
 
+import { getTherapyText } from "./bluetooth";
+export { getTherapyText };
+
 // Basic ESC/POS command constants
 export const CMD = {
   // Printer initialization
@@ -194,6 +197,8 @@ export interface OrderDataForPrint {
     modifiers?: Array<{ name: string; price: number }>;
     mods?: Array<{ name: string; price: number }>;
   }>;
+  mood?: string | null;
+  therapyText?: string | null;
 }
 
 export interface StoreDataForPrint {
@@ -419,6 +424,16 @@ export function formatReceipt(
 
   parts.push(textToBytes(payText));
   parts.push(textToBytes(formatDivider("=", lineWidth)));
+
+  // Resep Pulih Personal (AI Mood-to-Menu Scanner)
+  const therapy = orderData.therapyText || (orderData.mood ? getTherapyText(orderData.mood) : "");
+  if (therapy && therapy.trim().length > 0) {
+    parts.push(alignCenter());
+    parts.push(setBold(true));
+    parts.push(textToBytes(`${therapy.trim()}\n`));
+    parts.push(setBold(false));
+    parts.push(textToBytes(formatDivider("=", lineWidth)));
+  }
 
   // 7. FOOTER
   parts.push(alignCenter());

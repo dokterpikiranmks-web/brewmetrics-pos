@@ -20,9 +20,10 @@ const ICONS_MAP: Record<string, typeof Coffee> = {
 
 export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState<{ id: number; name: string; icon: string; sortOrder?: number }[]>([]);
+  const [categories, setCategories] = useState<{ id: number; name: string; icon: string; sortOrder?: number; outletId?: number | null }[]>([]);
   const [products, setProducts] = useState<ProductFormData[]>([]);
   const [ingredients, setIngredients] = useState<IngredientDto[]>([]);
+  const [outlets, setOutlets] = useState<{ id: number; name: string; brandName?: string; code?: string }[]>([]);
 
   // Filter & Search
   const [selectedCat, setSelectedCat] = useState<number | "all">("all");
@@ -47,11 +48,16 @@ export default function ProductsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [prodRes, catRes, ingRes] = await Promise.all([
-        fetch("/api/products").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/categories").then((r) => (r.ok ? r.json() : null)),
+      const [prodRes, catRes, ingRes, outRes] = await Promise.all([
+        fetch("/api/products?outlet_id=all").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/categories?outlet_id=all").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/inventory").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/outlets").then((r) => (r.ok ? r.json() : null)),
       ]);
+
+      if (outRes?.outlets) {
+        setOutlets(outRes.outlets);
+      }
 
       if (ingRes?.ingredients) {
         setIngredients(ingRes.ingredients);
@@ -151,6 +157,7 @@ export default function ProductsPage() {
           imageUrl: formData.imageUrl ?? "",
           isActive: formData.isActive,
           isBundle: formData.isBundle ?? false,
+          outletId: formData.outletId ?? 1,
           bundleItems: formData.bundleItems,
           variants: formData.variants,
           recipe: (formData.recipe || []).map((r) => ({
@@ -212,6 +219,7 @@ export default function ProductsPage() {
           name: catData.name,
           icon: catData.icon,
           sortOrder: catData.sortOrder,
+          outletId: catData.outletId ?? 1,
         }),
       });
 
@@ -469,6 +477,7 @@ export default function ProductsPage() {
                   const profit = p.price - hpp;
                   const margin = p.price > 0 ? Math.round((profit / p.price) * 1000) / 10 : 0;
                   const categoryName = categories.find((c) => c.id === p.categoryId)?.name ?? "Menu";
+                  const prodOutlet = outlets.find((o) => o.id === p.outletId);
                   const IconComp = ICONS_MAP[p.icon] || Coffee;
 
                   return (
@@ -502,6 +511,11 @@ export default function ProductsPage() {
                             )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
+                                {prodOutlet && (
+                                  <span className="inline-block text-[9px] font-bold uppercase tracking-wider text-brand bg-brand/15 border border-brand/35 px-1.5 py-0.2 rounded-md">
+                                    {prodOutlet.brandName || prodOutlet.name}
+                                  </span>
+                                )}
                                 <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-faint">
                                   {categoryName}
                                 </span>
@@ -667,6 +681,14 @@ export default function ProductsPage() {
                     </div>
 
                     <div>
+                      {(() => {
+                        const catOutlet = outlets.find((o) => o.id === cat.outletId);
+                        return catOutlet ? (
+                          <span className="inline-block text-[9.5px] font-bold uppercase tracking-wider text-brand bg-brand/15 border border-brand/35 px-2 py-0.5 rounded-md mb-1.5">
+                            {catOutlet.brandName || catOutlet.name}
+                          </span>
+                        ) : null;
+                      })()}
                       <h3 className="font-display text-lg font-bold text-cream">{cat.name}</h3>
                       <p className="text-xs text-sand font-medium mt-0.5">
                         {count} Produk Terdaftar
@@ -684,6 +706,7 @@ export default function ProductsPage() {
                               name: cat.name,
                               icon: cat.icon,
                               sortOrder: cat.sortOrder ?? 1,
+                              outletId: cat.outletId ?? 1,
                             },
                           })
                         }
@@ -965,11 +988,13 @@ export default function ProductsPage() {
         onClose={() => setProductModal({ open: false })}
         onSave={handleSaveProduct}
         onDelete={handleDeleteProduct}
+        outlets={outlets}
       />
 
       <CategoryModal
         open={categoryModal.open}
         initialData={categoryModal.data}
+        outlets={outlets}
         onClose={() => setCategoryModal({ open: false })}
         onSave={handleSaveCategory}
         onDelete={handleDeleteCategory}

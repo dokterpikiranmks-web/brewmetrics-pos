@@ -15,6 +15,7 @@ import VoidAuthModal, { type VoidRequest } from "@/components/pos/VoidAuthModal"
 import CloseShiftModal from "@/components/pos/CloseShiftModal";
 import CashMovementModal from "@/components/cash/CashMovementModal";
 import SplitBillModal from "@/components/pos/SplitBillModal";
+import MoodScanner, { type MoodTag } from "@/components/scanner/MoodScanner";
 import type {
   CatalogDto,
   OrderReceipt,
@@ -56,6 +57,8 @@ export default function PosPage() {
   const [splitBillOpen, setSplitBillOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [moodScannerOpen, setMoodScannerOpen] = useState(false);
+  const [scannedMood, setScannedMood] = useState<MoodTag | null>(null);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [cashMovementOpen, setCashMovementOpen] = useState(false);
   const [todayOrders, setTodayOrders] = useState<TodayOrderDto[]>([]);
@@ -377,6 +380,7 @@ export default function PosPage() {
     setOrderType("dine-in");
     setTableNumber("");
     setDiscount(null);
+    setScannedMood(null);
   };
 
   // Handler proses Split Bill: langsung bayar Nota Baru, amankan sisa Nota Asal
@@ -448,6 +452,7 @@ export default function PosPage() {
             catalog={catalog}
             onPick={pickProduct}
             onOpenHistory={() => setOrderHistoryOpen(true)}
+            onOpenMoodScanner={() => setMoodScannerOpen(true)}
           />
         )}
 
@@ -492,6 +497,7 @@ export default function PosPage() {
         total={totals.grandTotal}
         offline={!online}
         storeSettings={settings}
+        moodTag={scannedMood}
         onClose={handleClosePayment}
         onSubmit={submitOrder}
         onDone={handlePaymentDone}
@@ -550,6 +556,18 @@ export default function PosPage() {
         onSaved={refreshToday}
         onSuccessToast={(m) => showToast(m, "ok")}
         onErrorToast={(m) => showToast(m, "err")}
+      />
+
+      {/* Modal AI Mood-to-Menu Scanner */}
+      <MoodScanner
+        isOpen={moodScannerOpen}
+        onClose={() => setMoodScannerOpen(false)}
+        catalog={catalog}
+        onAddToCart={pickProduct}
+        onMoodScanned={(m, text) => {
+          setScannedMood(m);
+          showToast(`Kondisi energi ${m.toUpperCase()} terdeteksi! Menu pemulih siap dipilih.`, "ok");
+        }}
       />
 
       {/* toast */}
