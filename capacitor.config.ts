@@ -1,21 +1,13 @@
-export interface CapacitorConfig {
-  appId: string;
-  appName: string;
-  webDir: string;
-  server?: {
-    androidScheme?: string;
-    url?: string;
-    cleartext?: boolean;
-  };
-}
+import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: "com.doita.pos",
-  appName: "DOI TA",
-  webDir: "out",
+  appId: 'com.brewmetricspos.app',
+  appName: 'QAF POS',
+  webDir: 'public',
   server: {
-    androidScheme: "https",
-  },
+    url: 'https://brewmetrics-pos-git-apk-testing-dokterpikiranmks.vercel.app',
+    cleartext: true
+  }
 };
 
 export default config;
