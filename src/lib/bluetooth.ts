@@ -1,359 +1,138 @@
-/**
- * Web Bluetooth Driver for ESC/POS Thermal Printers
- * Supports standard thermal printer UUID fallbacks, automatic reconnect via localStorage,
- * and chunked binary buffer printing.
- */
+// Sesuaikan jika Anda menggunakan library ESC/POS lain
+// Di project BrewMetrics POS, generator ESC/POS biner internal tersedia di "@/lib/escpos"
+// import { EscPos } from "@seodi/escpos-encoder";
 
-// Universal Bluetooth UUIDs for Thermal Receipt Printers & BLE Serial SPP
-export const THERMAL_PRINTER_SERVICES = [
-  "000018f0-0000-1000-8000-00805f9b34fb", // Standard ESC/POS Thermal Service (0x18F0)
-  "e7810a71-73ae-499d-8c15-faa9aef0c3f2", // Common Rongta/Xprinter POS Service
-  "49535343-fe7d-4ae5-8fa9-9fafd205e455", // ISSC Transparent UART
-  "0000ffe0-0000-1000-8000-00805f9b34fb", // HM-10 / Common BLE POS UART (0xFFE0)
-  "0000ff00-0000-1000-8000-00805f9b34fb", // Generic POS UART (0xFF00)
-  "00001101-0000-1000-8000-00805f9b34fb", // Standard SPP Service (0x1101)
+// Deklarasi tipe global untuk Web Bluetooth API agar kompatibel dengan TypeScript
+declare global {
+  interface Navigator {
+    bluetooth?: {
+      requestDevice: (options: any) => Promise<any>;
+      getDevices?: () => Promise<any[]>;
+    };
+  }
+}
+
+// 1. Daftar Service UUID standar pabrikan printer thermal China (BLE)
+export const PRINTER_SERVICE_UUIDS = [
+  '000018f0-0000-1000-8000-00805f9b34fb', // Generik Paling Umum
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // VSC / XPrinter
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC
+  '0000fee7-0000-1000-8000-00805f9b34fb'  // WeChat BLE standard
 ];
 
-export const THERMAL_PRINTER_CHARACTERISTICS = [
-  "00002af1-0000-1000-8000-00805f9b34fb", // Standard Printer Data Write
-  "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f", // Rongta Write
-  "49535343-8841-43f4-a8d4-ecbe34729bb3", // ISSC Write
-  "0000ffe1-0000-1000-8000-00805f9b34fb", // HM-10 Write
-  "0000ff01-0000-1000-8000-00805f9b34fb", // POS Write
-  "0000ff02-0000-1000-8000-00805f9b34fb", // Secondary POS Write
-];
+// Alias untuk kompatibilitas
+export const THERMAL_PRINTER_SERVICES = PRINTER_SERVICE_UUIDS;
 
-const STORAGE_KEY = "bm_bt_printer_device";
-
-// Type definitions for Web Bluetooth API compatibility without external typings
-interface BluetoothDeviceLike {
-  id: string;
-  name?: string;
-  gatt?: {
-    connected: boolean;
-    connect: () => Promise<BluetoothRemoteGATTServerLike>;
-    disconnect: () => void;
-  };
-  addEventListener: (type: string, listener: (ev: Event) => void) => void;
-  removeEventListener: (type: string, listener: (ev: Event) => void) => void;
-}
-
-interface BluetoothRemoteGATTServerLike {
-  connected: boolean;
-  device: BluetoothDeviceLike;
-  getPrimaryService: (service: string | number) => Promise<BluetoothRemoteGATTServiceLike>;
-  getPrimaryServices: () => Promise<BluetoothRemoteGATTServiceLike[]>;
-  disconnect: () => void;
-}
-
-interface BluetoothRemoteGATTServiceLike {
-  uuid: string;
-  getCharacteristic: (characteristic: string | number) => Promise<BluetoothRemoteGATTCharacteristicLike>;
-  getCharacteristics: () => Promise<BluetoothRemoteGATTCharacteristicLike[]>;
-}
-
-interface BluetoothRemoteGATTCharacteristicLike {
-  uuid: string;
-  properties: {
-    write: boolean;
-    writeWithoutResponse: boolean;
-  };
-  writeValue?: (value: BufferSource) => Promise<void>;
-  writeValueWithResponse?: (value: BufferSource) => Promise<void>;
-  writeValueWithoutResponse?: (value: BufferSource) => Promise<void>;
-}
-
-// Module-level connection state
-let connectedDevice: BluetoothDeviceLike | null = null;
-let activeCharacteristic: BluetoothRemoteGATTCharacteristicLike | null = null;
-
-function getBluetooth(): any {
-  if (typeof window !== "undefined" && typeof navigator !== "undefined") {
-    return (navigator as any).bluetooth;
-  }
-  return null;
-}
+// Helper untuk memberikan jeda waktu (delay)
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Cek apakah peramban saat ini mendukung Web Bluetooth API.
+ * 2. Mekanisme Chunking (Anti Buffer-Overflow)
+ * Memecah data struk menjadi paket-paket kecil 256 bytes.
  */
-export function isBluetoothSupported(): boolean {
-  return Boolean(getBluetooth());
-}
-
-/**
- * Cek status koneksi aktif printer saat ini.
- */
-export function isPrinterConnected(): boolean {
-  return Boolean(
-    connectedDevice &&
-      connectedDevice.gatt?.connected &&
-      activeCharacteristic
-  );
-}
-
-/**
- * Mengambil nama perangkat printer yang sedang terhubung.
- */
-export function getConnectedPrinterName(): string | null {
-  return connectedDevice?.name || null;
-}
-
-/**
- * Membaca data perangkat printer tersimpan dari localStorage.
- */
-export function getSavedPrinter(): { id: string; name?: string } | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Simpan ID/MAC perangkat printer ke localStorage untuk reconnect otomatis.
- */
-export function savePrinterToStorage(device: BluetoothDeviceLike) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        id: device.id,
-        name: device.name || "Bluetooth Thermal Printer",
-        lastConnected: new Date().toISOString(),
-      })
-    );
-  } catch (err) {
-    console.warn("Gagal menyimpan identitas printer ke localStorage:", err);
-  }
-}
-
-/**
- * Hapus data printer tersimpan dari localStorage.
- */
-export function clearSavedPrinter() {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {}
-}
-
-/**
- * Cari karakteristik printer yang dapat ditulisi (writeable).
- */
-async function findWriteCharacteristic(
-  server: BluetoothRemoteGATTServerLike
-): Promise<BluetoothRemoteGATTCharacteristicLike | null> {
-  // Coba ambil seluruh service primer yang didukung
-  let services: BluetoothRemoteGATTServiceLike[] = [];
-  try {
-    services = await server.getPrimaryServices();
-  } catch {
-    // Jika getPrimaryServices() gagal, coba per service UUID yang diketahui
-    for (const serviceUuid of THERMAL_PRINTER_SERVICES) {
-      try {
-        const s = await server.getPrimaryService(serviceUuid);
-        services.push(s);
-      } catch {}
-    }
-  }
-
-  for (const service of services) {
+export async function sendDataToPrinter(characteristic: any, uint8Array: Uint8Array) {
+  const CHUNK_SIZE = 256; 
+  
+  for (let i = 0; i < uint8Array.length; i += CHUNK_SIZE) {
+    const chunk = uint8Array.slice(i, i + CHUNK_SIZE);
     try {
-      const chars = await service.getCharacteristics();
-      for (const char of chars) {
-        // Prioritaskan karakteristik yang terdaftar di daftar standar atau yang memiliki properti write
-        const isKnown = THERMAL_PRINTER_CHARACTERISTICS.includes(char.uuid.toLowerCase());
-        const canWrite =
-          char.properties.writeWithoutResponse || char.properties.write;
-        if (isKnown || canWrite) {
-          return char;
+      if (characteristic.properties?.writeWithoutResponse) {
+        if (typeof characteristic.writeValueWithoutResponse === "function") {
+          await characteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await characteristic.writeValue(chunk);
+        }
+      } else {
+        if (typeof characteristic.writeValueWithResponse === "function") {
+          await characteristic.writeValueWithResponse(chunk);
+        } else {
+          await characteristic.writeValue(chunk);
         }
       }
-    } catch {}
+      await delay(50);
+    } catch (error) {
+      console.error(`Gagal mengirim chunk pada posisi ${i}:`, error);
+      throw error;
+    }
   }
-
-  return null;
 }
 
-function handleDisconnection() {
-  console.log("Printer thermal bluetooth terputus.");
-  activeCharacteristic = null;
-}
+// Alias fungsi chunking
+export const sendTextToPrinter = sendDataToPrinter;
 
 /**
- * Hubungkan printer thermal via Web Bluetooth API.
- * Menampilkan dialog pemilihan perangkat bawaan browser jika belum terkoneksi.
+ * 3. Fungsi Utama Pencetakan Struk Bluetooth
  */
-export async function connectPrinter(): Promise<{
-  success: boolean;
-  deviceName?: string;
-  error?: string;
-}> {
-  const bt = getBluetooth();
-  if (!bt) {
-    return {
-      success: false,
-      error:
-        "Web Bluetooth API tidak didukung di browser ini. Gunakan Google Chrome di Android/Windows/Mac.",
-    };
-  }
-
+export async function printReceiptBluetooth(receiptData: Uint8Array): Promise<boolean> {
   try {
-    // Jika sudah terhubung, langsung kembalikan status aktif
-    if (isPrinterConnected()) {
-      return {
-        success: true,
-        deviceName: connectedDevice?.name || "Bluetooth Printer",
-      };
+    if (typeof navigator === "undefined" || !navigator.bluetooth) {
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        alert("Browser ini tidak mendukung Web Bluetooth. Gunakan Google Chrome versi terbaru.");
+      }
+      return false;
     }
 
-    // Buka dialog Web Bluetooth dengan filter standar thermal printer
-    const device: BluetoothDeviceLike = await bt.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: THERMAL_PRINTER_SERVICES,
+    const device = await navigator.bluetooth.requestDevice({
+      filters: PRINTER_SERVICE_UUIDS.map(uuid => ({ services: [uuid] })),
+      optionalServices: PRINTER_SERVICE_UUIDS
     });
 
-    if (!device.gatt) {
-      throw new Error("Perangkat tidak memiliki antarmuka Bluetooth GATT.");
+    if (!device || !device.gatt) {
+      throw new Error("Perangkat gagal merespons GATT server.");
     }
 
-    // Dengarkan event pemutusan koneksi
-    device.removeEventListener("gattserverdisconnected", handleDisconnection);
-    device.addEventListener("gattserverdisconnected", handleDisconnection);
-
-    // Buka koneksi GATT Server
     const server = await device.gatt.connect();
+    let printerCharacteristic = null;
 
-    // Cari karakteristik write
-    const char = await findWriteCharacteristic(server);
-    if (!char) {
-      throw new Error(
-        "Karakteristik penulisan (write characteristic) printer thermal tidak ditemukan."
-      );
+    for (const uuid of PRINTER_SERVICE_UUIDS) {
+      try {
+        const service = await server.getPrimaryService(uuid);
+        if (service) {
+          const characteristics = await service.getCharacteristics();
+          printerCharacteristic = characteristics.find((c: any) => 
+            c.properties?.write || c.properties?.writeWithoutResponse
+          );
+          if (printerCharacteristic) break; 
+        }
+      } catch (e) {
+        continue;
+      }
     }
 
-    connectedDevice = device;
-    activeCharacteristic = char;
-
-    // Simpan ke localStorage agar dapat disambungkan kembali secara otomatis
-    savePrinterToStorage(device);
-
-    return {
-      success: true,
-      deviceName: device.name || "Bluetooth Printer",
-    };
-  } catch (err: any) {
-    console.error("connectPrinter error:", err);
-    if (err.name === "NotFoundError") {
-      return { success: false, error: "Pemilihan perangkat printer dibatalkan." };
+    if (!printerCharacteristic) {
+      throw new Error("Printer terhubung, tapi port penulisan (characteristic) tidak ditemukan.");
     }
-    return {
-      success: false,
-      error: err.message || "Gagal menghubungkan ke printer bluetooth.",
-    };
-  }
-}
 
-/**
- * Coba hubungkan ulang (auto-reconnect) secara otomatis saat aplikasi dibuka
- * menggunakan ID perangkat yang tersimpan di localStorage.
- */
-export async function autoReconnectPrinter(): Promise<boolean> {
-  const bt = getBluetooth();
-  if (!bt || typeof bt.getDevices !== "function") return false;
+    await sendDataToPrinter(printerCharacteristic, receiptData);
 
-  const saved = getSavedPrinter();
-  if (!saved || !saved.id) return false;
-
-  try {
-    const devices: BluetoothDeviceLike[] = await bt.getDevices();
-    const matched = devices.find((d) => d.id === saved.id);
-    if (!matched || !matched.gatt) return false;
-
-    matched.removeEventListener("gattserverdisconnected", handleDisconnection);
-    matched.addEventListener("gattserverdisconnected", handleDisconnection);
-
-    const server = await matched.gatt.connect();
-    const char = await findWriteCharacteristic(server);
-    if (!char) return false;
-
-    connectedDevice = matched;
-    activeCharacteristic = char;
+    if (device.gatt.connected) {
+      device.gatt.disconnect();
+    }
+    
     return true;
-  } catch (err) {
-    console.warn("Gagal auto-reconnect printer bluetooth:", err);
+
+  } catch (error: any) {
+    console.error("Bluetooth Error:", error);
+    
+    if (error.name === 'NotFoundError') {
+       console.warn("Kasir membatalkan popup pemilihan printer.");
+    } else if (error.message && error.message.includes("Must be handling a user gesture")) {
+       if (typeof window !== "undefined" && typeof window.alert === "function") {
+         alert("Sistem memblokir. Anda harus mengklik tombol secara langsung untuk mulai mencari printer.");
+       }
+    } else {
+       if (typeof window !== "undefined" && typeof window.alert === "function") {
+         alert(`Gagal konek ke printer.\nPastikan printer menyala, bukan Bluetooth Classic, dan belum terhubung ke perangkat lain.\nInfo: ${error.message}`);
+       }
+    }
+    
     return false;
   }
 }
 
-/**
- * Putuskan koneksi printer aktif.
- */
-export async function disconnectPrinter(): Promise<void> {
-  if (connectedDevice?.gatt?.connected) {
-    try {
-      connectedDevice.gatt.disconnect();
-    } catch {}
-  }
-  connectedDevice = null;
-  activeCharacteristic = null;
-}
-
-/**
- * Kirim buffer biner mentah (ESC/POS) ke printer bluetooth.
- * Mengirim dalam pecahan chunk (100 byte) dengan delay untuk mencegah buffer overrun.
- */
-export async function printRaw(
-  data: Uint8Array
-): Promise<{ success: boolean; error?: string }> {
-  // Jika belum terkoneksi, coba reconnect otomatis terlebih dahulu
-  if (!isPrinterConnected()) {
-    const reconnected = await autoReconnectPrinter();
-    if (!reconnected) {
-      return {
-        success: false,
-        error: "Printer bluetooth belum terhubung. Silakan hubungkan printer terlebih dahulu.",
-      };
-    }
-  }
-
-  if (!activeCharacteristic) {
-    return {
-      success: false,
-      error: "Karakteristik printer bluetooth tidak aktif.",
-    };
-  }
-
-  try {
-    const CHUNK_SIZE = 100; // Ukuran chunk aman untuk buffer BLE thermal printer
-    for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
-      const chunk = data.slice(offset, offset + CHUNK_SIZE);
-
-      if (activeCharacteristic.writeValueWithoutResponse) {
-        await activeCharacteristic.writeValueWithoutResponse(chunk);
-      } else if (activeCharacteristic.writeValue) {
-        await activeCharacteristic.writeValue(chunk);
-      } else {
-        throw new Error("Karakteristik tidak mendukung perintah writeValue.");
-      }
-
-      // Berikan jeda kecil antar chunk
-      if (offset + CHUNK_SIZE < data.length) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error("printRaw error:", err);
-    return {
-      success: false,
-      error: err.message || "Terjadi kesalahan saat mencetak ke printer bluetooth.",
-    };
-  }
-}
+// Alias printRaw untuk kompatibilitas
+export const printRaw = async (data: Uint8Array | string): Promise<{ success: boolean; error?: string }> => {
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+  const ok = await printReceiptBluetooth(bytes);
+  return { success: ok, error: ok ? undefined : "Gagal mencetak struk bluetooth." };
+};
