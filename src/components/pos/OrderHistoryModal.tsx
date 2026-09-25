@@ -28,6 +28,8 @@ import {
 import type { TodayOrderDto, OrderReceipt, StoreSettingDto } from "@/lib/types";
 import { formatIDR, formatTime, formatDateID } from "@/lib/format";
 import ReceiptPrint from "./ReceiptPrint";
+import { printOrderReceipt, type PrintStrategy } from "@/lib/printer";
+
 
 interface OrderHistoryModalProps {
   open: boolean;
@@ -134,7 +136,7 @@ export default function OrderHistoryModal({
     return channelTotals.grandTotal;
   }, [channelTotals]);
 
-  const handleReprint = async (orderId: number) => {
+  const handleReprint = async (orderId: number, strategy?: PrintStrategy) => {
     try {
       setReprintingId(orderId);
       const res = await fetch(`/api/orders/${orderId}/receipt`);
@@ -143,12 +145,12 @@ export default function OrderHistoryModal({
       if (!data.receipt) throw new Error("Data struk tidak ditemukan.");
 
       setReprintReceipt(data.receipt);
-      setTimeout(() => {
-        window.print();
-        setReprintingId(null);
-      }, 300);
+      await printOrderReceipt(data.receipt, storeSettings, undefined, strategy || "auto");
     } catch (err: any) {
-      alert(err.message || "Gagal mencetak ulang struk.");
+      console.error("[POS] Gagal mencetak ulang struk:", err);
+      // Fallback ke window.print()
+      window.print();
+    } finally {
       setReprintingId(null);
     }
   };

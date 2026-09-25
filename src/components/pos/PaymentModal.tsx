@@ -25,6 +25,8 @@ import {
 import type { OrderReceipt, StoreSettingDto, PaymentBreakdownItem } from "@/lib/types";
 import { formatIDR, formatTime } from "@/lib/format";
 import ReceiptPrint from "./ReceiptPrint";
+import { printOrderReceipt, type PrintStrategy, isAndroidDevice } from "@/lib/printer";
+
 
 export type Method = "cash" | "qris" | "debit" | "transfer" | "split";
 
@@ -100,6 +102,32 @@ export default function PaymentModal({
     prevOpenRef.current = open;
   }, [open, total]);
 
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printStatus, setPrintStatus] = useState<string | null>(null);
+
+  // Fungsi Eksekusi Cetak Terpadu (BLE -> RawBT Intent -> Browser)
+  const handlePrint = async (strategy?: PrintStrategy) => {
+    if (!completedOrder) {
+      window.print();
+      return;
+    }
+    setIsPrinting(true);
+    setPrintStatus("Mempersiapkan cetak struk...");
+    try {
+      const res = await printOrderReceipt(completedOrder, storeSettings, moodTag, strategy || "auto");
+      if (res.message) {
+        setPrintStatus(res.message);
+        setTimeout(() => setPrintStatus(null), 3500);
+      }
+    } catch (err: any) {
+      console.error("[POS] Gagal mengeksekusi cetak struk:", err);
+      // Fallback aman ke browser print
+      window.print();
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   // Auto-print saat transaksi berhasil jika autoPrintReceipt aktif
   useEffect(() => {
     if (isSuccess && completedOrder) {
@@ -109,7 +137,7 @@ export default function PaymentModal({
         true;
       if (autoPrint) {
         const timer = setTimeout(() => {
-          window.print();
+          handlePrint("auto");
         }, 350);
         return () => clearTimeout(timer);
       }
@@ -156,13 +184,13 @@ export default function PaymentModal({
         handleNewOrder();
       } else if (e.key.toLowerCase() === "p" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        window.print();
+        handlePrint();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, isSuccess]);
+  }, [open, isSuccess, completedOrder]);
 
   // Hitungan untuk Single Cash
   const change = Math.max(0, tendered - total);
@@ -819,28 +847,73 @@ export default function PaymentModal({
                   </div>
                 </div>
 
-                {/* Notifikasi info pemotongan stok & tombol cetak manual */}
-                <p className="mt-3 text-[11px] text-faint flex items-center justify-center gap-1.5">
-                  <Sparkles className="size-3 text-brand shrink-0" />
-                  <span>Stok bahan terpotong otomatis. Klik Cetak Struk bila diperlukan pelanggan.</span>
-                </p>
+                {/* Notifikasi info cetak & status */}
+                {printStatus ? (
+                  <div className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-brand/10 border border-brand/20 px-3 py-1.5 text-xs font-semibold text-brand">
+                    <Sparkles className="size-3.5 shrink-0" />
+                    <span>{printStatus}</span>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11px] text-faint flex items-center justify-center gap-1.5">
+                    <Sparkles className="size-3 text-brand shrink-0" />
+                    <span>Stok bahan terpotong otomatis. Klik Cetak Struk bila diperlukan pelanggan.</span>
+                  </p>
+                )}
 
                 {/* Tombol Aksi: Cetak Struk & Pesanan Baru */}
                 <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="btn-press flex items-center justify-center gap-2 rounded-2xl border border-line-2 bg-coal py-3.5 px-4 font-display text-sm font-bold text-sand hover:text-cream hover:border-brand/40 shadow-sm"
-                    title="Cetak ulang struk thermal (P)"
-                  >
-                    <Printer className="size-4.5 text-brand" />
-                    <span>Cetak Struk (P)</span>
-                  </button>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      disabled={isPrinting}
+                      onClick={() => handlePrint("auto")}
+                      className="btn-press flex items-center justify-center gap-2 rounded-2xl border border-line-2 bg-coal py-3.5 px-4 font-display text-sm font-bold text-sand hover:text-cream hover:border-brand/40 shadow-sm disabled:opacity-50"
+                      title="Cetak struk ke printer thermal (Otomatis: BLE / RawBT)"
+                    >
+                      {isPrinting ? (
+                        <Loader2 className="size-4.5 animate-spin text-brand" />
+                      ) : (
+                        <Printer className="size-4.5 text-brand" />
+                      )}
+                      <span>{isPrinting ? "Mencetak..." : "Cetak Struk (P)"}</span>
+                    </button>
+
+                    {/* Quick Switch Print Options untuk Kasir */}
+                    <div className="flex items-center justify-center gap-2 text-[10px] text-faint">
+                      <span>Jalur:</span>
+                      <button
+                        type="button"
+                        onClick={() => handlePrint("bluetooth")}
+                        className="hover:text-brand underline"
+                        title="Paksa cetak via Web Bluetooth BLE"
+                      >
+                        Bluetooth
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => handlePrint("rawbt")}
+                        className="hover:text-brand underline"
+                        title="Paksa kirim intent ke aplikasi RawBT"
+                      >
+                        RawBT (Android)
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => handlePrint("browser")}
+                        className="hover:text-brand underline"
+                        title="Buka dialog cetak sistem"
+                      >
+                        Sistem
+                      </button>
+                    </div>
+                  </div>
 
                   <button
                     type="button"
                     onClick={handleNewOrder}
-                    className="btn-press flex items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 px-4 font-display text-sm font-bold text-coal shadow-[0_12px_28px_-8px] shadow-brand/70 hover:brightness-110"
+                    className="btn-press flex items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 px-4 font-display text-sm font-bold text-coal shadow-[0_12px_28px_-8px] shadow-brand/70 hover:brightness-110 h-[52px]"
                     title="Mulai pesanan baru dan kosongkan keranjang (Enter)"
                   >
                     <Plus className="size-4.5" strokeWidth={2.5} />

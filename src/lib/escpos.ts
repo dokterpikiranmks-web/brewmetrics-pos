@@ -451,3 +451,61 @@ export function formatReceipt(
 
   return concatBytes(...parts);
 }
+
+/**
+ * Buat byte buffer ESC/POS untuk uji kalibrasi hardware (Ruler presisi & ketajaman thermal).
+ */
+export function formatCalibrationReceipt(storeData?: StoreDataForPrint): Uint8Array {
+  const is80mm = storeData?.printerPaperSize === "80mm";
+  const lineWidth = is80mm ? 48 : 32;
+  const brandTitle = (storeData?.brandName || storeData?.cafeName || "DOI TA POS").trim();
+  const address = (storeData?.address || "Jl. Pengayoman No. 12, Makassar").trim();
+
+  const parts: Uint8Array[] = [];
+  parts.push(initPrinter());
+
+  // Header Kalibrasi
+  parts.push(alignCenter());
+  parts.push(setBold(true));
+  parts.push(setFontSize("double-height"));
+  parts.push(textToBytes("*** UJI KALIBRASI ***\n"));
+  parts.push(setFontSize("normal"));
+  parts.push(textToBytes(`${brandTitle}\n`));
+  parts.push(setBold(false));
+  parts.push(textToBytes(`${address}\n`));
+  parts.push(textToBytes(`LEBAR KERTAS: ${is80mm ? "80MM (48 Karakter)" : "58MM (32 Karakter)"}\n`));
+
+  parts.push(alignLeft());
+  parts.push(textToBytes(formatDivider("=", lineWidth)));
+
+  // Ruler alignment
+  parts.push(alignCenter());
+  parts.push(textToBytes(is80mm ? "|0mm............36mm............72mm|\n" : "|0mm......24mm......48mm|\n"));
+  parts.push(textToBytes(is80mm ? "[ 1234567890123456789012345678901234567890 ]\n" : "[ 123456789012345678901234567890 ]\n"));
+  parts.push(alignLeft());
+  parts.push(textToBytes(formatDivider("-", lineWidth)));
+
+  // Simulasi Dummy
+  parts.push(textToBytes(formatRow("1x Kopi Kalibrasi", "Rp 25.000", lineWidth)));
+  parts.push(textToBytes("  Subtotal: Rp 25.000\n"));
+  parts.push(textToBytes("  Pajak PB1 (10%): Rp 2.500\n"));
+  parts.push(textToBytes(formatDivider("-", lineWidth)));
+  parts.push(setBold(true));
+  parts.push(textToBytes(formatRow("TOTAL UJI:", "Rp 27.500", lineWidth)));
+  parts.push(setBold(false));
+  parts.push(textToBytes(formatDivider("=", lineWidth)));
+
+  // Footer status
+  parts.push(alignCenter());
+  parts.push(setBold(true));
+  parts.push(textToBytes("STATUS: HARDWARE SIAP DIGUNAKAN\n"));
+  parts.push(setBold(false));
+  parts.push(textToBytes(`Waktu: ${new Date().toLocaleDateString("id-ID")} ${new Date().toLocaleTimeString("id-ID")}\n`));
+  parts.push(textToBytes("Powered by DOI TA POS\n"));
+
+  parts.push(feedLines(4));
+  parts.push(cutPaper(true));
+
+  return concatBytes(...parts);
+}
+

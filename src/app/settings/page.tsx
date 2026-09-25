@@ -20,6 +20,15 @@ import { AttendanceLogsTable } from "@/components/attendance/AttendanceLogsTable
 import type { StoreSettingDto, StaffUserDto, SessionUser, Role, CustomerDto } from "@/lib/types";
 import { formatIDR, formatDateID, formatTime } from "@/lib/format";
 import { ROLE_LABEL, ROLE_ACCENT } from "@/lib/nav";
+import {
+  printTestCalibration,
+  getSavedPrintStrategy,
+  setSavedPrintStrategy,
+  type PrintStrategy,
+  isAndroidDevice,
+  isWebBluetoothSupported,
+} from "@/lib/printer";
+
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -45,6 +54,9 @@ export default function SettingsPage() {
   // Printer Configuration State
   const [printerPaperSize, setPrinterPaperSize] = useState<"58mm" | "80mm">("58mm");
   const [autoPrintReceipt, setAutoPrintReceipt] = useState<boolean>(true);
+  const [printerStrategy, setPrinterStrategy] = useState<PrintStrategy>("auto");
+  const [testingPrint, setTestingPrint] = useState<boolean>(false);
+
 
   // Mini CRM Customers State
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
@@ -394,12 +406,27 @@ export default function SettingsPage() {
   };
 
   /* ------------------- TEST CALIBRATION PRINT ------------------- */
-  const handleTestCalibrationPrint = () => {
+  const handleTestCalibrationPrint = async (strategy?: PrintStrategy) => {
+    setTestingPrint(true);
     setShowCalibrationPrint(true);
-    setTimeout(() => {
+    try {
+      const res = await printTestCalibration(
+        {
+          cafeName,
+          address,
+          phone,
+          printerPaperSize,
+        },
+        strategy || printerStrategy
+      );
+      showToast(res.message || "Perintah uji cetak berhasil dikirim!", res.success ? "ok" : "warn");
+    } catch (err: any) {
+      console.error("[Settings] Test print error:", err);
       window.print();
-      setTimeout(() => setShowCalibrationPrint(false), 1000);
-    }, 250);
+    } finally {
+      setTimeout(() => setShowCalibrationPrint(false), 1200);
+      setTestingPrint(false);
+    }
   };
 
   /* ------------------- RESET DATABASE SELEKTIF ------------------- */
@@ -1022,23 +1049,146 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
+                    {/* Metode Jalur Koneksi Printer (Hardware Bridge) */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-faint mb-2">
+                        Metode Jalur Printer (Hardware Bridge)
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        {/* Auto */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrinterStrategy("auto");
+                            setSavedPrintStrategy("auto");
+                          }}
+                          className={`btn-press p-3 rounded-2xl border text-left transition-all ${
+                            printerStrategy === "auto"
+                              ? "border-brand bg-brand/10 ring-1 ring-brand text-cream"
+                              : "border-line bg-coal text-sand hover:border-line-2"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs">Otomatis (Hybrid)</span>
+                            {printerStrategy === "auto" && <Check className="size-3 text-brand" />}
+                          </div>
+                          <p className="text-[10px] text-faint leading-tight">
+                            Bluetooth BLE &gt; RawBT Intent &gt; Browser. Rekomendasi paling fleksibel.
+                          </p>
+                        </button>
+
+                        {/* Web Bluetooth */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrinterStrategy("bluetooth");
+                            setSavedPrintStrategy("bluetooth");
+                          }}
+                          className={`btn-press p-3 rounded-2xl border text-left transition-all ${
+                            printerStrategy === "bluetooth"
+                              ? "border-brand bg-brand/10 ring-1 ring-brand text-cream"
+                              : "border-line bg-coal text-sand hover:border-line-2"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs">Web Bluetooth (BLE)</span>
+                            {printerStrategy === "bluetooth" && <Check className="size-3 text-brand" />}
+                          </div>
+                          <p className="text-[10px] text-faint leading-tight">
+                            Koneksi BLE GATT langsung ke printer thermal portabel.
+                          </p>
+                        </button>
+
+                        {/* RawBT Bridge */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrinterStrategy("rawbt");
+                            setSavedPrintStrategy("rawbt");
+                          }}
+                          className={`btn-press p-3 rounded-2xl border text-left transition-all ${
+                            printerStrategy === "rawbt"
+                              ? "border-brand bg-brand/10 ring-1 ring-brand text-cream"
+                              : "border-line bg-coal text-sand hover:border-line-2"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs">RawBT (Android TWA)</span>
+                            {printerStrategy === "rawbt" && <Check className="size-3 text-brand" />}
+                          </div>
+                          <p className="text-[10px] text-faint leading-tight">
+                            Intent URL ke RawBT bridge. Sangat stabil untuk Android POS.
+                          </p>
+                        </button>
+
+                        {/* Browser Spooler */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrinterStrategy("browser");
+                            setSavedPrintStrategy("browser");
+                          }}
+                          className={`btn-press p-3 rounded-2xl border text-left transition-all ${
+                            printerStrategy === "browser"
+                              ? "border-brand bg-brand/10 ring-1 ring-brand text-cream"
+                              : "border-line bg-coal text-sand hover:border-line-2"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs">Sistem Browser</span>
+                            {printerStrategy === "browser" && <Check className="size-3 text-brand" />}
+                          </div>
+                          <p className="text-[10px] text-faint leading-tight">
+                            Menggunakan dialog cetak bawaan OS (window.print / PDF spooler).
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Uji Cetak Printer Kalibrasi */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 p-3 rounded-2xl border border-line bg-coal/70">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 p-3.5 rounded-2xl border border-line bg-coal/70">
                       <div>
                         <p className="text-xs font-bold text-cream">Uji Presisi Hasil Cetak Fisik</p>
                         <p className="text-[11px] text-faint mt-0.5">
                           Cetak struk dummy kalibrasi untuk mengecek presisi batas tepi (margin ruler) dan ketajaman teks fisik.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleTestCalibrationPrint}
-                        className="btn-press inline-flex items-center justify-center gap-2 rounded-xl border border-brand/50 bg-brand/15 px-4 py-2.5 text-xs font-bold text-brand hover:bg-brand/25 transition shrink-0"
-                        title="Uji Cetak Printer Thermal"
-                      >
-                        <Printer className="size-4" />
-                        <span>Uji Cetak Printer ({printerPaperSize})</span>
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          disabled={testingPrint}
+                          onClick={() => handleTestCalibrationPrint()}
+                          className="btn-press inline-flex items-center justify-center gap-2 rounded-xl border border-brand/50 bg-brand/15 px-4 py-2.5 text-xs font-bold text-brand hover:bg-brand/25 transition shrink-0 disabled:opacity-50"
+                          title="Uji Cetak Printer Thermal sesuai metode terpilih"
+                        >
+                          {testingPrint ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Printer className="size-4" />
+                          )}
+                          <span>Uji Cetak ({printerPaperSize})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={testingPrint}
+                          onClick={() => handleTestCalibrationPrint("rawbt")}
+                          className="btn-press inline-flex items-center justify-center gap-1.5 rounded-xl border border-line-2 bg-coal px-3 py-2.5 text-[11px] font-bold text-sand hover:text-cream transition shrink-0"
+                          title="Uji khusus via Intent RawBT (Android)"
+                        >
+                          <span>RawBT</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={testingPrint}
+                          onClick={() => handleTestCalibrationPrint("bluetooth")}
+                          className="btn-press inline-flex items-center justify-center gap-1.5 rounded-xl border border-line-2 bg-coal px-3 py-2.5 text-[11px] font-bold text-sand hover:text-cream transition shrink-0"
+                          title="Uji khusus via Web Bluetooth (BLE)"
+                        >
+                          <span>Bluetooth</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 

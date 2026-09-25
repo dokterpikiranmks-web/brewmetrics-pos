@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.doitapos.app",
+      "sha256_cert_fingerprints": [
+        "71:77:E1:82:B4:BA:52:68:C7:FA:DF:35:73:BA:EF:AF:12:EC:56:35:FA:66:2E:FD:90:B0:78:79:D5:48:64:87"
+      ]
+    }
+  }
+]

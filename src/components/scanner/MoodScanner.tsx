@@ -110,18 +110,35 @@ export default function MoodScanner({
     const startTime = Date.now();
 
     try {
-      const res = await fetch("/api/analyze-mood", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ image: imageBase64 }),
-      });
+      let data: any = null;
+      let lastFetchErr: any = null;
 
-      const data = await res.json();
+      // Coba fetch hingga 2 kali jika terjadi transient network drop di Android TWA
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const res = await fetch("/api/analyze-mood", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ image: imageBase64 }),
+          });
 
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal memproses analisa ekspresi wajah dengan AI.");
+          data = await res.json();
+          if (res.ok && data?.mood_tag) {
+            break;
+          }
+          throw new Error(data?.error || "Gagal memproses analisa ekspresi wajah dengan AI.");
+        } catch (fetchErr: any) {
+          lastFetchErr = fetchErr;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        }
+      }
+
+      if (!data || !data.mood_tag) {
+        throw lastFetchErr || new Error("Gagal terhubung ke layanan AI Mood Scanner.");
       }
 
       // Pastikan efek theatrical loading berjalan minimal 2.2 detik agar terasa holistik
@@ -145,7 +162,7 @@ export default function MoodScanner({
       }
     } catch (err: any) {
       console.error("AI Mood Scanner Error:", err);
-      setErrorMsg(err.message || "Gagal menganalisa ekspresi wajah. Periksa koneksi atau GEMINI_API_KEY.");
+      setErrorMsg(err.message || "Gagal menganalisa ekspresi wajah. Periksa koneksi internet.");
       setScannerState("idle");
     }
   };
