@@ -298,7 +298,7 @@ export function orderReceiptToPrintData(
  */
 export async function printOrderReceipt(
   receipt: OrderReceipt,
-  storeSettings?: StoreSettingDto | null,
+  storeSettings?: Partial<StoreSettingDto> | null,
   moodTag?: string | null,
   strategy?: PrintStrategy
 ): Promise<PrintResult> {
@@ -306,11 +306,11 @@ export async function printOrderReceipt(
   const storeData: StoreDataForPrint = {
     cafeName: storeSettings?.cafeName,
     brandName: receipt.outletBrandName || storeSettings?.brandName,
-    receiptHeader: receipt.outletReceiptHeader || storeSettings?.receiptHeader,
+    receiptHeader: receipt.outletReceiptHeader || (storeSettings as any)?.receiptHeader,
     receiptFooter:
       receipt.outletReceiptFooter ||
       storeSettings?.receiptFooterMessage ||
-      storeSettings?.receiptFooter,
+      (storeSettings as any)?.receiptFooter,
     address: storeSettings?.address,
     phone: storeSettings?.phone,
     printerPaperSize: storeSettings?.printerPaperSize || "58mm",
@@ -324,7 +324,7 @@ export async function printOrderReceipt(
  * Eksekusi uji kalibrasi printer thermal
  */
 export async function printTestCalibration(
-  storeSettings?: StoreSettingDto | null,
+  storeSettings?: Partial<StoreSettingDto> | null,
   strategy?: PrintStrategy
 ): Promise<PrintResult> {
   const storeData: StoreDataForPrint = {
