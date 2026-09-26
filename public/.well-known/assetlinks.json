@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.doitapos.app",
       "sha256_cert_fingerprints": [
-        "71:77:E1:82:B4:BA:52:68:C7:FA:DF:35:73:BA:EF:AF:12:EC:56:35:FA:66:2E:FD:90:B0:78:79:D5:48:64:87"
+        "71:77:E1:82:B4:BA:52:68:C7:FA:DF:35:73:BA:EF:AF:12:EC:56:35:FA:66:2E:FD:90:B0:78:79:D5:48:64:87",
+        "31:5C:3B:CF:CE:69:A8:B1:87:5F:49:0B:ED:BE:05:92:71:49:6C:10:25:58:42:6B:B2:EF:2D:CF:63:BC:DB:70"
       ]
     }
   }
