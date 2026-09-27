@@ -52,8 +52,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // Filter produk berdasarkan outletId secara ketat
-    const productWhere = targetOutletId !== null ? eq(products.outletId, targetOutletId) : undefined;
+    // Filter produk: tampilkan produk khusus cabang target, ATAU katalog master pusat (outletId = 1 / NULL)
+    const productWhere = targetOutletId !== null
+      ? or(eq(products.outletId, targetOutletId), eq(products.outletId, 1), isNull(products.outletId))
+      : undefined;
 
     const [allProducts, allVariants, allRecipes, allIngredients, allCategories, allBundleItems] =
       await Promise.all([

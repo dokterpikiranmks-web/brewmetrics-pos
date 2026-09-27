@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { categories } from "@/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 
@@ -44,7 +44,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const whereClause = targetOutletId !== null ? eq(categories.outletId, targetOutletId) : undefined;
+    const whereClause = targetOutletId !== null
+      ? or(eq(categories.outletId, targetOutletId), eq(categories.outletId, 1), isNull(categories.outletId))
+      : undefined;
 
     const list = await db
       .select()
