@@ -30,17 +30,36 @@ export async function GET(req: Request) {
     }
   }
 
-  const whereConditions = [sql`${orders.createdAt} >= date_trunc('day', now())`];
+  const scope = url.searchParams.get("scope") || url.searchParams.get("all");
+  const whereConditions: any[] = [];
+  if (scope !== "all" && scope !== "true") {
+    whereConditions.push(sql`${orders.createdAt} >= date_trunc('day', now())`);
+  }
   if (targetOutletId !== null) {
     whereConditions.push(eq(orders.outletId, targetOutletId));
   }
 
-  const rows = await db
+  let rows = await db
     .select()
     .from(orders)
-    .where(and(...whereConditions))
+    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
     .orderBy(desc(orders.createdAt))
     .limit(60);
+
+  // Fallback: jika belum ada pesanan hari ini dan scope bukan 'today_only',
+  // tampilkan riwayat pesanan terbaru dari cabang ini agar kasir tetap dapat melihat data & cetak ulang
+  if (rows.length === 0 && scope !== "today_only") {
+    const fallbackConditions: any[] = [];
+    if (targetOutletId !== null) {
+      fallbackConditions.push(eq(orders.outletId, targetOutletId));
+    }
+    rows = await db
+      .select()
+      .from(orders)
+      .where(fallbackConditions.length > 0 ? and(...fallbackConditions) : undefined)
+      .orderBy(desc(orders.createdAt))
+      .limit(30);
+  }
 
   const dto: (TodayOrderDto & { outletId?: number | null })[] = rows.map((o) => ({
     id: o.id,

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { categories, modifiers, products, variants } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import type { CatalogDto } from "@/lib/types";
@@ -30,9 +30,14 @@ export async function GET(req: Request) {
     }
   }
 
-  const catWhere = targetOutletId !== null ? eq(categories.outletId, targetOutletId) : undefined;
+  const catWhere = targetOutletId !== null
+    ? or(eq(categories.outletId, targetOutletId), eq(categories.outletId, 1), isNull(categories.outletId))
+    : undefined;
   const prodWhere = targetOutletId !== null
-    ? and(eq(products.isActive, true), eq(products.outletId, targetOutletId))
+    ? and(
+        eq(products.isActive, true),
+        or(eq(products.outletId, targetOutletId), eq(products.outletId, 1), isNull(products.outletId))
+      )
     : eq(products.isActive, true);
 
   const [cats, prods, vars, mods] = await Promise.all([
