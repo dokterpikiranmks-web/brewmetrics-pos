@@ -707,7 +707,7 @@ export default function PaymentModal({
 
                 <p className="text-xs text-faint mt-1">
                   {completedOrder && formatTime(completedOrder.createdAt)} • Kasir{" "}
-                  {completedOrder?.cashierName.split(" ")[0]} •{" "}
+                  {(completedOrder?.cashierName || "Kasir").split(" ")[0]} •{" "}
                   <span className="uppercase font-bold text-sand">
                     {completedOrder?.paymentMethod === "split"
                       ? "Split Pembayaran"

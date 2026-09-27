@@ -221,7 +221,7 @@ export default function AppShell({
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-panel border border-line text-xs">
               <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
               <span className="font-semibold text-cream truncate max-w-[80px]">
-                {user.name.split(" ")[0]}
+                {(user.name || "User").split(" ")[0]}
               </span>
               <span className="text-line-2">|</span>
               <LiveClock mobile />

@@ -86,10 +86,10 @@ export default function OrderHistoryModal({
     const q = searchQuery.toLowerCase().trim();
     return orders.filter(
       (o) =>
-        o.orderNumber.toLowerCase().includes(q) ||
+        (o.orderNumber || "").toLowerCase().includes(q) ||
         (o.customerName && o.customerName.toLowerCase().includes(q)) ||
         (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
-        o.cashierName.toLowerCase().includes(q)
+        (o.cashierName && o.cashierName.toLowerCase().includes(q))
     );
   }, [orders, searchQuery]);
 

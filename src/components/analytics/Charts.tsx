@@ -40,6 +40,13 @@ function ChartTooltip({
 
 /* ------------------------------ REVENUE 30 HARI ----------------------------- */
 export function RevenueChart({ data }: { data: AnalyticsSummary["daily"] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-[230px] sm:h-[270px] md:h-[300px] grid place-items-center text-faint text-xs">
+        Belum ada data pendapatan 30 hari.
+      </div>
+    );
+  }
   return (
     <div className="w-full min-w-0 h-[230px] sm:h-[270px] md:h-[300px] overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
@@ -89,6 +96,13 @@ export function RevenueChart({ data }: { data: AnalyticsSummary["daily"] }) {
 
 /* ------------------------------- HOURLY CHART ------------------------------ */
 export function HourlyChart({ data }: { data: AnalyticsSummary["hourly"] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-[180px] sm:h-[210px] grid place-items-center text-faint text-xs">
+        Belum ada data traffic hari ini.
+      </div>
+    );
+  }
   const max = Math.max(...data.map((d) => d.hour), 0);
   const nowH = new Date().getHours();
   return (
@@ -127,6 +141,13 @@ export function HourlyChart({ data }: { data: AnalyticsSummary["hourly"] }) {
 
 /* ------------------------------- TOP PRODUCTS ------------------------------ */
 export function TopProducts({ data }: { data: AnalyticsSummary["topProducts"] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="py-12 text-center text-faint text-xs">
+        Belum ada menu terjual dalam 14 hari terakhir.
+      </div>
+    );
+  }
   const max = Math.max(...data.map((d) => d.qty), 1);
   return (
     <div className="space-y-3">
@@ -156,11 +177,18 @@ export function TopProducts({ data }: { data: AnalyticsSummary["topProducts"] })
 }
 
 /* ------------------------------ PAYMENT DONUT ------------------------------ */
-const PAY_COLORS: Record<string, string> = { cash: "#f59e0b", qris: "#38bdf8", debit: "#a78bfa" };
-const PAY_LABELS: Record<string, string> = { cash: "Tunai", qris: "QRIS", debit: "Debit" };
+const PAY_COLORS: Record<string, string> = { cash: "#f59e0b", qris: "#38bdf8", debit: "#a78bfa", transfer: "#10b981", split: "#ec4899" };
+const PAY_LABELS: Record<string, string> = { cash: "Tunai", qris: "QRIS", debit: "Debit", transfer: "Transfer", split: "Split" };
 
 export function PaymentDonut({ data }: { data: AnalyticsSummary["paymentSplit"] }) {
-  const total = data.reduce((s, d) => s + d.value, 0);
+  const total = (data ?? []).reduce((s, d) => s + (d.value ?? 0), 0);
+  if (!data || data.length === 0 || total === 0) {
+    return (
+      <div className="py-12 text-center text-faint text-xs">
+        Belum ada transaksi pembayaran dalam 30 hari terakhir.
+      </div>
+    );
+  }
   const shaped = data.map((d) => ({ ...d, label: PAY_LABELS[d.method] ?? d.method }));
   return (
     <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 w-full min-w-0">
@@ -193,7 +221,7 @@ export function PaymentDonut({ data }: { data: AnalyticsSummary["paymentSplit"] 
       <div className="space-y-2 sm:space-y-2.5 flex-1 w-full">
         {shaped.map((d) => (
           <div key={d.method} className="flex items-center gap-2.5">
-            <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: PAY_COLORS[d.method] }} />
+            <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: PAY_COLORS[d.method] || "#f59e0b" }} />
             <span className="text-xs text-sand flex-1">{d.label}</span>
             <span className="text-xs font-bold tabular text-cream">
               {total > 0 ? Math.round((d.value / total) * 100) : 0}%

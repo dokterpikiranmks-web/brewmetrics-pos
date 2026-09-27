@@ -54,7 +54,9 @@ export async function GET(req: Request) {
   const outletCashFilter = outletId
     ? sql`WHERE outlet_id = ${outletId} AND created_at >= date_trunc('day', now())`
     : sql`WHERE created_at >= date_trunc('day', now())`;
-  const outletProductFilter = outletId ? sql`AND p.outlet_id = ${outletId}` : sql``;
+  const outletProductFilter = outletId
+    ? sql`AND (p.outlet_id = ${outletId} OR p.outlet_id = 1 OR p.outlet_id IS NULL)`
+    : sql``;
 
   const todayRows = await query<{ revenue: number; orders: number; hpp: number; profit: number }>(sql`
     SELECT COALESCE(SUM(subtotal),0)::int AS revenue, COUNT(*)::int AS orders,
@@ -289,11 +291,11 @@ export async function GET(req: Request) {
       (o): TodayOrderDto => ({
         id: o.id,
         orderNumber: o.orderNumber,
-        cashierName: o.cashierName,
+        cashierName: o.cashierName || "Kasir",
         paymentMethod: o.paymentMethod,
-        total: o.subtotal,
-        itemCount: o.itemCount,
-        createdAt: o.createdAt.toISOString(),
+        total: o.total ?? o.subtotal,
+        itemCount: o.itemCount ?? 0,
+        createdAt: o.createdAt ? (o.createdAt instanceof Date ? o.createdAt.toISOString() : new Date(o.createdAt).toISOString()) : new Date().toISOString(),
         isOfflineSync: o.isOfflineSync,
       })
     ),
@@ -301,9 +303,9 @@ export async function GET(req: Request) {
       ? {
           id: shiftList[0].id,
           cashierId: shiftList[0].cashierId,
-          cashierName: shiftList[0].cashierName,
-          openedAt: shiftList[0].openedAt.toISOString(),
-          closedAt: shiftList[0].closedAt.toISOString(),
+          cashierName: shiftList[0].cashierName || "Kasir",
+          openedAt: shiftList[0].openedAt ? (shiftList[0].openedAt instanceof Date ? shiftList[0].openedAt.toISOString() : new Date(shiftList[0].openedAt).toISOString()) : new Date().toISOString(),
+          closedAt: shiftList[0].closedAt ? (shiftList[0].closedAt instanceof Date ? shiftList[0].closedAt.toISOString() : new Date(shiftList[0].closedAt).toISOString()) : new Date().toISOString(),
           expectedCash: shiftList[0].expectedCash,
           actualCash: shiftList[0].actualCash,
           variance: shiftList[0].variance,
@@ -311,16 +313,16 @@ export async function GET(req: Request) {
           cashOrders: shiftList[0].cashOrders,
           qrisTotal: shiftList[0].qrisTotal,
           debitTotal: shiftList[0].debitTotal,
-          note: shiftList[0].note,
-          createdAt: shiftList[0].createdAt.toISOString(),
+          note: shiftList[0].note || "",
+          createdAt: shiftList[0].createdAt ? (shiftList[0].createdAt instanceof Date ? shiftList[0].createdAt.toISOString() : new Date(shiftList[0].createdAt).toISOString()) : new Date().toISOString(),
         }
       : null,
     recentShifts: shiftList.map((s): ShiftReportDto => ({
       id: s.id,
       cashierId: s.cashierId,
-      cashierName: s.cashierName,
-      openedAt: s.openedAt.toISOString(),
-      closedAt: s.closedAt.toISOString(),
+      cashierName: s.cashierName || "Kasir",
+      openedAt: s.openedAt ? (s.openedAt instanceof Date ? s.openedAt.toISOString() : new Date(s.openedAt).toISOString()) : new Date().toISOString(),
+      closedAt: s.closedAt ? (s.closedAt instanceof Date ? s.closedAt.toISOString() : new Date(s.closedAt).toISOString()) : new Date().toISOString(),
       expectedCash: s.expectedCash,
       actualCash: s.actualCash,
       variance: s.variance,
@@ -328,8 +330,8 @@ export async function GET(req: Request) {
       cashOrders: s.cashOrders,
       qrisTotal: s.qrisTotal,
       debitTotal: s.debitTotal,
-      note: s.note,
-      createdAt: s.createdAt.toISOString(),
+      note: s.note || "",
+      createdAt: s.createdAt ? (s.createdAt instanceof Date ? s.createdAt.toISOString() : new Date(s.createdAt).toISOString()) : new Date().toISOString(),
     })),
     menuEngineering,
     generatedAt: new Date().toISOString(),

@@ -223,7 +223,7 @@ export async function GET(req: Request) {
       revenue: number;
     }
 
-    const rows = ((productRows as unknown as { rows: RawProductRow[] }).rows || []) as RawProductRow[];
+    const rows = (Array.isArray(productRows) ? productRows : ((productRows as unknown as { rows: RawProductRow[] })?.rows || [])) as RawProductRow[];
     const totalMenuRevenue = rows.reduce((acc, r) => acc + (Number(r.revenue) || 0), 0);
 
     const products: ProductSalesMetric[] = rows.map((r, index) => {

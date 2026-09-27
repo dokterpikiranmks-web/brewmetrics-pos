@@ -190,7 +190,7 @@ export async function GET(req: Request) {
       sumProfit += profit;
 
       return {
-        "Waktu Transaksi": formatDateDisplay(new Date(ord.createdAt)),
+        "Waktu Transaksi": formatDateDisplay(ord.createdAt ? new Date(ord.createdAt) : new Date()),
         "No Order": ord.orderNumber,
         "Kasir": ord.cashierName || "-",
         "Metode Bayar": formatPaymentMethod(ord.paymentMethod),

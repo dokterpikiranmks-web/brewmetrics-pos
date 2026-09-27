@@ -128,7 +128,7 @@ export default function OrdersDrawer({
                             )}
                           </div>
                           <p className="text-[11px] text-faint mt-0.5">
-                            {formatTime(o.createdAt)} • {o.cashierName.split(" ")[0]}
+                            {formatTime(o.createdAt)} • {(o.cashierName || "Kasir").split(" ")[0]}
                             {o.customerName && (
                               <span className="text-sand font-medium"> • {o.customerName}</span>
                             )}

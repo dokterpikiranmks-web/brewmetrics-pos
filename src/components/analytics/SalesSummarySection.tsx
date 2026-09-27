@@ -271,17 +271,17 @@ export default function SalesSummarySection({
               <p className="text-[11px] text-faint">
                 Periode Aktif:{" "}
                 <span className="text-sand font-semibold">
-                  {new Date(summary.startDate).toLocaleDateString("id-ID", {
+                  {summary.startDate ? new Date(summary.startDate).toLocaleDateString("id-ID", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
-                  })}
+                  }) : ""}
                   {" s/d "}
-                  {new Date(summary.endDate).toLocaleDateString("id-ID", {
+                  {summary.endDate ? new Date(summary.endDate).toLocaleDateString("id-ID", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
-                  })}
+                  }) : ""}
                 </span>
                 {period === "custom" && (
                   <span className="ml-2 px-1.5 py-0.5 rounded bg-brand/20 text-brand text-[10px] font-bold">
@@ -294,13 +294,13 @@ export default function SalesSummarySection({
               <div className="px-3.5 py-2 rounded-xl bg-coal/80 border border-line text-right">
                 <p className="text-[10px] text-faint uppercase font-bold">Total Transaksi</p>
                 <p className="font-display text-base font-bold text-cream tabular">
-                  {summary.totalOrders} Pesanan
+                  {summary.totalOrders ?? 0} Pesanan
                 </p>
               </div>
               <div className="px-3.5 py-2 rounded-xl bg-coal/80 border border-line text-right">
                 <p className="text-[10px] text-faint uppercase font-bold">Total Penerimaan Kanal</p>
                 <p className="font-display text-base font-bold text-emerald-400 tabular">
-                  {formatIDR(summary.channels.total)}
+                  {formatIDR(summary.channels?.total ?? 0)}
                 </p>
               </div>
             </div>
@@ -319,10 +319,10 @@ export default function SalesSummarySection({
               <p className="text-[11px] text-faint">
                 Total Masuk:{" "}
                 <span className="font-display font-bold text-cream tabular">
-                  {formatIDR(summary.channels.total)}
+                  {formatIDR(summary.channels?.total ?? 0)}
                 </span>{" "}
-                ({summary.totalOrders} Transaksi
-                {summary.channels.counts.split > 0
+                ({summary.totalOrders ?? 0} Transaksi
+                {summary.channels?.counts?.split && summary.channels.counts.split > 0
                   ? `, ${summary.channels.counts.split} Split`
                   : ""}
                 )
@@ -330,7 +330,7 @@ export default function SalesSummarySection({
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-              {summary.metrics.map((m) => (
+              {(summary.metrics ?? []).map((m) => (
                 <div
                   key={m.channel}
                   className={`rounded-2xl border p-3.5 sm:p-4 transition-all duration-200 flex flex-col justify-between ${channelBorder(
@@ -379,11 +379,11 @@ export default function SalesSummarySection({
                 </h4>
               </div>
               <span className="text-[11px] text-faint">
-                {summary.products.length} Menu Terjual
+                {summary.products?.length ?? 0} Menu Terjual
               </span>
             </div>
 
-            {summary.products.length === 0 ? (
+            {!summary.products || summary.products.length === 0 ? (
               <div className="text-center py-8 text-faint text-xs">
                 Belum ada transaksi menu pada periode ini.
               </div>
@@ -401,7 +401,7 @@ export default function SalesSummarySection({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line/40">
-                    {summary.products.map((prod) => {
+                    {(summary.products ?? []).map((prod) => {
                       const isTop1 = prod.rank === 1;
                       const isTop2 = prod.rank === 2;
                       const isTop3 = prod.rank === 3;

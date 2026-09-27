@@ -107,7 +107,7 @@ export default function MenuEngineeringMatrix({ data }: MenuEngineeringMatrixPro
   const [selectedQuadrant, setSelectedQuadrant] = useState<MenuQuadrant | "all">("all");
   const [search, setSearch] = useState("");
 
-  if (!data || data.items.length === 0) {
+  if (!data || !data.items || data.items.length === 0) {
     return (
       <div className="rounded-2xl border border-line bg-panel p-6 text-center text-faint">
         <Sparkles className="mx-auto size-8 text-brand/50 mb-2 animate-pulse-soft" />
@@ -119,7 +119,7 @@ export default function MenuEngineeringMatrix({ data }: MenuEngineeringMatrixPro
     );
   }
 
-  const { avgVolume, avgMargin, avgMarginPct, counts, items } = data;
+  const { avgVolume = 0, avgMargin = 0, avgMarginPct = 0, counts, items = [] } = data;
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -127,8 +127,8 @@ export default function MenuEngineeringMatrix({ data }: MenuEngineeringMatrixPro
         selectedQuadrant === "all" ? true : item.quadrant === selectedQuadrant;
       const matchSearch =
         !search.trim() ||
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.categoryName.toLowerCase().includes(search.toLowerCase());
+        (item.name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (item.categoryName || "").toLowerCase().includes(search.toLowerCase());
       return matchQuadrant && matchSearch;
     });
   }, [items, selectedQuadrant, search]);
@@ -309,7 +309,7 @@ export default function MenuEngineeringMatrix({ data }: MenuEngineeringMatrixPro
                     }`}
                   >
                     <span>{conf.badgeLabel}</span>
-                    <span className="text-[10px] opacity-75 font-mono">({counts[q]})</span>
+                    <span className="text-[10px] opacity-75 font-mono">({counts?.[q] ?? 0})</span>
                   </button>
                 );
               })}
@@ -354,7 +354,7 @@ function QuadrantBox({
   quadrant: MenuQuadrant;
   items: MenuEngineeringItem[];
 }) {
-  const conf = QUADRANT_CONFIG[quadrant];
+  const conf = QUADRANT_CONFIG[quadrant] || QUADRANT_CONFIG.dog;
   const Icon = conf.icon;
 
   return (
@@ -449,7 +449,7 @@ function QuadrantBox({
 /* -------------------------------- MENU ITEM CARD -------------------------------- */
 
 function MenuItemCard({ item }: { item: MenuEngineeringItem }) {
-  const conf = QUADRANT_CONFIG[item.quadrant];
+  const conf = QUADRANT_CONFIG[item.quadrant] || QUADRANT_CONFIG.dog;
   const Icon = conf.icon;
 
   return (

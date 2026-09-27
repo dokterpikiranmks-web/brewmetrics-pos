@@ -48,8 +48,8 @@ export default function AnalyticsPage() {
         fetch("/api/customers?sortBy=spend&limit=6").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (s) setSummary(s as AnalyticsSummary);
-      if (m) setMovements((m as { movements: CashMovementDto[] }).movements);
-      if (c) setTopCustomers(c.customers ?? []);
+      if (m) setMovements((m as { movements: CashMovementDto[] })?.movements ?? []);
+      if (c) setTopCustomers((c as { customers: CustomerDto[] })?.customers ?? []);
       setLastSync(new Date());
     } catch {
       /* diam saat offline */
@@ -63,11 +63,11 @@ export default function AnalyticsPage() {
   }, [load]);
 
   const waHref = useMemo(() => {
-    if (!summary || summary.forecast.length === 0) return null;
+    if (!summary?.forecast || summary.forecast.length === 0) return null;
     const lines = [
       "*DOI TA — Low-Stock AI Alert*", "",
       ...summary.forecast.slice(0, 6).map(
-        (f) => `• ${f.name}: sisa *${formatQty(f.stockQty, f.unit)}* ≈ *${f.daysLeft} hari* (pakai ${formatQty(f.dailyUsage, f.unit)}/hari)`
+        (f) => `• ${f.name}: sisa *${formatQty(f.stockQty, f.unit)}* ≈ *${f.daysLeft ?? "?"} hari* (pakai ${formatQty(f.dailyUsage, f.unit)}/hari)`
       ),
       "", "Prediksi berbasis tren penjualan 14 hari terakhir.",
     ];
@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
             <h1 className="font-display text-2xl lg:text-3xl font-bold tracking-tight">Analitik &amp; Arus Kas</h1>
             <p className="text-xs sm:text-sm text-sand mt-1">
               {summary
-                ? `Diperbarui ${lastSync ? formatTime(lastSync) : ""} — margin kotor hari ini ${summary.today.margin}%`
+                ? `Diperbarui ${lastSync ? formatTime(lastSync) : ""} — margin kotor hari ini ${summary.today?.margin ?? 0}%`
                 : "Memuat angka real-time…"}
             </p>
           </div>
@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
                 className="btn-press flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-[13px] font-bold text-emerald-300 hover:bg-emerald-400/20"
               >
                 <MessageCircleWarning className="size-4 shrink-0" />
-                <span className="whitespace-nowrap">WA Alert ({summary?.forecast.length})</span>
+                <span className="whitespace-nowrap">WA Alert ({summary?.forecast?.length ?? 0})</span>
               </a>
             )}
             <button
@@ -279,13 +279,13 @@ export default function AnalyticsPage() {
               <Kpi
                 icon={Wallet}
                 label="Pendapatan Hari Ini"
-                value={formatIDR(summary.today.revenue)}
+                value={formatIDR(summary.today?.revenue ?? 0)}
                 accent="text-brand"
                 badge={
-                  summary.today.vsYesterdayPct !== 0
+                  (summary.today?.vsYesterdayPct ?? 0) !== 0
                     ? {
-                        up: summary.today.vsYesterdayPct > 0,
-                        text: `${summary.today.vsYesterdayPct > 0 ? "+" : ""}${summary.today.vsYesterdayPct}% vs kemarin`,
+                        up: (summary.today?.vsYesterdayPct ?? 0) > 0,
+                        text: `${(summary.today?.vsYesterdayPct ?? 0) > 0 ? "+" : ""}${summary.today?.vsYesterdayPct ?? 0}% vs kemarin`,
                       }
                     : undefined
                 }
@@ -293,29 +293,29 @@ export default function AnalyticsPage() {
               <Kpi
                 icon={PiggyBank}
                 label="Profit Kotor (setelah HPP)"
-                value={formatIDR(summary.today.grossProfit)}
+                value={formatIDR(summary.today?.grossProfit ?? 0)}
                 accent="text-emerald-400"
-                sub={`Margin ${summary.today.margin}% • HPP ${formatIDR(summary.today.hpp, true)}`}
+                sub={`Margin ${summary.today?.margin ?? 0}% • HPP ${formatIDR(summary.today?.hpp ?? 0, true)}`}
               />
               <Kpi
                 icon={ReceiptText}
                 label="Transaksi"
-                value={String(summary.today.orders)}
+                value={String(summary.today?.orders ?? 0)}
                 accent="text-sky-300"
-                sub={`Rata-rata struk ${formatIDR(summary.today.avgTicket)}`}
+                sub={`Rata-rata struk ${formatIDR(summary.today?.avgTicket ?? 0)}`}
               />
               <Kpi
                 icon={BanknoteArrowDown}
                 label="Kas Masuk (non-penjualan)"
-                value={formatIDR(summary.today.cashIn)}
+                value={formatIDR(summary.today?.cashIn ?? 0)}
                 accent="text-emerald-300"
               />
               <Kpi
                 icon={BanknoteArrowUp}
                 label="Kas Keluar Operasional"
-                value={formatIDR(summary.today.cashOut)}
+                value={formatIDR(summary.today?.cashOut ?? 0)}
                 accent="text-red-300"
-                sub={`Kas bersih ${formatIDR(summary.today.netCash)}`}
+                sub={`Kas bersih ${formatIDR(summary.today?.netCash ?? 0)}`}
               />
             </div>
 
@@ -326,7 +326,7 @@ export default function AnalyticsPage() {
                 subtitle="Tren bisnis dengan growth engine resep"
                 className="xl:col-span-2"
               >
-                <RevenueChart data={summary.daily} />
+                <RevenueChart data={summary.daily ?? []} />
               </Card>
 
               <Card
@@ -334,11 +334,11 @@ export default function AnalyticsPage() {
                 subtitle="Prediksi habis berdasarkan velocity"
                 action={
                   <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2.5 py-1 text-[10px] font-bold text-red-300">
-                    {summary.forecast.filter((f) => f.severity === "critical").length} KRITIS
+                    {(summary.forecast ?? []).filter((f) => f.severity === "critical").length} KRITIS
                   </span>
                 }
               >
-                <ForecastList items={summary.forecast} />
+                <ForecastList items={summary.forecast ?? []} />
               </Card>
             </div>
 
@@ -351,38 +351,41 @@ export default function AnalyticsPage() {
             {/* ----------------------------- GRID ROW ---------------------------- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <Card title="Traffic Hari Ini" subtitle="Pendapatan per jam">
-                <HourlyChart data={summary.hourly} />
+                <HourlyChart data={summary.hourly ?? []} />
               </Card>
               <Card title="Menu Terlaris" subtitle="14 hari terakhir">
-                <TopProducts data={summary.topProducts} />
+                <TopProducts data={summary.topProducts ?? []} />
               </Card>
               <Card title="Metode Pembayaran" subtitle="Distribusi 30 hari">
-                <PaymentDonut data={summary.paymentSplit} />
+                <PaymentDonut data={summary.paymentSplit ?? []} />
                 <div className="mt-5 border-t border-line pt-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-faint font-bold mb-3">Kesehatan Stok</p>
                   <div className="flex items-center gap-2">
-                    <HealthPill count={summary.inventoryHealth.ok} cls="bg-emerald-400" label="aman" />
-                    <HealthPill count={summary.inventoryHealth.low} cls="bg-amber-400" label="menipis" />
-                    <HealthPill count={summary.inventoryHealth.out} cls="bg-red-400" label="habis" />
+                    <HealthPill count={summary.inventoryHealth?.ok ?? 0} cls="bg-emerald-400" label="aman" />
+                    <HealthPill count={summary.inventoryHealth?.low ?? 0} cls="bg-amber-400" label="menipis" />
+                    <HealthPill count={summary.inventoryHealth?.out ?? 0} cls="bg-red-400" label="habis" />
                   </div>
                   <p className="mt-3 text-[11px] text-faint">
-                    Nilai bahan di gudang: <span className="text-brand font-bold tabular">{formatIDR(summary.inventoryHealth.totalValue)}</span>
+                    Nilai bahan di gudang: <span className="text-brand font-bold tabular">{formatIDR(summary.inventoryHealth?.totalValue ?? 0)}</span>
                   </p>
                 </div>
               </Card>
               <Card title="Transaksi Terbaru" subtitle="Real-time dari kasir">
                 <div className="space-y-2 -mx-1">
-                  {summary.recentOrders.slice(0, 6).map((o) => (
+                  {(summary.recentOrders ?? []).slice(0, 6).map((o) => (
                     <div key={o.id} className="flex items-center gap-3 rounded-xl border border-line bg-coal px-3 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="text-[12px] font-bold font-display tabular truncate">{o.orderNumber}</p>
                         <p className="text-[10.5px] text-faint">
-                          {formatTime(o.createdAt)} • {o.itemCount} item • {o.cashierName.split(" ")[0]}
+                          {o.createdAt ? formatTime(o.createdAt) : ""} • {o.itemCount ?? 0} item • {(o.cashierName || "Kasir").split(" ")[0]}
                         </p>
                       </div>
-                      <p className="font-display text-[13px] font-bold tabular text-cream">{formatIDR(o.total)}</p>
+                      <p className="font-display text-[13px] font-bold tabular text-cream">{formatIDR(o.total ?? 0)}</p>
                     </div>
                   ))}
+                  {(!summary.recentOrders || summary.recentOrders.length === 0) && (
+                    <p className="text-sm text-faint py-6 text-center">Belum ada transaksi di cabang ini.</p>
+                  )}
                 </div>
               </Card>
             </div>
@@ -390,7 +393,7 @@ export default function AnalyticsPage() {
             {/* ---------------------------- CASH LEDGER ---------------------------- */}
             <Card title="Buku Kas Operasional" subtitle="Pemasukan & pengeluaran non-penjualan">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                {movements.slice(0, 9).map((m) => (
+                {(movements ?? []).slice(0, 9).map((m) => (
                   <div key={m.id} className="flex items-center gap-3 rounded-xl border border-line bg-coal px-3.5 py-3">
                     <div
                       className={`grid size-9 shrink-0 place-items-center rounded-lg border ${
@@ -402,17 +405,17 @@ export default function AnalyticsPage() {
                       {m.type === "in" ? <ArrowDownToLine className="size-4" /> : <ArrowUpFromLine className="size-4" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-semibold text-cream truncate">{m.note}</p>
+                      <p className="text-[12px] font-semibold text-cream truncate">{m.note || "-"}</p>
                       <p className="text-[10.5px] text-faint">
-                        {formatTime(m.createdAt)} • {new Date(m.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} • {m.userName.split(" ")[0]}
+                        {m.createdAt ? formatTime(m.createdAt) : ""} • {m.createdAt ? new Date(m.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" }) : ""} • {(m.userName || "Staff").split(" ")[0]}
                       </p>
                     </div>
                     <p className={`font-display text-[13px] font-bold tabular ${m.type === "in" ? "text-emerald-400" : "text-red-400"}`}>
-                      {m.type === "in" ? "+" : "−"}{formatIDR(m.amount)}
+                      {m.type === "in" ? "+" : "−"}{formatIDR(m.amount ?? 0)}
                     </p>
                   </div>
                 ))}
-                {movements.length === 0 && (
+                {(!movements || movements.length === 0) && (
                   <p className="text-sm text-faint py-6 md:col-span-2 xl:col-span-3 text-center">Belum ada catatan kas.</p>
                 )}
               </div>
@@ -433,8 +436,8 @@ export default function AnalyticsPage() {
               }
             >
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {topCustomers.map((cust, idx) => {
-                  const cleanPhone = cust.phone.replace(/[^0-9]/g, "");
+                {(topCustomers ?? []).map((cust, idx) => {
+                  const cleanPhone = (cust.phone || "").replace(/[^0-9]/g, "");
                   const waNumber = cleanPhone.startsWith("0")
                     ? "62" + cleanPhone.slice(1)
                     : cleanPhone.startsWith("62")
@@ -447,7 +450,7 @@ export default function AnalyticsPage() {
                     >
                       <div className="relative shrink-0">
                         <div className="grid size-10 place-items-center rounded-2xl border border-line-2 bg-panel font-display font-bold text-sand text-sm">
-                          {cust.name.charAt(0).toUpperCase()}
+                          {(cust.name || "?").charAt(0).toUpperCase()}
                         </div>
                         {idx < 3 && (
                           <span className="absolute -top-1.5 -left-1.5 text-xs">
@@ -457,13 +460,13 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-bold text-cream truncate">{cust.name}</p>
+                          <p className="text-[13px] font-bold text-cream truncate">{cust.name || "Pelanggan"}</p>
                           <span className="rounded-full bg-brand/10 text-brand text-[10px] font-bold px-1.5 py-0.5 border border-brand/20 shrink-0">
-                            {cust.totalOrders}x order
+                            {cust.totalOrders ?? 0}x order
                           </span>
                         </div>
                         <p className="text-[11px] text-faint flex items-center gap-1.5 mt-0.5">
-                          <span>{cust.phone}</span>
+                          <span>{cust.phone || "-"}</span>
                           {cleanPhone && (
                             <a
                               href={`https://wa.me/${waNumber}`}
@@ -479,14 +482,14 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-display text-[13.5px] font-bold tabular text-amber-400">
-                          {formatIDR(cust.totalSpend)}
+                          {formatIDR(cust.totalSpend ?? 0)}
                         </p>
                         <p className="text-[10px] text-faint">Total belanja</p>
                       </div>
                     </div>
                   );
                 })}
-                {topCustomers.length === 0 && (
+                {(!topCustomers || topCustomers.length === 0) && (
                   <p className="text-sm text-faint py-6 md:col-span-2 xl:col-span-3 text-center">
                     Belum ada data pelanggan setia tercatat. Masukkan No. HP pelanggan saat checkout di POS.
                   </p>
@@ -512,39 +515,39 @@ export default function AnalyticsPage() {
                       </div>
                       <span
                         className={`font-display font-bold px-2 py-0.5 rounded-md text-[11px] ${
-                          s.variance === 0
+                          (s.variance ?? 0) === 0
                             ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
-                            : s.variance < 0
+                            : (s.variance ?? 0) < 0
                               ? "bg-red-400/10 text-red-400 border border-red-400/30"
                               : "bg-amber-400/10 text-amber-400 border border-amber-400/30"
                         }`}
                       >
-                        {s.variance > 0 ? "+" : ""}
-                        {formatIDR(s.variance)}
+                        {(s.variance ?? 0) > 0 ? "+" : ""}
+                        {formatIDR(s.variance ?? 0)}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-[11.5px] border-y border-line/60 py-2">
                       <div>
                         <span className="text-faint block text-[10px]">Uang Fisik Kasir:</span>
-                        <span className="font-semibold tabular text-cream">{formatIDR(s.actualCash)}</span>
+                        <span className="font-semibold tabular text-cream">{formatIDR(s.actualCash ?? 0)}</span>
                       </div>
                       <div>
                         <span className="text-faint block text-[10px]">Sistem (Expected):</span>
-                        <span className="font-semibold tabular text-sand">{formatIDR(s.expectedCash)}</span>
+                        <span className="font-semibold tabular text-sand">{formatIDR(s.expectedCash ?? 0)}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-faint">
                       <span>
-                        Kasir: <strong className="text-cream">{s.cashierName}</strong>
+                        Kasir: <strong className="text-cream">{s.cashierName || "Kasir"}</strong>
                       </span>
                       <span>
-                        {new Date(s.closedAt).toLocaleDateString("id-ID", {
+                        {s.closedAt ? new Date(s.closedAt).toLocaleDateString("id-ID", {
                           day: "numeric",
                           month: "short",
-                        })}{" "}
-                        {formatTime(s.closedAt)}
+                        }) : ""}{" "}
+                        {s.closedAt ? formatTime(s.closedAt) : ""}
                       </span>
                     </div>
                   </div>
