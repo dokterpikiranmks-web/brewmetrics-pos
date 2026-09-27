@@ -28,7 +28,15 @@ import {
 import type { TodayOrderDto, OrderReceipt, StoreSettingDto } from "@/lib/types";
 import { formatIDR, formatTime, formatDateID } from "@/lib/format";
 import ReceiptPrint from "./ReceiptPrint";
-import { printOrderReceipt, type PrintStrategy } from "@/lib/printer";
+import {
+  printOrderReceipt,
+  printToRawBT,
+  printStandard,
+  formatReceiptText,
+  orderReceiptToPrintData,
+  type PrintStrategy,
+  isAndroidDevice,
+} from "@/lib/printer";
 
 
 interface OrderHistoryModalProps {
@@ -145,11 +153,37 @@ export default function OrderHistoryModal({
       if (!data.receipt) throw new Error("Data struk tidak ditemukan.");
 
       setReprintReceipt(data.receipt);
+
+      if (strategy === "browser") {
+        printStandard();
+        return;
+      }
+
+      const isAndroid = isAndroidDevice();
+      if (strategy === "rawbt" || (strategy !== "bluetooth" && isAndroid)) {
+        const printData = orderReceiptToPrintData(data.receipt);
+        const storeData = {
+          cafeName: storeSettings?.cafeName,
+          brandName: data.receipt.outletBrandName || storeSettings?.brandName,
+          receiptHeader: data.receipt.outletReceiptHeader || (storeSettings as any)?.receiptHeader,
+          receiptFooter:
+            data.receipt.outletReceiptFooter ||
+            storeSettings?.receiptFooterMessage ||
+            (storeSettings as any)?.receiptFooter,
+          address: storeSettings?.address,
+          phone: storeSettings?.phone,
+          printerPaperSize: storeSettings?.printerPaperSize || "58mm",
+        };
+        const receiptString = formatReceiptText(printData, storeData);
+        printToRawBT(receiptString);
+        return;
+      }
+
       await printOrderReceipt(data.receipt, storeSettings, undefined, strategy || "auto");
     } catch (err: any) {
       console.error("[POS] Gagal mencetak ulang struk:", err);
-      // Fallback ke window.print()
-      window.print();
+      // Fallback ke printStandard()
+      printStandard();
     } finally {
       setReprintingId(null);
     }

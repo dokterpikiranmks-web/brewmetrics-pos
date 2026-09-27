@@ -25,7 +25,15 @@ import {
 import type { OrderReceipt, StoreSettingDto, PaymentBreakdownItem } from "@/lib/types";
 import { formatIDR, formatTime } from "@/lib/format";
 import ReceiptPrint from "./ReceiptPrint";
-import { printOrderReceipt, type PrintStrategy, isAndroidDevice } from "@/lib/printer";
+import {
+  printOrderReceipt,
+  printToRawBT,
+  printStandard,
+  formatReceiptText,
+  orderReceiptToPrintData,
+  type PrintStrategy,
+  isAndroidDevice,
+} from "@/lib/printer";
 
 
 export type Method = "cash" | "qris" | "debit" | "transfer" | "split";
@@ -105,15 +113,49 @@ export default function PaymentModal({
   const [isPrinting, setIsPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<string | null>(null);
 
-  // Fungsi Eksekusi Cetak Terpadu (BLE -> RawBT Intent -> Browser)
+  // Event handler tombol pencetakan kasir
+  // Menggunakan skema URI RawBT (rawbt:) untuk Text/ESC-POS di Android, atau printStandard (window.print) untuk Dokumen/HTML
   const handlePrint = async (strategy?: PrintStrategy) => {
     if (!completedOrder) {
-      window.print();
+      printStandard();
       return;
     }
     setIsPrinting(true);
     setPrintStatus("Mempersiapkan cetak struk...");
     try {
+      // 1. Jika mode peramban bawaan / Dokumen/HTML diminta:
+      if (strategy === "browser") {
+        printStandard();
+        setPrintStatus("Dialog cetak standar dibuka.");
+        setTimeout(() => setPrintStatus(null), 3000);
+        return;
+      }
+
+      // 2. Jika di Android (misal APK DOI TA POS pada Samsung Tab) atau strategi "rawbt":
+      // Langsung lemparkan receiptString teks ke skema URI RawBT (rawbt:<encodedReceipt>)
+      const isAndroid = isAndroidDevice();
+      if (strategy === "rawbt" || (strategy !== "bluetooth" && isAndroid)) {
+        const printData = orderReceiptToPrintData(completedOrder, moodTag);
+        const storeData = {
+          cafeName: storeSettings?.cafeName,
+          brandName: completedOrder.outletBrandName || storeSettings?.brandName,
+          receiptHeader: completedOrder.outletReceiptHeader || (storeSettings as any)?.receiptHeader,
+          receiptFooter:
+            completedOrder.outletReceiptFooter ||
+            storeSettings?.receiptFooterMessage ||
+            (storeSettings as any)?.receiptFooter,
+          address: storeSettings?.address,
+          phone: storeSettings?.phone,
+          printerPaperSize: storeSettings?.printerPaperSize || "58mm",
+        };
+        const receiptString = formatReceiptText(printData, storeData);
+        printToRawBT(receiptString);
+        setPrintStatus("Struk dikirim ke RawBT...");
+        setTimeout(() => setPrintStatus(null), 3500);
+        return;
+      }
+
+      // 3. Fallback Bluetooth atau Desktop:
       const res = await printOrderReceipt(completedOrder, storeSettings, moodTag, strategy || "auto");
       if (res.message) {
         setPrintStatus(res.message);
@@ -121,8 +163,8 @@ export default function PaymentModal({
       }
     } catch (err: any) {
       console.error("[POS] Gagal mengeksekusi cetak struk:", err);
-      // Fallback aman ke browser print
-      window.print();
+      // Fallback aman: jika sistem merender struk sebagai Dokumen/HTML, alihkan ke printStandard()
+      printStandard();
     } finally {
       setIsPrinting(false);
     }
@@ -868,7 +910,7 @@ export default function PaymentModal({
                       disabled={isPrinting}
                       onClick={() => handlePrint("auto")}
                       className="btn-press flex items-center justify-center gap-2 rounded-2xl border border-line-2 bg-coal py-3.5 px-4 font-display text-sm font-bold text-sand hover:text-cream hover:border-brand/40 shadow-sm disabled:opacity-50"
-                      title="Cetak struk ke printer thermal (Otomatis: BLE / RawBT)"
+                      title="Cetak struk ke printer thermal via RawBT URI"
                     >
                       {isPrinting ? (
                         <Loader2 className="size-4.5 animate-spin text-brand" />
@@ -883,18 +925,9 @@ export default function PaymentModal({
                       <span>Jalur:</span>
                       <button
                         type="button"
-                        onClick={() => handlePrint("bluetooth")}
-                        className="hover:text-brand underline"
-                        title="Paksa cetak via Web Bluetooth BLE"
-                      >
-                        Bluetooth
-                      </button>
-                      <span>•</span>
-                      <button
-                        type="button"
                         onClick={() => handlePrint("rawbt")}
                         className="hover:text-brand underline"
-                        title="Paksa kirim intent ke aplikasi RawBT"
+                        title="Langsung lempar ke aplikasi RawBT (URI rawbt:)"
                       >
                         RawBT (Android)
                       </button>
@@ -903,9 +936,18 @@ export default function PaymentModal({
                         type="button"
                         onClick={() => handlePrint("browser")}
                         className="hover:text-brand underline"
-                        title="Buka dialog cetak sistem"
+                        title="Buka dialog cetak Dokumen/HTML (RawBT Print Service)"
                       >
-                        Sistem
+                        Dokumen/HTML
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => handlePrint("bluetooth")}
+                        className="hover:text-brand underline"
+                        title="Paksa cetak via Web Bluetooth BLE"
+                      >
+                        Bluetooth
                       </button>
                     </div>
                   </div>

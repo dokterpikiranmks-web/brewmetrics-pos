@@ -8,12 +8,16 @@
 
 import {
   formatReceipt,
+  formatReceiptText,
   formatCalibrationReceipt,
+  formatCalibrationReceiptText,
   type OrderDataForPrint,
   type StoreDataForPrint,
 } from "./escpos";
 import { printReceiptBluetooth } from "./bluetooth";
 import type { OrderReceipt, StoreSettingDto } from "./types";
+
+export { formatReceiptText, formatCalibrationReceiptText };
 
 export type PrintStrategy = "auto" | "bluetooth" | "rawbt" | "browser";
 
@@ -59,7 +63,7 @@ export function isWebBluetoothSupported(): boolean {
  * Ambil preferensi strategi cetak dari localStorage kasir
  */
 export function getSavedPrintStrategy(): PrintStrategy {
-  if (typeof window === "undefined") return "auto";
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return "auto";
   const saved = localStorage.getItem("doita_printer_strategy") as PrintStrategy;
   if (saved && ["auto", "bluetooth", "rawbt", "browser"].includes(saved)) {
     return saved;
@@ -71,54 +75,58 @@ export function getSavedPrintStrategy(): PrintStrategy {
  * Simpan preferensi strategi cetak ke localStorage kasir
  */
 export function setSavedPrintStrategy(strategy: PrintStrategy): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return;
   localStorage.setItem("doita_printer_strategy", strategy);
 }
 
 /**
- * Pengiriman data ESC/POS via skema Android Intent ke aplikasi RawBT
- * Mendukung TWA Android sandbox tanpa memerlukan permission hardware native.
+ * Skema URI RawBT untuk sistem cetak berbasis Teks (ESC/POS).
+ * Langsung melempar data struk kasir yang sudah diformat dengan baris baru (\n)
+ * ke aplikasi RawBT di Android / Samsung Tab tanpa dialog print browser.
  */
-export function printViaRawBT(receiptBytes: Uint8Array): { success: boolean; error?: string } {
+export const printToRawBT = (receiptString: string): { success: boolean; error?: string } => {
   try {
-    const base64Data = uint8ArrayToBase64(receiptBytes);
+    if (typeof window === "undefined") {
+      return { success: false, error: "Objek window peramban tidak tersedia." };
+    }
+    // receiptString berisi teks struk kasir yang sudah diformat dengan baris baru (\n)
+    const encodedReceipt = encodeURIComponent(receiptString);
+    window.location.href = "rawbt:" + encodedReceipt;
+    return { success: true };
+  } catch (err: any) {
+    console.error("[Printer] Gagal mengirim ke skema URI RawBT:", err);
+    return { success: false, error: err?.message || "Gagal memanggil RawBT" };
+  }
+};
 
-    // 1. Skema Android Intent standar untuk package ru.a402d.rawbtprinter
-    const intentUrl = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
+/**
+ * Fungsi cetak peramban bawaan jika sistem merender struk sebagai Dokumen/HTML.
+ * Karena RawBT Print Service telah diaktifkan di Android, ini akan otomatis memanggil aplikasi RawBT.
+ */
+export const printStandard = (): { success: boolean } => {
+  if (typeof window !== "undefined" && typeof window.print === "function") {
+    window.print();
+    return { success: true };
+  }
+  return { success: false };
+};
 
-    if (typeof document !== "undefined") {
-      // Trigger via anchor click agar tidak diblokir oleh popup/navigation blockers
-      const a = document.createElement("a");
-      a.href = intentUrl;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        try {
-          document.body.removeChild(a);
-        } catch (_) {}
-      }, 500);
-
-      return { success: true };
-    } else if (typeof window !== "undefined") {
-      window.location.href = intentUrl;
+/**
+ * Pengiriman data ESC/POS via skema RawBT URI (mendukung string teks maupun byte array).
+ */
+export function printViaRawBT(receiptData: Uint8Array | string): { success: boolean; error?: string } {
+  if (typeof receiptData === "string") {
+    return printToRawBT(receiptData);
+  }
+  try {
+    if (typeof window !== "undefined") {
+      const base64Data = uint8ArrayToBase64(receiptData);
+      window.location.href = `rawbt:base64,${base64Data}`;
       return { success: true };
     }
-
-    return { success: false, error: "Objek browser (window/document) tidak tersedia." };
+    return { success: false, error: "Objek browser (window) tidak tersedia." };
   } catch (err: any) {
-    console.error("[Printer] Gagal meluncurkan intent RawBT:", err);
-
-    // Fallback sekunder: skema URL langsung rawbt:
-    try {
-      if (typeof window !== "undefined") {
-        const base64Data = uint8ArrayToBase64(receiptBytes);
-        window.location.href = `rawbt:base64,${base64Data}`;
-        return { success: true };
-      }
-    } catch (_) {}
-
+    console.error("[Printer] Gagal meluncurkan RawBT:", err);
     return { success: false, error: err?.message || "Gagal memanggil RawBT" };
   }
 }
@@ -141,14 +149,10 @@ export async function printViaBluetooth(
 }
 
 /**
- * Pengiriman cetak via browser print spooler (window.print)
+ * Pengiriman cetak via browser print spooler (window.print / printStandard)
  */
 export function printViaBrowser(): { success: boolean } {
-  if (typeof window !== "undefined" && typeof window.print === "function") {
-    window.print();
-    return { success: true };
-  }
-  return { success: false };
+  return printStandard();
 }
 
 /**
@@ -156,6 +160,7 @@ export function printViaBrowser(): { success: boolean } {
  */
 export async function executePrintReceipt(
   receiptBytes: Uint8Array,
+  receiptText?: string,
   strategy: PrintStrategy = "auto"
 ): Promise<PrintResult> {
   const chosenStrategy = strategy === "auto" ? getSavedPrintStrategy() : strategy;
@@ -163,7 +168,8 @@ export async function executePrintReceipt(
 
   // 1. Eksekusi Strategi Eksplisit
   if (chosenStrategy === "rawbt") {
-    const res = printViaRawBT(receiptBytes);
+    const textToPrint = receiptText || new TextDecoder().decode(receiptBytes);
+    const res = printToRawBT(textToPrint);
     return {
       success: res.success,
       strategyUsed: "rawbt",
@@ -183,52 +189,38 @@ export async function executePrintReceipt(
   }
 
   if (chosenStrategy === "browser") {
-    printViaBrowser();
+    printStandard();
     return {
       success: true,
       strategyUsed: "browser",
-      message: "Dialog cetak sistem dibuka.",
+      message: "Dialog cetak dokumen standar dibuka.",
     };
   }
 
   // 2. Strategi Otomatis (AUTO)
   if (isAndroid) {
-    // Pada Android TWA, jika Web Bluetooth tersedia, coba Bluetooth terlebih dahulu
-    if (isWebBluetoothSupported()) {
-      try {
-        const btRes = await printViaBluetooth(receiptBytes);
-        if (btRes.success) {
-          return {
-            success: true,
-            strategyUsed: "bluetooth",
-            message: "Struk berhasil dicetak via Bluetooth!",
-          };
-        }
-      } catch (btErr) {
-        console.warn("[Printer] Web Bluetooth gagal di Android, mengalihkan ke RawBT fallback...", btErr);
-      }
-    }
-
-    // Fallback otomatis ke RawBT Intent untuk Android
-    const rawBtRes = printViaRawBT(receiptBytes);
+    // Pada Android / Samsung Tab: Utamakan langsung lempar teks struk ke RawBT via skema URI "rawbt:"
+    // Struk langsung keluar seketika tanpa perantara dialog cetak browser
+    const textToPrint = receiptText || new TextDecoder().decode(receiptBytes);
+    const rawBtRes = printToRawBT(textToPrint);
     if (rawBtRes.success) {
       return {
         success: true,
         strategyUsed: "rawbt",
-        message: "Struk dialihkan ke RawBT printer bridge.",
+        message: "Struk langsung dialihkan ke RawBT printer bridge.",
       };
     }
 
-    // Terakhir: browser print jika RawBT gagal
-    printViaBrowser();
+    // Fallback: cetak dokumen HTML standar (RawBT Print Service)
+    printStandard();
     return {
       success: true,
       strategyUsed: "browser",
-      message: "Menggunakan dialog cetak browser.",
+      message: "Menggunakan dialog cetak dokumen standar.",
     };
   }
 
-  // Pada Desktop: coba Bluetooth jika ada, lalu fallback ke window.print()
+  // Pada Desktop: coba Bluetooth jika ada, lalu fallback ke printStandard()
   if (isWebBluetoothSupported()) {
     try {
       const btRes = await printViaBluetooth(receiptBytes);
@@ -242,7 +234,7 @@ export async function executePrintReceipt(
     } catch (_) {}
   }
 
-  printViaBrowser();
+  printStandard();
   return {
     success: true,
     strategyUsed: "browser",
@@ -316,8 +308,9 @@ export async function printOrderReceipt(
     printerPaperSize: storeSettings?.printerPaperSize || "58mm",
   };
 
+  const receiptText = formatReceiptText(printData, storeData);
   const bytes = formatReceipt(printData, storeData);
-  return await executePrintReceipt(bytes, strategy || "auto");
+  return await executePrintReceipt(bytes, receiptText, strategy || "auto");
 }
 
 /**
@@ -335,6 +328,7 @@ export async function printTestCalibration(
     printerPaperSize: storeSettings?.printerPaperSize || "58mm",
   };
 
+  const calibText = formatCalibrationReceiptText(storeData);
   const bytes = formatCalibrationReceipt(storeData);
-  return await executePrintReceipt(bytes, strategy || "auto");
+  return await executePrintReceipt(bytes, calibText, strategy || "auto");
 }

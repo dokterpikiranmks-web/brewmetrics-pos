@@ -22,6 +22,9 @@ import { formatIDR, formatDateID, formatTime } from "@/lib/format";
 import { ROLE_LABEL, ROLE_ACCENT } from "@/lib/nav";
 import {
   printTestCalibration,
+  printToRawBT,
+  printStandard,
+  formatCalibrationReceiptText,
   getSavedPrintStrategy,
   setSavedPrintStrategy,
   type PrintStrategy,
@@ -410,6 +413,26 @@ export default function SettingsPage() {
     setTestingPrint(true);
     setShowCalibrationPrint(true);
     try {
+      const activeStrategy = strategy || printerStrategy;
+      if (activeStrategy === "browser") {
+        printStandard();
+        showToast("Dialog cetak dokumen kalibrasi dibuka.", "ok");
+        return;
+      }
+
+      const isAndroid = isAndroidDevice();
+      if (activeStrategy === "rawbt" || (activeStrategy !== "bluetooth" && isAndroid)) {
+        const calibString = formatCalibrationReceiptText({
+          cafeName,
+          address,
+          phone,
+          printerPaperSize,
+        });
+        printToRawBT(calibString);
+        showToast("Struk kalibrasi dikirim ke RawBT.", "ok");
+        return;
+      }
+
       const res = await printTestCalibration(
         {
           cafeName,
@@ -417,12 +440,12 @@ export default function SettingsPage() {
           phone,
           printerPaperSize,
         },
-        strategy || printerStrategy
+        activeStrategy
       );
       showToast(res.message || "Perintah uji cetak berhasil dikirim!", res.success ? "ok" : "warn");
     } catch (err: any) {
       console.error("[Settings] Test print error:", err);
-      window.print();
+      printStandard();
     } finally {
       setTimeout(() => setShowCalibrationPrint(false), 1200);
       setTestingPrint(false);

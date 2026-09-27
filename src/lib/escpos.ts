@@ -509,3 +509,243 @@ export function formatCalibrationReceipt(storeData?: StoreDataForPrint): Uint8Ar
   return concatBytes(...parts);
 }
 
+/**
+ * Format data transaksi menjadi string teks struk kasir terformat (\n)
+ * Siap dikirim ke RawBT via skema URI "rawbt:" (printToRawBT).
+ */
+export function formatReceiptText(
+  orderData: OrderDataForPrint,
+  storeData?: StoreDataForPrint
+): string {
+  const is80mm = storeData?.printerPaperSize === "80mm";
+  const lineWidth = is80mm ? 48 : 32;
+
+  const brandTitle = (
+    orderData?.outletBrandName ||
+    storeData?.brandName ||
+    orderData?.outletName ||
+    storeData?.cafeName ||
+    "DOI TA"
+  ).trim();
+
+  const receiptHeader = (
+    orderData?.outletReceiptHeader ||
+    storeData?.receiptHeader ||
+    ""
+  ).trim();
+
+  const address = (storeData?.address || "").trim();
+  const phone = (storeData?.phone || "").trim();
+
+  const footerMsg = (
+    orderData?.outletReceiptFooter ||
+    storeData?.receiptFooter ||
+    storeData?.receiptFooterMessage ||
+    "Terima kasih atas kunjungan Anda!"
+  ).trim();
+
+  const orderNumber = orderData?.orderNumber || "ORDER-000";
+  const cashierName = orderData?.cashierName || "Kasir";
+  const customerName = orderData?.customerName || "Umum";
+  const orderType = orderData?.orderType === "take-away" ? "Take Away" : "Dine In";
+  const table = orderData?.tableNumber ? ` (Meja ${orderData.tableNumber})` : "";
+
+  const dateObj = orderData?.createdAt
+    ? typeof orderData.createdAt === "string"
+      ? new Date(orderData.createdAt)
+      : orderData.createdAt
+    : new Date();
+
+  const formattedDate = dateObj.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const formattedTime = dateObj.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const center = (text: string): string => {
+    const clean = text.trim();
+    if (clean.length >= lineWidth) return clean + "\n";
+    const pad = Math.floor((lineWidth - clean.length) / 2);
+    return " ".repeat(pad) + clean + "\n";
+  };
+
+  let out = "";
+
+  // 1. Header Toko
+  out += center(brandTitle);
+  if (receiptHeader) out += center(receiptHeader);
+  if (address) out += center(address);
+  if (phone) out += center(`Telp: ${phone}`);
+
+  // Divider
+  out += formatDivider("=", lineWidth);
+
+  // 2. Metadata Transaksi
+  out += formatRow("No. Struk:", orderNumber, lineWidth);
+  out += formatRow("Waktu:", `${formattedDate} ${formattedTime}`, lineWidth);
+  out += formatRow("Kasir:", cashierName, lineWidth);
+  out += formatRow("Pelanggan:", customerName, lineWidth);
+  if (orderData.customerPhone) {
+    out += formatRow("No. HP:", orderData.customerPhone, lineWidth);
+  }
+  out += formatRow("Tipe/Meja:", `${orderType}${table}`, lineWidth);
+
+  out += formatDivider("-", lineWidth);
+
+  // 3. Daftar Item Pesanan
+  const items = orderData.items || [];
+  for (const item of items) {
+    const itemName = (item.productName || item.name || "Item").trim();
+    const variantStr = item.variantName ? ` (${item.variantName})` : "";
+    const fullName = `${itemName}${variantStr}`;
+    const totalPriceFormatted = formatCurrency(item.totalPrice);
+
+    out += formatRow(fullName, totalPriceFormatted, lineWidth);
+    out += `  ${item.qty} x ${formatCurrency(item.unitPrice)}\n`;
+
+    const mods = item.modifiers || item.mods || [];
+    if (mods.length > 0) {
+      const modNames = mods.map((m) => m.name).join(", ");
+      out += `  + ${modNames}\n`;
+    }
+  }
+
+  if (items.length === 0) {
+    out += "  (Tidak ada item)\n";
+  }
+
+  out += formatDivider("-", lineWidth);
+
+  // 4. Total Tagihan & Pembayaran
+  const subtotal = orderData.subtotal ?? 0;
+  const discount = orderData.discountAmount ?? 0;
+  const serviceCharge = orderData.serviceCharge ?? 0;
+  const tax = orderData.tax ?? 0;
+  const total = orderData.total ?? (subtotal - discount + serviceCharge + tax);
+
+  out += formatRow("Subtotal:", formatCurrency(subtotal), lineWidth);
+  if (discount > 0) {
+    out += formatRow("Diskon:", `- ${formatCurrency(discount)}`, lineWidth);
+  }
+  if (serviceCharge > 0) {
+    out += formatRow("Biaya Layanan:", formatCurrency(serviceCharge), lineWidth);
+  }
+  if (tax > 0) {
+    out += formatRow("Pajak PB1:", formatCurrency(tax), lineWidth);
+  }
+
+  out += formatDivider("-", lineWidth);
+  out += formatRow("TOTAL:", formatCurrency(total), lineWidth);
+  out += formatDivider("-", lineWidth);
+
+  // 5. Metode Bayar
+  const method = (orderData.paymentMethod || "cash").toLowerCase();
+  const breakdown = orderData.paymentBreakdown || [];
+
+  if (method === "split" || breakdown.length > 0) {
+    out += formatRow("Metode Bayar:", "SPLIT PEMBAYARAN", lineWidth);
+    for (const splitItem of breakdown) {
+      const label =
+        splitItem.method === "cash"
+          ? "Tunai"
+          : splitItem.method === "qris"
+            ? "QRIS"
+            : splitItem.method === "transfer"
+              ? "Transfer"
+              : "Debit";
+      const refStr = splitItem.reference ? ` (${splitItem.reference})` : "";
+      out += formatRow(` • ${label}${refStr}:`, formatCurrency(splitItem.amount), lineWidth);
+    }
+    if (orderData.tendered !== undefined && orderData.tendered !== null) {
+      out += formatRow("Total Diterima:", formatCurrency(orderData.tendered), lineWidth);
+    }
+    if (orderData.change !== undefined && orderData.change !== null && orderData.change > 0) {
+      out += formatRow("Kembalian:", formatCurrency(orderData.change), lineWidth);
+    }
+  } else {
+    const label =
+      method === "cash"
+        ? "TUNAI"
+        : method === "qris"
+          ? "QRIS"
+          : method === "transfer"
+            ? "TRANSFER BANK"
+            : "KARTU DEBIT";
+    out += formatRow("Metode Bayar:", label, lineWidth);
+
+    if (method === "transfer" && orderData.paymentReference) {
+      out += formatRow("Ref:", orderData.paymentReference, lineWidth);
+    }
+    if (method === "cash" && orderData.tendered !== undefined && orderData.tendered !== null) {
+      out += formatRow("Bayar Tunai:", formatCurrency(orderData.tendered), lineWidth);
+      const chg = orderData.change ?? (orderData.tendered - total);
+      out += formatRow("Kembalian:", formatCurrency(Math.max(0, chg)), lineWidth);
+    }
+  }
+
+  out += formatDivider("=", lineWidth);
+
+  // Resep Pulih Personal
+  const therapy = orderData.therapyText || (orderData.mood ? getTherapyText(orderData.mood) : "");
+  if (therapy && therapy.trim().length > 0) {
+    out += center(therapy.trim());
+    out += formatDivider("=", lineWidth);
+  }
+
+  // Footer
+  out += center("*** LUNAS / TERIMA KASIH ***");
+  if (footerMsg) {
+    out += center(footerMsg);
+  }
+  out += center("Powered by DOI TA POS");
+
+  // Feed lines di akhir agar struk siap disobek
+  out += "\n\n\n\n";
+
+  return out;
+}
+
+/**
+ * Format teks struk uji kalibrasi printer untuk RawBT URI.
+ */
+export function formatCalibrationReceiptText(storeData?: StoreDataForPrint): string {
+  const is80mm = storeData?.printerPaperSize === "80mm";
+  const lineWidth = is80mm ? 48 : 32;
+  const brandTitle = (storeData?.brandName || storeData?.cafeName || "DOI TA POS").trim();
+  const address = (storeData?.address || "Jl. Pengayoman No. 12, Makassar").trim();
+
+  const center = (text: string): string => {
+    const clean = text.trim();
+    if (clean.length >= lineWidth) return clean + "\n";
+    const pad = Math.floor((lineWidth - clean.length) / 2);
+    return " ".repeat(pad) + clean + "\n";
+  };
+
+  let out = "";
+  out += center("*** UJI KALIBRASI ***");
+  out += center(brandTitle);
+  out += center(address);
+  out += center(`LEBAR KERTAS: ${is80mm ? "80MM (48 Karakter)" : "58MM (32 Karakter)"}`);
+  out += formatDivider("=", lineWidth);
+  out += center(is80mm ? "|0mm............36mm............72mm|" : "|0mm......24mm......48mm|");
+  out += center(is80mm ? "[ 1234567890123456789012345678901234567890 ]" : "[ 123456789012345678901234567890 ]");
+  out += formatDivider("-", lineWidth);
+  out += formatRow("1x Kopi Kalibrasi", "Rp 25.000", lineWidth);
+  out += "  Subtotal: Rp 25.000\n";
+  out += "  Pajak PB1 (10%): Rp 2.500\n";
+  out += formatDivider("-", lineWidth);
+  out += formatRow("TOTAL UJI:", "Rp 27.500", lineWidth);
+  out += formatDivider("=", lineWidth);
+  out += center("STATUS: HARDWARE SIAP DIGUNAKAN");
+  out += center(`Waktu: ${new Date().toLocaleDateString("id-ID")} ${new Date().toLocaleTimeString("id-ID")}`);
+  out += center("Powered by DOI TA POS");
+  out += "\n\n\n\n";
+
+  return out;
+}
+
