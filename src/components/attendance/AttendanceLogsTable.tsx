@@ -216,6 +216,7 @@ export function AttendanceLogsTable() {
                   <th className="py-3 px-4">Tipe</th>
                   <th className="py-3 px-4">Waktu</th>
                   <th className="py-3 px-4">Cabang</th>
+                  <th className="py-3 px-4">Mood AI</th>
                   <th className="py-3 px-4">Catatan</th>
                 </tr>
               </thead>
@@ -300,6 +301,27 @@ export function AttendanceLogsTable() {
                           <Store className="size-3.5 text-brand shrink-0" />
                           {att.outletName || "Cabang Pusat"}
                         </span>
+                      </td>
+
+                      {/* Mood AI */}
+                      <td className="py-3 px-4">
+                        {att.mood ? (
+                          <span
+                            className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                              att.mood === "optimal"
+                                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                                : att.mood === "lelah"
+                                ? "bg-amber-500/10 border-amber-500/25 text-amber-400"
+                                : att.mood === "tegang"
+                                ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                                : "bg-violet-500/10 border-violet-500/25 text-violet-400"
+                            }`}
+                          >
+                            {att.mood.toUpperCase()}
+                          </span>
+                        ) : (
+                          <span className="text-faint text-[10px]">Optimal</span>
+                        )}
                       </td>
 
                       {/* Note */}

@@ -16,6 +16,7 @@ import {
   CircleUserRound,
   Menu,
   X,
+  ShieldCheck,
 } from "lucide-react";
 import { NAV_TABS, ROLE_ACCENT, ROLE_LABEL } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
@@ -23,7 +24,7 @@ import { formatDateID } from "@/lib/format";
 import { BranchSwitcher } from "@/components/branch/BranchSwitcher";
 import Logo from "@/components/Logo";
 
-const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, ReceiptText };
+const TAB_ICONS = { MonitorSmartphone, Boxes, ChartSpline, UtensilsCrossed, Settings, ReceiptText, ShieldCheck };
 
 function LiveClock({ mobile = false }: { mobile?: boolean }) {
   const [now, setNow] = useState<Date | null>(null);
@@ -80,7 +81,8 @@ export default function AppShell({
         // 1. Proteksi RBAC Client-Side: Jika cashier mencoba akses rute manajemen kafe, paksa redirect ke /pos
         if (
           d.user.role === "cashier" &&
-          (pathname.startsWith("/inventory") ||
+          (pathname.startsWith("/admin") ||
+            pathname.startsWith("/inventory") ||
             pathname.startsWith("/analytics") ||
             pathname.startsWith("/settings") ||
             pathname.startsWith("/products"))

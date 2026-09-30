@@ -360,6 +360,8 @@ export const attendances = pgTable(
     clockInAt: timestamp("clock_in_at", { withTimezone: true }),
     clockOutAt: timestamp("clock_out_at", { withTimezone: true }),
     photoUrl: text("photo_url").notNull(),
+    mood: text("mood").default(""),
+    moodDiagnosis: text("mood_diagnosis").default(""),
     notes: text("notes").default(""),
     note: text("note").default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

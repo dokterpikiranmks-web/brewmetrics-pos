@@ -21,14 +21,15 @@ export const HOME_BY_ROLE: Record<Role, string> = {
 export interface NavTab {
   href: string;
   label: string;
-  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline" | "UtensilsCrossed" | "Settings" | "ReceiptText";
+  icon: "MonitorSmartphone" | "Boxes" | "ChartSpline" | "UtensilsCrossed" | "Settings" | "ReceiptText" | "ShieldCheck";
   roles: Role[];
   isAction?: boolean;
   actionKey?: string;
 }
 
 export const NAV_TABS: NavTab[] = [
-  // 1. Navigasi Owner & Manager: Analytics, Menu & Resep, Inventory Matrix, Pengaturan (Tanpa POS Terminal)
+  // 1. Navigasi Owner & Manager: Admin Portal, Analytics, Menu & Resep, Inventory Matrix, Pengaturan
+  { href: "/admin", label: "Admin Absensi", icon: "ShieldCheck", roles: ["owner", "manager"] },
   { href: "/analytics", label: "Analytics", icon: "ChartSpline", roles: ["owner", "manager"] },
   { href: "/products", label: "Menu & Resep", icon: "UtensilsCrossed", roles: ["owner", "manager"] },
   { href: "/inventory", label: "Inventory Matrix", icon: "Boxes", roles: ["owner", "manager"] },

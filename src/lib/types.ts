@@ -402,6 +402,8 @@ export interface AttendanceDto {
   clockInAt?: string | null;
   clockOutAt?: string | null;
   photoUrl: string;
+  mood?: string | null;
+  moodDiagnosis?: string | null;
   notes?: string | null;
   note?: string | null;
   createdAt: string;
@@ -416,6 +418,8 @@ export interface CreateAttendancePayload {
   status?: string;
   photoUrl?: string;
   photo_url?: string;
+  mood?: string;
+  moodDiagnosis?: string;
   notes?: string;
   note?: string;
   clock_in_at?: string | Date;

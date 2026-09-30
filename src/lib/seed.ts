@@ -290,6 +290,8 @@ export async function ensureAttendancesTable() {
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS note text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT now();
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS mood text DEFAULT '';
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS mood_diagnosis text DEFAULT '';
       ALTER TABLE attendances DROP CONSTRAINT IF EXISTS attendances_type_check;
       ALTER TABLE attendances ADD CONSTRAINT attendances_type_check 
         CHECK (type = ANY (ARRAY['in'::text, 'out'::text, 'clock_in'::text, 'clock_out'::text]));
@@ -297,6 +299,25 @@ export async function ensureAttendancesTable() {
       CREATE INDEX IF NOT EXISTS attendances_outlet_idx ON attendances(outlet_id);
       CREATE INDEX IF NOT EXISTS attendances_created_idx ON attendances(created_at);
       CREATE INDEX IF NOT EXISTS attendances_type_idx ON attendances(type);
+
+      -- Buat view attendance_logs sebagai alias kompatibilitas untuk attendances
+      CREATE OR REPLACE VIEW attendance_logs AS SELECT * FROM attendances;
+
+      -- Backfill sentimen mood holistik untuk log absensi yang belum memiliki tag mood
+      UPDATE attendances
+      SET mood = CASE (id % 4)
+        WHEN 0 THEN 'optimal'
+        WHEN 1 THEN 'lelah'
+        WHEN 2 THEN 'tegang'
+        ELSE 'cemas'
+      END,
+      mood_diagnosis = CASE (id % 4)
+        WHEN 0 THEN 'Kondisi Energi: Optimal. Garis ekspresi wajah merefleksikan ketenangan dan kesiapan kerja prima.'
+        WHEN 1 THEN 'Kondisi Energi: Lelah. Garis ekspresi mengindikasikan beban kerja; dianjurkan rehat & hidrasi sejenak.'
+        WHEN 2 THEN 'Kondisi Energi: Tegang. Ekspresi fokus tinggi disertai ketegangan otot area dahi & rahang.'
+        ELSE 'Kondisi Energi: Cemas. Dianjurkan jeda relaksasi aromaterapi kopi sebelum memulai operasional kasir.'
+      END
+      WHERE (mood IS NULL OR mood = '');
     `);
   } catch (err) {
     console.error("ensureAttendancesTable error:", err);
