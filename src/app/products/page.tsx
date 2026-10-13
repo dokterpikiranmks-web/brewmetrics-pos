@@ -13,12 +13,14 @@ import ProductRecipeModal, { type ProductFormData, type RecipeItemData } from "@
 import CategoryModal, { type CategoryData } from "@/components/products/CategoryModal";
 import type { CatalogDto, IngredientDto } from "@/lib/types";
 import { formatIDR, formatQty } from "@/lib/format";
+import { useBranch } from "@/context/BranchContext";
 
 const ICONS_MAP: Record<string, typeof Coffee> = {
   Coffee, Filter, CupSoda, Flame, Sparkles, Croissant, CakeSlice, Leaf, Milk, Beer,
 };
 
 export default function ProductsPage() {
+  const { currentBranch, currentBranchEntity } = useBranch();
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<{ id: number; name: string; icon: string; sortOrder?: number; outletId?: number | null }[]>([]);
   const [products, setProducts] = useState<ProductFormData[]>([]);
@@ -48,10 +50,17 @@ export default function ProductsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const branchHeaders = { "x-branch-id": currentBranch };
       const [prodRes, catRes, ingRes, outRes] = await Promise.all([
-        fetch("/api/products?outlet_id=all").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/categories?outlet_id=all").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/inventory").then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/products?outlet_id=all&branch_id=${currentBranch}`, { headers: branchHeaders }).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`/api/categories?outlet_id=all&branch_id=${currentBranch}`, { headers: branchHeaders }).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`/api/inventory?branch_id=${currentBranch}`, { headers: branchHeaders }).then((r) =>
+          r.ok ? r.json() : null
+        ),
         fetch("/api/outlets").then((r) => (r.ok ? r.json() : null)),
       ]);
 
@@ -76,7 +85,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentBranch]);
 
   useEffect(() => {
     loadData();
@@ -142,10 +151,14 @@ export default function ProductsPage() {
       const isEdit = Boolean(formData.id);
       const url = isEdit ? `/api/products/${formData.id}` : "/api/products";
       const method = isEdit ? "PUT" : "POST";
+      const targetBranch = formData.branchId || currentBranch;
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": targetBranch,
+        },
         body: JSON.stringify({
           categoryId: formData.categoryId,
           name: formData.name,
@@ -157,7 +170,9 @@ export default function ProductsPage() {
           imageUrl: formData.imageUrl ?? "",
           isActive: formData.isActive,
           isBundle: formData.isBundle ?? false,
-          outletId: formData.outletId ?? 1,
+          outletId: formData.outletId ?? currentBranchEntity.outletId ?? 1,
+          branchId: targetBranch,
+          branch_id: targetBranch,
           bundleItems: formData.bundleItems,
           variants: formData.variants,
           recipe: (formData.recipe || []).map((r) => ({
@@ -211,15 +226,21 @@ export default function ProductsPage() {
       const isEdit = Boolean(catData.id);
       const url = isEdit ? `/api/categories/${catData.id}` : "/api/categories";
       const method = isEdit ? "PUT" : "POST";
+      const targetBranch = catData.branchId || currentBranch;
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": targetBranch,
+        },
         body: JSON.stringify({
           name: catData.name,
           icon: catData.icon,
           sortOrder: catData.sortOrder,
-          outletId: catData.outletId ?? 1,
+          outletId: catData.outletId ?? currentBranchEntity.outletId ?? 1,
+          branchId: targetBranch,
+          branch_id: targetBranch,
         }),
       });
 

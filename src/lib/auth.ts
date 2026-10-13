@@ -37,6 +37,7 @@ export function verifySessionToken(token: string | undefined): SessionUser | nul
       role: data.role,
       outletId: data.outletId ?? null,
       outletName: data.outletName ?? null,
+      authorizedBranch: data.authorizedBranch ?? (data.role === "owner" ? "ALL" : "KOPI_ASO"),
     };
   } catch {
     return null;

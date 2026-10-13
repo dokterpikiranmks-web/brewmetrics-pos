@@ -240,6 +240,8 @@ export async function ensureOutletsAndMultiBranchSchema() {
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS active_days jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS authorized_branch text;
 
       CREATE INDEX IF NOT EXISTS categories_branch_idx ON categories(branch_id);
       CREATE INDEX IF NOT EXISTS products_branch_idx ON products(branch_id);

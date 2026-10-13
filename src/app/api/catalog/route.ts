@@ -16,7 +16,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const headerBranch = req.headers.get("x-branch-id");
   const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
-  const targetBranch = normalizeBranchId(branchParam);
+  let targetBranch = normalizeBranchId(branchParam);
+
+  // STRICT RBAC: Kasir dengan otorisasi tunggal hanya bisa mengakses katalog cabangnya
+  if (user?.role === "cashier" && user.authorizedBranch && user.authorizedBranch !== "ALL") {
+    targetBranch = normalizeBranchId(user.authorizedBranch);
+  }
 
   const catWhere = eq(categories.branchId, targetBranch);
   const prodWhere = and(

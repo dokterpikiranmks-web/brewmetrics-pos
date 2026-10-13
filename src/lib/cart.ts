@@ -10,6 +10,7 @@ export interface CartLine {
   unitPrice: number; // base + delta varian + modifiers
   qty: number;
   mods: { id: number; name: string; price: number }[];
+  isSurcharge?: boolean;
 }
 
 export function cartLineKey(productId: number, variantId: number | null, modIds: number[]): string {
@@ -22,6 +23,9 @@ export function toPayloadLines(lines: CartLine[]): CartLinePayload[] {
     variantId: l.variantId,
     qty: l.qty,
     modifierIds: l.mods.map((m) => m.id),
+    name: l.name,
+    unitPrice: l.unitPrice,
+    isSurcharge: l.isSurcharge ?? false,
   }));
 }
 

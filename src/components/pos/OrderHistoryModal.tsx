@@ -257,7 +257,7 @@ export default function OrderHistoryModal({
             initial={{ y: 30, scale: 0.97, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 20, scale: 0.97, opacity: 0 }}
-            className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border border-line bg-panel shadow-2xl overflow-hidden"
+            className="w-full max-w-4xl max-h-[92dvh] flex flex-col rounded-3xl border border-line bg-panel shadow-2xl overflow-hidden"
           >
             {/* Header Modal */}
             <div className="flex items-center justify-between border-b border-line px-5 sm:px-6 py-4 bg-surface/50">
@@ -556,7 +556,7 @@ export default function OrderHistoryModal({
                     initial={{ scale: 0.95, y: 20, opacity: 0 }}
                     animate={{ scale: 1, y: 0, opacity: 1 }}
                     exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                    className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-line-2 bg-panel shadow-2xl overflow-hidden"
+                    className="w-full max-w-2xl max-h-[90dvh] flex flex-col rounded-3xl border border-line-2 bg-panel shadow-2xl overflow-hidden"
                   >
                     {/* Header Detail Transaksi */}
                     <div className="flex items-center justify-between border-b border-line px-5 sm:px-6 py-4 bg-surface/60">

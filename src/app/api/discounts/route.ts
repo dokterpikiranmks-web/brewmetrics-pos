@@ -94,6 +94,8 @@ export async function GET(req: Request) {
       validUntil: r.validUntil ? r.validUntil.toISOString() : (r.endDate ? r.endDate.toISOString() : null),
       startDate: r.startDate ? r.startDate.toISOString() : (r.validFrom ? r.validFrom.toISOString() : null),
       endDate: r.endDate ? r.endDate.toISOString() : (r.validUntil ? r.validUntil.toISOString() : null),
+      activeDays: (r.activeDays as number[]) || [],
+      active_days: (r.activeDays as number[]) || [],
       isActive: r.isActive,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -135,6 +137,8 @@ export async function POST(req: Request) {
       endDate?: string | null;
       start_date?: string | null;
       end_date?: string | null;
+      activeDays?: number[] | null;
+      active_days?: number[] | null;
       isActive?: boolean;
     };
 
@@ -188,6 +192,11 @@ export async function POST(req: Request) {
     const minOrder = Math.max(0, Math.round(Number(body.minOrder) || 0));
     const isActive = body.isActive ?? true;
 
+    const rawActiveDays = body.activeDays ?? (body as any).active_days;
+    const activeDays: number[] = Array.isArray(rawActiveDays)
+      ? rawActiveDays.map(Number).filter((n) => !isNaN(n) && n >= 0 && n <= 6)
+      : [];
+
     const [created] = await db
       .insert(discounts)
       .values({
@@ -203,6 +212,7 @@ export async function POST(req: Request) {
         validUntil: validUntilDate,
         startDate: validFromDate,
         endDate: validUntilDate,
+        activeDays,
         isActive,
       })
       .returning();
@@ -240,6 +250,8 @@ export async function POST(req: Request) {
       validUntil: created.validUntil?.toISOString() ?? null,
       startDate: created.startDate?.toISOString() ?? null,
       endDate: created.endDate?.toISOString() ?? null,
+      activeDays: (created.activeDays as number[]) || [],
+      active_days: (created.activeDays as number[]) || [],
       isActive: created.isActive,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString(),
@@ -282,6 +294,8 @@ export async function PATCH(req: Request) {
       endDate?: string | null;
       start_date?: string | null;
       end_date?: string | null;
+      activeDays?: number[] | null;
+      active_days?: number[] | null;
       isActive?: boolean;
     };
 
@@ -311,6 +325,7 @@ export async function PATCH(req: Request) {
       validUntil?: Date;
       startDate?: Date;
       endDate?: Date;
+      activeDays?: number[];
       isActive?: boolean;
       updatedAt: Date;
     } = {
@@ -396,6 +411,13 @@ export async function PATCH(req: Request) {
       updateData.isActive = Boolean(body.isActive);
     }
 
+    const rawActiveDays = body.activeDays ?? (body as any).active_days;
+    if (rawActiveDays !== undefined) {
+      updateData.activeDays = Array.isArray(rawActiveDays)
+        ? rawActiveDays.map(Number).filter((n) => !isNaN(n) && n >= 0 && n <= 6)
+        : [];
+    }
+
     const [updated] = await db
       .update(discounts)
       .set(updateData)
@@ -434,6 +456,8 @@ export async function PATCH(req: Request) {
       validUntil: updated.validUntil?.toISOString() ?? null,
       startDate: updated.startDate?.toISOString() ?? null,
       endDate: updated.endDate?.toISOString() ?? null,
+      activeDays: (updated.activeDays as number[]) || [],
+      active_days: (updated.activeDays as number[]) || [],
       isActive: updated.isActive,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),

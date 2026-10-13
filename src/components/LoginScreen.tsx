@@ -62,10 +62,21 @@ export default function LoginScreen() {
         setStatus("success");
         setUserName(data.user.name);
         setLoggedInUser(data.user);
-        // Buka modal Select Branch untuk isolasi multi-tenant
-        setTimeout(() => {
-          setBranchModalOpen(true);
-        }, 500);
+
+        // RBAC: JIKA staf hanya berhak mengakses 1 cabang, skip modal "Pilih Cabang" dan langsung arahkan.
+        // JIKA staf adalah Owner / akses semua ("ALL"), barulah modal "Pilih Cabang" dimunculkan.
+        const authBranch = data.user.authorizedBranch;
+        const isOwner = data.user.role === "owner" || authBranch === "ALL" || !authBranch;
+
+        if (!isOwner && authBranch && authBranch !== "ALL") {
+          setTimeout(() => {
+            handleSelectBranch(authBranch as BranchId);
+          }, 400);
+        } else {
+          setTimeout(() => {
+            setBranchModalOpen(true);
+          }, 500);
+        }
       } catch {
         setStatus("error");
         setErrorMsg("Tidak dapat terhubung ke server.");
@@ -75,7 +86,7 @@ export default function LoginScreen() {
         }, 650);
       }
     },
-    []
+    [handleSelectBranch]
   );
 
   const pushDigit = useCallback(

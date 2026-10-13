@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { categories } from "@/db/schema";
-import { asc, eq, or, isNull } from "drizzle-orm";
+import { and, asc, eq, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
+import { normalizeBranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const headerOutlet = req.headers.get("x-outlet-id");
     const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
+    const headerBranch = req.headers.get("x-branch-id");
+    const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
     const role = user?.role ?? (req.headers.get("x-user-role") as any);
 
     // Tangkap userOutletId dari token sesi user atau default 1
@@ -24,29 +27,27 @@ export async function GET(req: Request) {
     let targetOutletId: number | null = null;
 
     if (role === "cashier") {
-      // STRICT OUTLET ISOLATION:
-      // Jika role === 'cashier', paksa kueri Drizzle untuk SELALU memfilter categories.outletId = userOutletId.
-      // Kasir DILARANG dan TIDAK BISA melakukan bypass (parameter outletParam diabaikan).
       targetOutletId = userOutletId;
     } else {
-      // Role 'owner', 'manager', atau 'admin'
       if (outletParam && outletParam !== "all") {
         const parsed = Number(outletParam);
         if (!isNaN(parsed)) {
           targetOutletId = parsed;
         }
-      } else if (outletParam === "all") {
-        // Jika role === 'owner' atau 'admin', dan outlet_id === 'all', tampilkan semua kategori
-        targetOutletId = null;
       } else {
-        // Default untuk owner/manager jika tidak ada parameter spesifik: tampilkan semua
         targetOutletId = null;
       }
     }
 
-    const whereClause = targetOutletId !== null
-      ? or(eq(categories.outletId, targetOutletId), eq(categories.outletId, 1), isNull(categories.outletId))
-      : undefined;
+    const conditions: any[] = [];
+    if (branchParam && branchParam !== "all") {
+      conditions.push(eq(categories.branchId, normalizeBranchId(branchParam)));
+    }
+    if (targetOutletId !== null) {
+      conditions.push(or(eq(categories.outletId, targetOutletId), eq(categories.outletId, 1), isNull(categories.outletId)));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const list = await db
       .select()
@@ -74,7 +75,13 @@ export async function POST(req: Request) {
       sortOrder?: number;
       outletId?: number | null;
       outlet_id?: number | null;
+      branchId?: string;
+      branch_id?: string;
     };
+
+    const headerBranch = req.headers.get("x-branch-id");
+    const rawBranch = body.branchId || body.branch_id || headerBranch;
+    const branchId = rawBranch ? normalizeBranchId(rawBranch) : "KOPI_ASO";
 
     const name = (body.name ?? "").trim();
     if (!name) {
@@ -97,6 +104,7 @@ export async function POST(req: Request) {
         icon,
         sortOrder,
         outletId,
+        branchId,
       })
       .returning();
 

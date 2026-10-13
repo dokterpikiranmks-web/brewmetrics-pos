@@ -42,6 +42,7 @@ export interface ProductFormData {
   isActive: boolean;
   isBundle?: boolean;
   outletId?: number | null;
+  branchId?: string;
   bundleItems?: { productId: number; productName?: string; qty: number }[];
   variants: VariantData[];
   recipe: RecipeItemData[];
@@ -371,6 +372,7 @@ export default function ProductRecipeModal({
       isActive,
       isBundle,
       outletId: Number(outletId) || 1,
+      branchId: initialData?.branchId,
       bundleItems: isBundle ? bundleItems : undefined,
       variants: isBundle ? [] : variants,
       recipe: isBundle ? [] : recipe,

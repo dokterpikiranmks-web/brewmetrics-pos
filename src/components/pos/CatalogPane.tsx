@@ -103,8 +103,8 @@ export default function CatalogPane({
           </div>
         </div>
 
-        {/* pb-28 pada layar HP agar produk paling bawah tidak tertutup Bottom Bar struk */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 pb-28 md:pb-5">
+        {/* pb-32 pada layar HP agar produk paling bawah bisa digulir ke atas melampaui area keranjang belanja (cart drawer) */}
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 pb-32 md:pb-6">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
             {filtered.map((p, i) => {
               const Icon = productIcon(p.icon);

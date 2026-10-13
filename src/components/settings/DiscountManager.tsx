@@ -24,6 +24,16 @@ import {
 import { formatIDR } from "@/lib/format";
 import type { DiscountDto, DiscountType, DiscountScope, OutletDto } from "@/lib/types";
 
+const DAYS_OF_WEEK = [
+  { day: 1, label: "Senin" },
+  { day: 2, label: "Selasa" },
+  { day: 3, label: "Rabu" },
+  { day: 4, label: "Kamis" },
+  { day: 5, label: "Jumat" },
+  { day: 6, label: "Sabtu" },
+  { day: 0, label: "Minggu" },
+];
+
 export default function DiscountManager({
   userRole = "owner",
   onToast,
@@ -53,6 +63,7 @@ export default function DiscountManager({
   const [formValidFrom, setFormValidFrom] = useState<string>("");
   const [formValidUntil, setFormValidUntil] = useState<string>("");
   const [formBranchId, setFormBranchId] = useState<string>("KOPI_ASO");
+  const [formActiveDays, setFormActiveDays] = useState<number[]>([]);
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -140,6 +151,7 @@ export default function DiscountManager({
     setFormValidFrom("");
     setFormValidUntil("");
     setFormBranchId("KOPI_ASO");
+    setFormActiveDays([]);
     setFormIsActive(true);
     setFormError(null);
     setModalOpen(true);
@@ -157,6 +169,8 @@ export default function DiscountManager({
     setFormValidFrom(d.validFrom ? d.validFrom.slice(0, 10) : (d.startDate ? d.startDate.slice(0, 10) : ""));
     setFormValidUntil(d.validUntil ? d.validUntil.slice(0, 10) : (d.endDate ? d.endDate.slice(0, 10) : ""));
     setFormBranchId((d.branchId as string) || "KOPI_ASO");
+    const rawDays = d.activeDays ?? (d as any).active_days;
+    setFormActiveDays(Array.isArray(rawDays) ? rawDays : []);
     setFormIsActive(d.isActive);
     setFormError(null);
     setModalOpen(true);
@@ -242,6 +256,7 @@ export default function DiscountManager({
           validUntil: formValidUntil ? new Date(formValidUntil + "T23:59:59.999Z").toISOString() : null,
           startDate: formValidFrom ? new Date(formValidFrom).toISOString() : null,
           endDate: formValidUntil ? new Date(formValidUntil + "T23:59:59.999Z").toISOString() : null,
+          activeDays: formActiveDays,
           isActive: formIsActive,
         }),
       });
@@ -518,6 +533,21 @@ export default function DiscountManager({
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-800 text-faint border border-line">
                         <Building2 className="size-2.5" />
                         <span>Semua Cabang (Global)</span>
+                      </span>
+                    )}
+
+                    {/* Badge Hari Berlaku */}
+                    {Array.isArray(d.activeDays) && d.activeDays.length > 0 && d.activeDays.length < 7 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        <span>
+                          {d.activeDays.length === 1 && d.activeDays[0] === 5
+                            ? "✨ Jumat Berkah"
+                            : `Hari: ${d.activeDays.map((x) => DAYS_OF_WEEK.find((w) => w.day === x)?.label || x).join(", ")}`}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-800/80 text-faint border border-line/60">
+                        <span>Setiap Hari</span>
                       </span>
                     )}
                   </div>
@@ -827,6 +857,67 @@ export default function DiscountManager({
                   </div>
                   <p className="text-[10px] text-faint mt-1">
                     Kasir hanya dapat menerapkan promo ini jika subtotal pesanan mencapai nilai minimal ini.
+                  </p>
+                </div>
+
+                {/* Checkbox Hari Berlaku (Recurring Day Promo - misal Jumat Berkah) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-faint">
+                      Hari Berlaku (Recurring Day)
+                    </label>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setFormActiveDays([])}
+                        className={`hover:underline font-semibold ${formActiveDays.length === 0 ? "text-brand" : "text-faint"}`}
+                      >
+                        Semua Hari
+                      </button>
+                      <span className="text-line">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormActiveDays([5])}
+                        className={`hover:underline font-semibold ${formActiveDays.length === 1 && formActiveDays[0] === 5 ? "text-emerald-400" : "text-faint"}`}
+                      >
+                        Jumat Berkah
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 p-2 rounded-xl border border-line bg-coal">
+                    {DAYS_OF_WEEK.map((item) => {
+                      const isChecked = formActiveDays.length === 0 || formActiveDays.includes(item.day);
+                      return (
+                        <label
+                          key={item.day}
+                          className={`flex items-center gap-1.5 p-2 rounded-lg cursor-pointer border text-center transition-all ${
+                            isChecked
+                              ? "border-brand/40 bg-brand/10 text-brand font-bold"
+                              : "border-line bg-panel text-faint hover:text-cream"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (formActiveDays.length === 0) {
+                                setFormActiveDays([1, 2, 3, 4, 5, 6, 0].filter((d) => d !== item.day));
+                              } else if (formActiveDays.includes(item.day)) {
+                                setFormActiveDays(formActiveDays.filter((d) => d !== item.day));
+                              } else {
+                                const next = [...formActiveDays, item.day];
+                                setFormActiveDays(next.length === 7 ? [] : next);
+                              }
+                            }}
+                            className="size-3.5 rounded text-brand focus:ring-brand"
+                          />
+                          <span className="text-[11px] leading-tight select-none">{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-faint mt-1">
+                    Atur hari promo otomatis aktif (misal centang Jumat saja untuk &quot;Jumat Berkah&quot;). Kasir hanya dapat memakai promo pada hari yang dicentang.
                   </p>
                 </div>
 

@@ -172,7 +172,7 @@ export default function SplitBillModal({
             initial={{ y: 30, scale: 0.97, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 20, scale: 0.97, opacity: 0 }}
-            className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border border-line bg-panel shadow-2xl overflow-hidden"
+            className="w-full max-w-4xl max-h-[92dvh] flex flex-col rounded-3xl border border-line bg-panel shadow-2xl overflow-hidden"
           >
             {/* Header Modal Split Nota */}
             <div className="flex items-center justify-between border-b border-line px-5 sm:px-6 py-4 bg-surface/50">

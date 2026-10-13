@@ -34,6 +34,7 @@ export async function POST(req: Request) {
       role: user.role,
       outletId: user.outletId,
       outletName,
+      authorizedBranch: user.authorizedBranch ?? (user.role === "owner" ? "ALL" : (user.branchId ?? "KOPI_ASO")),
     };
     await setSessionCookie(session);
     return Response.json({ user: session });

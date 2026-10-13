@@ -14,6 +14,7 @@ export interface CategoryData {
   icon: string;
   sortOrder: number;
   outletId?: number;
+  branchId?: string;
 }
 
 const AVAILABLE_ICONS = [
@@ -100,6 +101,7 @@ export default function CategoryModal({
       icon,
       sortOrder: Number(sortOrder) || 1,
       outletId: Number(outletId) || 1,
+      branchId: (initialData as any)?.branchId,
     });
     onClose();
   };

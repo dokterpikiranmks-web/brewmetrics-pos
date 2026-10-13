@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 
+import { normalizeBranchId } from "@/lib/types";
+
 export const dynamic = "force-dynamic";
 
 export async function PUT(
@@ -27,7 +29,12 @@ export async function PUT(
       sortOrder?: number;
       outletId?: number | null;
       outlet_id?: number | null;
+      branchId?: string;
+      branch_id?: string;
     };
+
+    const headerBranch = req.headers.get("x-branch-id");
+    const rawBranch = body.branchId || body.branch_id || headerBranch;
 
     const name = (body.name ?? "").trim();
     if (!name) {
@@ -43,6 +50,9 @@ export async function PUT(
       icon,
       sortOrder,
     };
+    if (rawBranch) {
+      updatePayload.branchId = normalizeBranchId(rawBranch);
+    }
     if (rawOutletId !== undefined && rawOutletId !== null && !isNaN(Number(rawOutletId))) {
       updatePayload.outletId = Number(rawOutletId);
     }

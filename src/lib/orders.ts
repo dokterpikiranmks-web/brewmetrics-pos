@@ -137,12 +137,33 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   const taxPercentage = settingsRow?.taxPercentage ?? 10;
   const serviceChargePercentage = settingsRow?.serviceChargePercentage ?? 0;
 
-  const productIds = [...new Set(payload.lines.map((l) => l.productId))];
-  const variantIds = [...new Set(payload.lines.map((l) => l.variantId).filter((v): v is number => v !== null && v !== undefined))];
-  const modifierIds = [...new Set(payload.lines.flatMap((l) => l.modifierIds ?? []))];
+  const productIds = [
+    ...new Set(
+      payload.lines
+        .filter((l) => !l.isSurcharge && l.productId)
+        .map((l) => l.productId as number)
+    ),
+  ];
+  const variantIds = [
+    ...new Set(
+      payload.lines
+        .filter((l) => !l.isSurcharge)
+        .map((l) => l.variantId)
+        .filter((v): v is number => v !== null && v !== undefined)
+    ),
+  ];
+  const modifierIds = [
+    ...new Set(
+      payload.lines
+        .filter((l) => !l.isSurcharge)
+        .flatMap((l) => l.modifierIds ?? [])
+    ),
+  ];
 
   const [prods, vars, mods] = await Promise.all([
-    db.select().from(products).where(and(inArray(products.id, productIds), eq(products.isActive, true))),
+    productIds.length
+      ? db.select().from(products).where(and(inArray(products.id, productIds), eq(products.isActive, true)))
+      : Promise.resolve([]),
     variantIds.length ? db.select().from(variants).where(inArray(variants.id, variantIds)) : Promise.resolve([]),
     modifierIds.length
       ? db.select().from(modifiers).where(and(inArray(modifiers.id, modifierIds), eq(modifiers.isActive, true)))
@@ -154,7 +175,25 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
 
   // Bangun line ternormalisasi (harga dihitung ulang dari DB — tidak percaya klien)
   const normalized = payload.lines.map((line, i) => {
-    const product = prodById.get(line.productId);
+    if (line.isSurcharge) {
+      const surchargeName = (line.name ?? "Biaya Tambahan").trim() || "Biaya Tambahan";
+      const unitPrice = Math.max(0, Math.round(line.unitPrice ?? 0));
+      const qty = Math.max(1, Math.min(20, Math.floor(line.qty || 1)));
+      return {
+        key: i,
+        isSurcharge: true,
+        lineInput: null as { productId: number; variantId: number | null; qty: number; modifierIds: number[] } | null,
+        product: { id: null as any, name: surchargeName },
+        variant: null as { id: number; productId: number; name: string; priceDelta: number } | null,
+        qty,
+        unitPrice,
+        totalPrice: unitPrice * qty,
+        hpp: 0,
+        mods: [] as { name: string; price: number }[],
+      };
+    }
+
+    const product = prodById.get(line.productId!);
     if (!product) throw new OrderError(`Produk #${line.productId} tidak ditemukan / nonaktif.`, 400, "BAD_PRODUCT");
     const variant = line.variantId ? varById.get(line.variantId) : null;
     if (line.variantId && (!variant || variant.productId !== product.id)) {
@@ -171,6 +210,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     const unitHpp = hppPerUnit(lineInput, index);
     return {
       key: i,
+      isSurcharge: false,
       lineInput,
       product,
       variant,
@@ -188,7 +228,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   let discountAmount = 0;
   if (payload.discountType && (payload.discountValue ?? 0) > 0) {
     if (payload.discountScope === "product" && payload.targetProductId) {
-      const matchingItems = normalized.filter((l) => l.product.id === payload.targetProductId);
+      const matchingItems = normalized.filter((l) => !l.isSurcharge && l.product.id === payload.targetProductId);
       const targetSubtotal = matchingItems.reduce((s, l) => s + l.totalPrice, 0);
       if (targetSubtotal > 0) {
         if (payload.discountType === "percentage") {
@@ -220,7 +260,11 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
 
   // Total pemakaian bahan seluruh order
   const totalUsage = new Map<number, number>();
-  for (const l of normalized) mergeUsage(totalUsage, usageForLine(l.lineInput, index));
+  for (const l of normalized) {
+    if (l.lineInput) {
+      mergeUsage(totalUsage, usageForLine(l.lineInput, index));
+    }
+  }
 
   const receipt = await db.transaction(async (tx) => {
     // Lock baris bahan agar potongan stok aman dari race condition
@@ -329,7 +373,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     await tx.insert(orderItems).values(
       normalized.map((l) => ({
         orderId: inserted.id,
-        productId: l.product.id,
+        productId: l.isSurcharge ? null : l.product.id,
         productName: l.product.name,
         variantName: l.variant?.name ?? null,
         qty: l.qty,

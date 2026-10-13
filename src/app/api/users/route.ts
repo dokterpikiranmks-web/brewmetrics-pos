@@ -25,6 +25,7 @@ export async function GET() {
         name: users.name,
         role: users.role,
         outletId: users.outletId,
+        authorizedBranch: users.authorizedBranch,
         outletName: outlets.name,
         active: users.active,
         createdAt: users.createdAt,
@@ -40,6 +41,7 @@ export async function GET() {
         role: u.role,
         outletId: u.outletId ?? null,
         outletName: u.outletName ?? null,
+        authorizedBranch: u.authorizedBranch ?? (u.role === "owner" ? "ALL" : "KOPI_ASO"),
         active: u.active,
         createdAt: u.createdAt.toISOString(),
       })),
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
       role?: Role;
       pin?: string;
       outletId?: number | null;
+      authorizedBranch?: string | null;
     };
 
     const name = (body.name ?? "").trim();
@@ -87,6 +90,19 @@ export async function POST(req: Request) {
     const outletId = body.outletId ? Number(body.outletId) : null;
     if (role === "cashier" && (!outletId || isNaN(outletId))) {
       return Response.json({ error: "Akun kasir wajib ditugaskan pada salah satu cabang / outlet." }, { status: 400 });
+    }
+
+    // Tentukan authorizedBranch
+    let authorizedBranch = (body.authorizedBranch ?? "").trim();
+    if (!authorizedBranch) {
+      if (role === "owner") {
+        authorizedBranch = "ALL";
+      } else if (outletId) {
+        const o = await db.query.outlets.findFirst({ where: eq(outlets.id, outletId) });
+        authorizedBranch = o?.branchId ?? "KOPI_ASO";
+      } else {
+        authorizedBranch = "KOPI_ASO";
+      }
     }
 
     // Validasi keunikan PIN: PIN tidak boleh kembar dengan staf lain yang masih aktif
@@ -110,6 +126,7 @@ export async function POST(req: Request) {
         role,
         pin,
         outletId,
+        authorizedBranch,
         active: true,
       })
       .returning({
@@ -117,6 +134,7 @@ export async function POST(req: Request) {
         name: users.name,
         role: users.role,
         outletId: users.outletId,
+        authorizedBranch: users.authorizedBranch,
         active: users.active,
         createdAt: users.createdAt,
       });
@@ -164,6 +182,7 @@ export async function PATCH(req: Request) {
       pin?: string;
       active?: boolean;
       outletId?: number | null;
+      authorizedBranch?: string | null;
     };
 
     const id = Number(body.id);
@@ -185,6 +204,7 @@ export async function PATCH(req: Request) {
       pin?: string;
       active?: boolean;
       outletId?: number | null;
+      authorizedBranch?: string;
     } = {};
 
     if (body.name !== undefined) {
@@ -217,6 +237,10 @@ export async function PATCH(req: Request) {
 
     if (body.outletId !== undefined) {
       updateData.outletId = body.outletId ? Number(body.outletId) : null;
+    }
+
+    if (body.authorizedBranch !== undefined && body.authorizedBranch !== null) {
+      updateData.authorizedBranch = body.authorizedBranch.trim();
     }
 
     if (body.active !== undefined) {
@@ -272,6 +296,7 @@ export async function PATCH(req: Request) {
         name: users.name,
         role: users.role,
         outletId: users.outletId,
+        authorizedBranch: users.authorizedBranch,
         active: users.active,
         createdAt: users.createdAt,
       });
@@ -288,6 +313,7 @@ export async function PATCH(req: Request) {
       user: {
         ...updated,
         outletName,
+        authorizedBranch: updated.authorizedBranch ?? (updated.role === "owner" ? "ALL" : "KOPI_ASO"),
         createdAt: updated.createdAt.toISOString(),
       },
     });

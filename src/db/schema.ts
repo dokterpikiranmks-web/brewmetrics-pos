@@ -40,6 +40,7 @@ export const users = pgTable("users", {
   role: text("role", { enum: ["cashier", "manager", "owner"] }).notNull(),
   outletId: integer("outlet_id").references(() => outlets.id),
   branchId: text("branch_id", { enum: BRANCH_ENUM }).default("KOPI_ASO"),
+  authorizedBranch: text("authorized_branch").default("KOPI_ASO"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -349,6 +350,7 @@ export const discounts = pgTable(
     validUntil: timestamp("valid_until", { withTimezone: true }),
     startDate: timestamp("start_date", { withTimezone: true }),
     endDate: timestamp("end_date", { withTimezone: true }),
+    activeDays: jsonb("active_days").$type<number[]>().default([]),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

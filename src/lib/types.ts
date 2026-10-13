@@ -60,6 +60,7 @@ export interface SessionUser {
   outletId?: number | null;
   outletName?: string | null;
   branchId?: BranchId | null;
+  authorizedBranch?: string | null;
 }
 
 export interface StaffUserDto {
@@ -70,6 +71,7 @@ export interface StaffUserDto {
   outletId?: number | null;
   outletName?: string | null;
   branchId?: BranchId | null;
+  authorizedBranch?: string | null;
   createdAt: string;
 }
 
@@ -100,6 +102,9 @@ export interface CartLinePayload {
   variantId: number | null;
   qty: number;
   modifierIds: number[];
+  name?: string;
+  unitPrice?: number;
+  isSurcharge?: boolean;
 }
 
 export type OrderType = "dine-in" | "take-away";
@@ -367,6 +372,8 @@ export interface DiscountDto {
   validUntil?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  activeDays?: number[] | null;
+  active_days?: number[] | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -386,6 +393,8 @@ export interface AppliedPromo {
   validUntil?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  activeDays?: number[] | null;
+  active_days?: number[] | null;
 }
 
 /* -------------------------- SALES SUMMARY & METRICS ------------------------- */

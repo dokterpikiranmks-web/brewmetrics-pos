@@ -1764,8 +1764,13 @@ export default function SettingsPage() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[10px] text-faint">
-                                    ID Staf #{staff.id} • {staff.outletName || (staff.role === "cashier" ? "Cabang Pusat (HQ)" : "Semua Cabang")}
+                                  <span className="text-[10px] text-faint flex items-center gap-1.5 flex-wrap">
+                                    <span>ID Staf #{staff.id} • {staff.outletName || (staff.role === "cashier" ? "Cabang Pusat (HQ)" : "Semua Cabang")}</span>
+                                    {staff.authorizedBranch && staff.authorizedBranch !== "ALL" && (
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/20 text-[9px]">
+                                        Terkunci: {staff.authorizedBranch}
+                                      </span>
+                                    )}
                                   </span>
                                 </div>
                               </div>

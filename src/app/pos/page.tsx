@@ -299,6 +299,30 @@ export default function PosPage() {
     setLines((prev) => prev.filter((l) => l.key !== key));
   };
 
+  // Tambah biaya tambahan khusus (surcharge) ke keranjang
+  const handleAddSurcharge = (name: string, amount: number) => {
+    const trimmedName = name.trim() || "Biaya Tambahan";
+    const validAmount = Math.max(0, Math.round(amount));
+    if (validAmount <= 0) return;
+
+    const key = `surcharge:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+    setLines((prev) => [
+      ...prev,
+      {
+        key,
+        productId: 0,
+        variantId: null,
+        name: trimmedName,
+        variantName: null,
+        color: "#F59E0B",
+        unitPrice: validAmount,
+        qty: 1,
+        mods: [],
+        isSurcharge: true,
+      },
+    ]);
+  };
+
   /* ---------------------- CALCULATE TAX & SERVICE CHARGE --------------------- */
   const rawSubtotal = cartTotal(lines);
   const totals = calculateOrderTotals(
@@ -545,7 +569,7 @@ export default function PosPage() {
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row md:h-[calc(100dvh-68px)] md:overflow-hidden">
         {!catalog ? (
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-5 content-start overflow-hidden ml-0 md:ml-[76px] lg:ml-[92px]">
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-5 content-start overflow-y-auto pb-32 md:pb-6 ml-0 md:ml-[76px] lg:ml-[92px]">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="h-[148px] rounded-2xl border border-line bg-panel animate-pulse-soft" style={{ animationDelay: `${i * 90}ms` }} />
             ))}
@@ -580,6 +604,7 @@ export default function PosPage() {
           onOpenHistory={() => setOrderHistoryOpen(true)}
           onCloseShift={() => setShiftModalOpen(true)}
           onCashMovement={() => setCashMovementOpen(true)}
+          onAddSurcharge={handleAddSurcharge}
           historyCount={todayOrders.length}
           cashierName={me?.name ?? "Kasir"}
           currentUser={me}

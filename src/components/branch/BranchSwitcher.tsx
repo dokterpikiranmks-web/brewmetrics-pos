@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useBranch } from "@/context/BranchContext";
-import { Building2, ChevronDown, Check, Store, Coffee, UtensilsCrossed, Sparkles } from "lucide-react";
+import { Building2, ChevronDown, Check, Store, Coffee, UtensilsCrossed, Sparkles, Lock } from "lucide-react";
 import type { SessionUser, BranchId } from "@/lib/types";
 import { BRANCH_ENTITIES } from "@/lib/types";
 
@@ -16,6 +16,19 @@ export function BranchSwitcher({ user }: { user: SessionUser }) {
   const { currentBranch, currentBranchEntity, setCurrentBranch, setActiveOutletId } = useBranch();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Staf non-owner dengan otorisasi cabang tunggal tidak dapat beralih cabang
+  const isSingleBranch =
+    user.role !== "owner" &&
+    Boolean(user.authorizedBranch) &&
+    user.authorizedBranch !== "ALL";
+
+  // Pastikan cabang sinkron dengan izin staf saat dimuat
+  useEffect(() => {
+    if (isSingleBranch && user.authorizedBranch && currentBranch !== user.authorizedBranch) {
+      setCurrentBranch(user.authorizedBranch as BranchId);
+    }
+  }, [isSingleBranch, user.authorizedBranch, currentBranch, setCurrentBranch]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -34,9 +47,18 @@ export function BranchSwitcher({ user }: { user: SessionUser }) {
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-line-2 bg-panel hover:bg-panel-2 hover:border-brand/40 text-xs font-semibold text-cream transition-all shadow-sm group"
-        title="Ganti Cabang / Entitas Bisnis"
+        disabled={Boolean(isSingleBranch)}
+        onClick={() => !isSingleBranch && setOpen((prev) => !prev)}
+        className={`flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-line-2 bg-panel text-xs font-semibold text-cream transition-all shadow-sm group ${
+          isSingleBranch
+            ? "cursor-default opacity-90"
+            : "hover:bg-panel-2 hover:border-brand/40"
+        }`}
+        title={
+          isSingleBranch
+            ? `Otorisasi Terkunci: ${currentBranchEntity.name}`
+            : "Ganti Cabang / Entitas Bisnis"
+        }
       >
         <Icon className="size-3.5 sm:size-4 text-brand group-hover:scale-105 transition-transform" />
         <span className="truncate max-w-[110px] sm:max-w-[150px] font-bold">
@@ -45,11 +67,17 @@ export function BranchSwitcher({ user }: { user: SessionUser }) {
         <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-brand/10 text-brand border border-brand/20 hidden sm:inline-block">
           {currentBranchEntity.code}
         </span>
-        <ChevronDown
-          className={`size-3 text-faint group-hover:text-sand transition-transform duration-200 ${
-            open ? "rotate-180" : ""
-          }`}
-        />
+        {isSingleBranch ? (
+          <span title="Akses terkunci pada cabang ini">
+            <Lock className="size-3 text-amber-400/80 shrink-0" />
+          </span>
+        ) : (
+          <ChevronDown
+            className={`size-3 text-faint group-hover:text-sand transition-transform duration-200 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        )}
       </button>
 
       {open && (

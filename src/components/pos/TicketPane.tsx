@@ -69,6 +69,7 @@ interface TicketPaneProps {
   onOpenHistory: () => void;
   onCloseShift?: () => void;
   onCashMovement?: () => void;
+  onAddSurcharge?: (name: string, amount: number) => void;
   historyCount: number;
   cashierName?: string;
   currentUser?: SessionUser | null;
@@ -95,6 +96,7 @@ export default function TicketPane({
   onOpenHistory,
   onCloseShift,
   onCashMovement,
+  onAddSurcharge,
   historyCount,
   cashierName = "Kasir",
   currentUser,
@@ -102,6 +104,7 @@ export default function TicketPane({
   const { currentBranch } = useBranch();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [surchargeModalOpen, setSurchargeModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   const rawSubtotal = cartTotal(lines);
@@ -131,7 +134,7 @@ export default function TicketPane({
       {/* =========================================================================
           1. DESKTOP / TABLET (>= md): Sisi kanan tetap sebagai panel berdampingan
          ========================================================================= */}
-      <aside className="hidden md:flex md:w-[370px] xl:w-[410px] shrink-0 border-l border-line bg-coal-2/70 flex-col min-h-0 h-[calc(100vh-58px)] sm:h-[calc(100vh-68px)] sticky top-[58px] sm:top-[68px]">
+      <aside className="hidden md:flex md:w-[370px] xl:w-[410px] shrink-0 border-l border-line bg-coal-2/70 flex-col min-h-0 h-[calc(100dvh-58px)] sm:h-[calc(100dvh-68px)] sticky top-[58px] sm:top-[68px]">
         <TicketHeader
           linesCount={lines.length}
           totalItems={totalItems}
@@ -167,6 +170,7 @@ export default function TicketPane({
           disabled={lines.length === 0}
           onOpenDiscount={() => setDiscountModalOpen(true)}
           onRemoveDiscount={() => setDiscount(null)}
+          onOpenSurcharge={() => setSurchargeModalOpen(true)}
           onOpenSplitBill={onOpenSplitBill}
           onPay={onPay}
         />
@@ -295,6 +299,7 @@ export default function TicketPane({
                 disabled={lines.length === 0}
                 onOpenDiscount={() => setDiscountModalOpen(true)}
                 onRemoveDiscount={() => setDiscount(null)}
+                onOpenSurcharge={() => setSurchargeModalOpen(true)}
                 onOpenSplitBill={() => {
                   setMobileOpen(false);
                   onOpenSplitBill?.();
@@ -319,6 +324,13 @@ export default function TicketPane({
           setDiscount(d);
           setDiscountModalOpen(false);
         }}
+      />
+
+      {/* Modal Tambah Biaya Tambahan (Surcharge) */}
+      <CustomSurchargeModal
+        open={surchargeModalOpen}
+        onClose={() => setSurchargeModalOpen(false)}
+        onAdd={onAddSurcharge}
       />
 
       {/* Modal Absensi Selfie Kasir */}
@@ -676,10 +688,16 @@ function TicketItemList({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span
-                    className="size-2 rounded-full shrink-0"
-                    style={{ backgroundColor: l.color }}
-                  />
+                  {l.isSurcharge ? (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-bold uppercase tracking-wider shrink-0 border border-amber-500/30">
+                      Biaya
+                    </span>
+                  ) : (
+                    <span
+                      className="size-2 rounded-full shrink-0"
+                      style={{ backgroundColor: l.color }}
+                    />
+                  )}
                   <p className="font-semibold text-cream truncate">{l.name}</p>
                 </div>
                 {l.variantName && (
@@ -741,6 +759,7 @@ function TicketSummary({
   disabled,
   onOpenDiscount,
   onRemoveDiscount,
+  onOpenSurcharge,
   onOpenSplitBill,
   onPay,
 }: {
@@ -760,6 +779,7 @@ function TicketSummary({
   disabled: boolean;
   onOpenDiscount: () => void;
   onRemoveDiscount: () => void;
+  onOpenSurcharge?: () => void;
   onOpenSplitBill?: () => void;
   onPay: () => void;
 }) {
@@ -811,6 +831,17 @@ function TicketSummary({
             </button>
           </div>
         )}
+
+        <div className="flex items-center justify-between pt-0.5">
+          <button
+            type="button"
+            onClick={onOpenSurcharge}
+            className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+          >
+            <Plus className="size-3.5" />
+            <span>+ Biaya Tambahan</span>
+          </button>
+        </div>
 
         {totals.discountAmount > 0 && (
           <div className="flex items-center justify-between text-sand">
@@ -936,13 +967,24 @@ function PromoSelectModal({
         const json = await res.json();
         const list: DiscountDto[] = json.discounts || json.data || [];
 
-        // TIME-BOUND PROMO FILTERING (currentDate >= start_date && currentDate <= end_date)
+        // RECURRING DAY & TIME-BOUND PROMO FILTERING
         const now = new Date();
+        const currentDay = now.getDay(); // 0 = Minggu, 1 = Senin, ..., 5 = Jumat, 6 = Sabtu
         const activePromos = list.filter((p) => {
           const fromStr = p.validFrom || p.startDate;
           const untilStr = p.validUntil || p.endDate;
           if (fromStr && now < new Date(fromStr)) return false;
           if (untilStr && now > new Date(untilStr)) return false;
+
+          // Validasi hari aktif berulang (Recurring Day Promo, e.g. Jumat Berkah = [5])
+          const days = p.activeDays ?? (p as any).active_days;
+          if (Array.isArray(days) && days.length > 0) {
+            const numDays = days.map(Number);
+            if (!numDays.includes(currentDay)) {
+              return false;
+            }
+          }
+
           return true;
         });
 
@@ -963,6 +1005,12 @@ function PromoSelectModal({
     const untilStr = promo.validUntil || promo.endDate;
     if (fromStr && now < new Date(fromStr)) return;
     if (untilStr && now > new Date(untilStr)) return;
+
+    // Pastikan hari hari ini sesuai dengan active_days promo
+    const days = promo.activeDays ?? (promo as any).active_days;
+    if (Array.isArray(days) && days.length > 0 && !days.map(Number).includes(now.getDay())) {
+      return;
+    }
 
     onApply({
       id: promo.id,
@@ -987,7 +1035,7 @@ function PromoSelectModal({
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full max-w-md rounded-3xl border border-line bg-coal-2 p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+            className="w-full max-w-md rounded-3xl border border-line bg-coal-2 p-5 shadow-2xl space-y-4 max-h-[85dvh] flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-line shrink-0">
@@ -1198,6 +1246,145 @@ function PromoSelectModal({
                 Tutup
               </button>
             </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* -----------------------------------------------------------------------------
+ * SUBKOMPONEN MODAL BIAYA TAMBAHAN (SURCHARGE)
+ * -------------------------------------------------------------------------- */
+
+function CustomSurchargeModal({
+  open,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onAdd?: (name: string, amount: number) => void;
+}) {
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setAmount("");
+    }
+  }, [open]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = name.trim() || "Biaya Tambahan";
+    const parsedAmount = parseInt(amount.replace(/\D/g, ""), 10);
+    if (!parsedAmount || parsedAmount <= 0) return;
+
+    onAdd?.(cleanName, parsedAmount);
+    onClose();
+  };
+
+  const SUGGESTIONS = ["Biaya Ongkir", "Paper Bag / Kantong", "Packaging / Kardus", "Biaya Admin", "Lain-lain"];
+  const NOMINALS = [2000, 5000, 10000, 15000, 20000];
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 12 }}
+            className="w-full max-w-md rounded-2xl border border-line bg-panel-solid p-5 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Plus className="size-5" />
+                <h3 className="font-display text-base font-bold text-cream">Biaya Tambahan (Surcharge)</h3>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="grid size-7 place-items-center rounded-lg text-faint hover:text-cream hover:bg-coal"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-sand uppercase tracking-wider mb-1.5">
+                  Nama Biaya
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Contoh: Ongkir, Paper Bag, Box Khusus..."
+                  className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-sm text-cream placeholder:text-faint outline-none focus:border-amber-400"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setName(s)}
+                      className="px-2 py-1 rounded-lg border border-line bg-coal text-[11px] text-sand hover:text-cream hover:border-amber-400/40"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-sand uppercase tracking-wider mb-1.5">
+                  Nominal Biaya (Rp)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  step={500}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-sm font-bold text-cream placeholder:text-faint outline-none focus:border-amber-400 tabular"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {NOMINALS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setAmount(String(n))}
+                      className="px-2 py-1 rounded-lg border border-line bg-coal text-[11px] text-amber-400 font-bold hover:bg-amber-400/10 hover:border-amber-400/40 tabular"
+                    >
+                      {formatIDR(n)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 rounded-xl border border-line bg-coal text-xs font-bold text-sand hover:text-cream"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={!name.trim() || !amount || Number(amount) <= 0}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-coal text-xs font-bold shadow-lg shadow-amber-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Tambahkan ke Keranjang
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}

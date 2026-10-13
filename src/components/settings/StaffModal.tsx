@@ -69,6 +69,7 @@ export default function StaffModal({
   const [outletId, setOutletId] = useState<number | null>(null);
   const [outlets, setOutlets] = useState<OutletDto[]>([]);
   const [active, setActive] = useState(true);
+  const [authorizedBranch, setAuthorizedBranch] = useState<string>("KOPI_ASO");
 
   // PIN State
   const [pin, setPin] = useState("");
@@ -97,12 +98,14 @@ export default function StaffModal({
         setName(initialData.name);
         setRole(initialData.role);
         setOutletId(initialData.outletId ?? null);
+        setAuthorizedBranch(initialData.authorizedBranch || (initialData.role === "owner" ? "ALL" : "KOPI_ASO"));
         setActive(initialData.active);
         setPin("");
         setResetPinMode(false);
       } else {
         setName("");
         setRole("cashier");
+        setAuthorizedBranch("KOPI_ASO");
         setActive(true);
         setPin("");
         setResetPinMode(true);
@@ -183,6 +186,7 @@ export default function StaffModal({
       name: string;
       role: Role;
       outletId?: number | null;
+      authorizedBranch?: string;
       pin?: string;
       active?: boolean;
     } = {
@@ -190,6 +194,7 @@ export default function StaffModal({
       name: cleanName,
       role,
       outletId: role === "cashier" ? outletId : (outletId ?? null),
+      authorizedBranch: role === "owner" ? "ALL" : authorizedBranch,
       active,
     };
 
@@ -348,6 +353,34 @@ export default function StaffModal({
                   {role === "cashier"
                     ? "Transaksi kasir dan riwayat absensi akan otomatis tersimpan atas nama cabang ini."
                     : "Pilih cabang spesifik atau biarkan default untuk akses menyeluruh."}
+                </p>
+              </div>
+
+              {/* FIELD OTORISASI CABANG (RBAC) */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand mb-1.5 flex items-center justify-between">
+                  <span>Otorisasi Cabang (RBAC)</span>
+                  <span className="text-[10px] text-brand font-semibold normal-case">
+                    {role === "owner" ? "Otorisasi Penuh" : "Pembatasan Cabang"}
+                  </span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={role === "owner" ? "ALL" : authorizedBranch}
+                    disabled={role === "owner"}
+                    onChange={(e) => setAuthorizedBranch(e.target.value)}
+                    className="input-dark text-sm w-full py-2.5 px-3 rounded-2xl bg-coal border border-line text-cream focus:border-brand focus:outline-none disabled:opacity-60"
+                  >
+                    <option value="ALL">Semua Cabang (Akses Bebas Switcher)</option>
+                    <option value="KOPI_ASO">Hanya Cabang Kopi Aso</option>
+                    <option value="NASI_KEBULI">Hanya Cabang Nasi Kebuli</option>
+                    <option value="BUCIN_UNCLE">Hanya Cabang Bucin Uncle</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-faint mt-1">
+                  {role === "owner"
+                    ? "Owner memiliki otoritas penuh ke seluruh cabang dan dapat memilih cabang bebas."
+                    : "Jika staf hanya berhak atas 1 cabang, modal Pilih Cabang saat login dilewati dan terkunci otomatis."}
                 </p>
               </div>
 
