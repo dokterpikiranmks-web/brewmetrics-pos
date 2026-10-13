@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Coffee, Delete, Zap, Boxes, BrainCircuit, Fingerprint, Loader2,
-  TrendingUp, Wifi, BadgeCheck, Camera,
+  TrendingUp, Wifi, BadgeCheck, Camera, Building2, Store, Check, ArrowRight, UtensilsCrossed, Sparkles,
 } from "lucide-react";
 import { HOME_BY_ROLE } from "@/lib/nav";
 import type { SessionUser } from "@/lib/types";
 import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
 import Logo from "@/components/Logo";
+
+import { BRANCH_ENTITIES, type BranchId } from "@/lib/types";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -22,6 +24,21 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState("");
   const [userName, setUserName] = useState("");
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<SessionUser | null>(null);
+  const [branchModalOpen, setBranchModalOpen] = useState(false);
+
+  const handleSelectBranch = useCallback((branchId: BranchId) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("current_branch", branchId);
+      window.dispatchEvent(new CustomEvent("bm-branch-change", { detail: { branch: branchId } }));
+    }
+    setBranchModalOpen(false);
+    if (loggedInUser) {
+      router.push(HOME_BY_ROLE[loggedInUser.role]);
+    } else {
+      router.push("/pos");
+    }
+  }, [loggedInUser, router]);
 
   const submit = useCallback(
     async (value: string) => {
@@ -44,7 +61,11 @@ export default function LoginScreen() {
         }
         setStatus("success");
         setUserName(data.user.name);
-        setTimeout(() => router.push(HOME_BY_ROLE[data.user!.role]), 620);
+        setLoggedInUser(data.user);
+        // Buka modal Select Branch untuk isolasi multi-tenant
+        setTimeout(() => {
+          setBranchModalOpen(true);
+        }, 500);
       } catch {
         setStatus("error");
         setErrorMsg("Tidak dapat terhubung ke server.");
@@ -54,7 +75,7 @@ export default function LoginScreen() {
         }, 650);
       }
     },
-    [router]
+    []
   );
 
   const pushDigit = useCallback(
@@ -301,6 +322,86 @@ export default function LoginScreen() {
             isOpen={attendanceModalOpen}
             onClose={() => setAttendanceModalOpen(false)}
           />
+
+          {/* ------------------------ MODAL SELECT BRANCH ------------------------ */}
+          <AnimatePresence>
+            {branchModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coal/80 backdrop-blur-md">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  className="w-full max-w-md rounded-3xl border border-line-2 bg-panel-solid/95 p-6 shadow-2xl backdrop-blur-xl"
+                >
+                  <div className="text-center mb-6">
+                    <div className="inline-grid place-items-center size-14 rounded-2xl border border-brand/40 bg-brand/10 mb-3 shadow-[0_0_24px_-4px] shadow-brand/30">
+                      <Store className="size-7 text-brand" />
+                    </div>
+                    <h3 className="font-display text-2xl font-bold text-cream tracking-tight">
+                      Pilih Cabang Operasional
+                    </h3>
+                    <p className="text-xs text-sand mt-1 max-w-xs mx-auto">
+                      Pilih entitas bisnis yang aktif untuk shift kasir Anda. Data produk, resep HPP, dan promo akan diisolasi.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 mb-6">
+                    {BRANCH_ENTITIES.map((ent) => {
+                      const isKopi = ent.id === "KOPI_ASO";
+                      const isKebuli = ent.id === "NASI_KEBULI";
+                      const Icon = isKopi ? Coffee : isKebuli ? UtensilsCrossed : Sparkles;
+                      const accentColor = isKopi
+                        ? "border-amber-500/40 hover:border-amber-500 bg-amber-500/5 hover:bg-amber-500/15"
+                        : isKebuli
+                        ? "border-orange-500/40 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/15"
+                        : "border-red-500/40 hover:border-red-500 bg-red-500/5 hover:bg-red-500/15";
+                      const badgeColor = isKopi
+                        ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+                        : isKebuli
+                        ? "text-orange-400 bg-orange-400/10 border-orange-400/30"
+                        : "text-red-400 bg-red-400/10 border-red-400/30";
+
+                      return (
+                        <button
+                          key={ent.id}
+                          type="button"
+                          onClick={() => handleSelectBranch(ent.id)}
+                          className={`btn-press w-full flex items-center justify-between gap-3 p-4 rounded-2xl border transition-all text-left group ${accentColor}`}
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="grid size-12 place-items-center rounded-xl border border-line bg-panel shrink-0 group-hover:scale-105 transition-transform">
+                              <Icon className="size-6 text-cream" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-display text-base font-bold text-cream truncate">
+                                  {ent.name}
+                                </h4>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}>
+                                  {ent.code}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-faint truncate mt-0.5">
+                                {ent.subtitle}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid size-8 place-items-center rounded-xl bg-panel border border-line text-sand group-hover:text-cream group-hover:bg-brand group-hover:text-coal transition-colors shrink-0">
+                            <ArrowRight className="size-4" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-center text-[11px] text-faint">
+                    Entitas bisnis dapat diganti sewaktu-waktu melalui tombol Switcher di pojok kanan atas.
+                  </p>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
     </div>

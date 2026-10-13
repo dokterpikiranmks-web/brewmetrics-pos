@@ -1,19 +1,20 @@
 import { db } from "@/db";
 import { discounts, products, outlets } from "@/db/schema";
-import { desc, eq, and, or, isNull } from "drizzle-orm";
+import { desc, eq, and, or, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
-import type { DiscountDto, DiscountType, DiscountScope } from "@/lib/types";
+import type { DiscountDto, DiscountType, DiscountScope, BranchId } from "@/lib/types";
+import { normalizeBranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/discounts
  * Mengambil daftar promo/diskon master.
- * Kasir, manajer, dan owner berhak mengakses.
- * Parameter query:
- *   - activeOnly: "true" | "false" (jika true, hanya mengambil promo yang is_active = true)
- *   - outletId: number (jika diberikan, hanya tampilkan promo global (outletId IS NULL) atau cabang tersebut)
+ * Parameter query & header:
+ *   - x-branch-id / branch_id: "KOPI_ASO" | "NASI_KEBULI" | "BUCIN_UNCLE"
+ *   - activeOnly: "true" | "false" (hanya promo aktif dan dalam periode waktu valid_from & valid_until)
+ *   - outletId: number (opsional)
  */
 export async function GET(req: Request) {
   const { error } = await requireRole(["cashier", "manager", "owner"]);
@@ -24,15 +25,31 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const activeOnly = url.searchParams.get("activeOnly") === "true" || url.searchParams.get("active") === "true";
+    const headerBranch = req.headers.get("x-branch-id");
+    const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
     const outletIdParam = url.searchParams.get("outletId") ?? url.searchParams.get("outlet_id");
     const parsedOutletId = outletIdParam && outletIdParam !== "all" ? Number(outletIdParam) : null;
 
-    let conditions: any[] = [];
+    const conditions: any[] = [];
+
+    if (branchParam && branchParam !== "all") {
+      const normBranch = normalizeBranchId(branchParam);
+      conditions.push(eq(discounts.branchId, normBranch));
+    }
+
     if (activeOnly) {
       conditions.push(eq(discounts.isActive, true));
+      // Filter time-bound: now() harus berada di antara valid_from dan valid_until (atau start_date dan end_date)
+      conditions.push(
+        and(
+          sql`(${discounts.validFrom} IS NULL OR ${discounts.validFrom} <= now())`,
+          sql`(${discounts.validUntil} IS NULL OR ${discounts.validUntil} >= now())`
+        )
+      );
     }
+
     if (parsedOutletId && !isNaN(parsedOutletId)) {
-      conditions.push(or(isNull(discounts.outletId), eq(discounts.outletId, parsedOutletId)));
+      conditions.push(or(sql`${discounts.outletId} IS NULL`, eq(discounts.outletId, parsedOutletId)));
     }
 
     const whereClause = conditions.length > 1
@@ -72,6 +89,11 @@ export async function GET(req: Request) {
       targetProductName: r.targetProductId ? (productMap.get(r.targetProductId) ?? null) : null,
       outletId: r.outletId ?? null,
       outletName: r.outletId ? (outletMap.get(r.outletId) ?? null) : null,
+      branchId: (r.branchId as BranchId) ?? "KOPI_ASO",
+      validFrom: r.validFrom ? r.validFrom.toISOString() : (r.startDate ? r.startDate.toISOString() : null),
+      validUntil: r.validUntil ? r.validUntil.toISOString() : (r.endDate ? r.endDate.toISOString() : null),
+      startDate: r.startDate ? r.startDate.toISOString() : (r.validFrom ? r.validFrom.toISOString() : null),
+      endDate: r.endDate ? r.endDate.toISOString() : (r.validUntil ? r.validUntil.toISOString() : null),
       isActive: r.isActive,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -103,6 +125,16 @@ export async function POST(req: Request) {
       scope?: DiscountScope;
       targetProductId?: number | null;
       outletId?: number | null;
+      branchId?: string | null;
+      branch_id?: string | null;
+      validFrom?: string | null;
+      validUntil?: string | null;
+      valid_from?: string | null;
+      valid_until?: string | null;
+      startDate?: string | null;
+      endDate?: string | null;
+      start_date?: string | null;
+      end_date?: string | null;
       isActive?: boolean;
     };
 
@@ -143,6 +175,15 @@ export async function POST(req: Request) {
       }
     }
 
+    const branchId = normalizeBranchId(body.branchId || body.branch_id || req.headers.get("x-branch-id"));
+
+    const rawValidFrom = body.validFrom || body.valid_from || body.startDate || body.start_date;
+    const rawValidUntil = body.validUntil || body.valid_until || body.endDate || body.end_date;
+
+    const validFromDate = rawValidFrom ? new Date(rawValidFrom) : new Date();
+    // Default valid until 1 tahun jika tidak ditentukan
+    const validUntilDate = rawValidUntil ? new Date(rawValidUntil) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
     const value = Math.round(rawValue);
     const minOrder = Math.max(0, Math.round(Number(body.minOrder) || 0));
     const isActive = body.isActive ?? true;
@@ -157,6 +198,11 @@ export async function POST(req: Request) {
         scope,
         targetProductId,
         outletId,
+        branchId,
+        validFrom: validFromDate,
+        validUntil: validUntilDate,
+        startDate: validFromDate,
+        endDate: validUntilDate,
         isActive,
       })
       .returning();
@@ -189,6 +235,11 @@ export async function POST(req: Request) {
       targetProductName,
       outletId: created.outletId ?? null,
       outletName,
+      branchId: (created.branchId as BranchId) ?? "KOPI_ASO",
+      validFrom: created.validFrom?.toISOString() ?? null,
+      validUntil: created.validUntil?.toISOString() ?? null,
+      startDate: created.startDate?.toISOString() ?? null,
+      endDate: created.endDate?.toISOString() ?? null,
       isActive: created.isActive,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString(),
@@ -221,6 +272,16 @@ export async function PATCH(req: Request) {
       scope?: DiscountScope;
       targetProductId?: number | null;
       outletId?: number | null;
+      branchId?: string | null;
+      branch_id?: string | null;
+      validFrom?: string | null;
+      validUntil?: string | null;
+      valid_from?: string | null;
+      valid_until?: string | null;
+      startDate?: string | null;
+      endDate?: string | null;
+      start_date?: string | null;
+      end_date?: string | null;
       isActive?: boolean;
     };
 
@@ -245,6 +306,11 @@ export async function PATCH(req: Request) {
       scope?: "cart" | "product";
       targetProductId?: number | null;
       outletId?: number | null;
+      branchId?: any;
+      validFrom?: Date;
+      validUntil?: Date;
+      startDate?: Date;
+      endDate?: Date;
       isActive?: boolean;
       updatedAt: Date;
     } = {
@@ -308,6 +374,24 @@ export async function PATCH(req: Request) {
       updateData.outletId = isNaN(outId) || outId <= 0 ? null : outId;
     }
 
+    if (body.branchId || body.branch_id) {
+      updateData.branchId = normalizeBranchId(body.branchId || body.branch_id);
+    }
+
+    const rawFrom = body.validFrom || body.valid_from || body.startDate || body.start_date;
+    if (rawFrom !== undefined) {
+      const d = rawFrom ? new Date(rawFrom) : new Date();
+      updateData.validFrom = d;
+      updateData.startDate = d;
+    }
+
+    const rawUntil = body.validUntil || body.valid_until || body.endDate || body.end_date;
+    if (rawUntil !== undefined) {
+      const d = rawUntil ? new Date(rawUntil) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      updateData.validUntil = d;
+      updateData.endDate = d;
+    }
+
     if (body.isActive !== undefined) {
       updateData.isActive = Boolean(body.isActive);
     }
@@ -345,6 +429,11 @@ export async function PATCH(req: Request) {
       targetProductName,
       outletId: updated.outletId ?? null,
       outletName,
+      branchId: (updated.branchId as BranchId) ?? "KOPI_ASO",
+      validFrom: updated.validFrom?.toISOString() ?? null,
+      validUntil: updated.validUntil?.toISOString() ?? null,
+      startDate: updated.startDate?.toISOString() ?? null,
+      endDate: updated.endDate?.toISOString() ?? null,
       isActive: updated.isActive,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
@@ -392,3 +481,4 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "Gagal menghapus promo." }, { status: 500 });
   }
 }
+

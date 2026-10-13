@@ -5,10 +5,14 @@ import type { CartLinePayload, CreateOrderPayload, OrderReceipt } from "./types"
 export interface QueuedOrder {
   offlineId: string;
   queuedAt: number;
+  branchId?: import("./types").BranchId | string;
   lines: CartLinePayload[];
   paymentMethod: CreateOrderPayload["paymentMethod"];
   tendered?: number;
   paymentBreakdown?: import("./types").PaymentBreakdownItem[];
+  subtotal?: number;
+  discountAmount?: number;
+  grandTotal?: number;
   /** Estimasi total sisi klien (untuk struk provisional) */
   estTotal: number;
   cashierName: string;
@@ -63,6 +67,10 @@ export async function flushQueue(): Promise<FlushResult> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           offlineId: item.offlineId,
+          branchId: item.branchId as any,
+          subtotal: item.subtotal,
+          discountAmount: item.discountAmount,
+          grandTotal: item.grandTotal,
           paymentMethod: item.paymentMethod,
           tendered: item.tendered,
           paymentBreakdown: item.paymentBreakdown,

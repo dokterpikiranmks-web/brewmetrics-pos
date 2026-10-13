@@ -29,14 +29,17 @@ import type {
 } from "@/lib/types";
 import { cartLineKey, cartTotal, calculateOrderTotals, toPayloadLines, type CartLine } from "@/lib/cart";
 import { enqueueOrder, flushQueue, newOfflineId, queueCount } from "@/lib/offline";
+import { useBranch } from "@/context/BranchContext";
 
 export default function PosPage() {
   const router = useRouter();
+  const { currentBranch } = useBranch();
   const [catalog, setCatalog] = useState<CatalogDto | null>(null);
   const [me, setMe] = useState<SessionUser | null>(null);
   const [settings, setSettings] = useState<StoreSettingDto | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [sheet, setSheet] = useState<CatalogDto["products"][number] | null>(null);
+  const isCartLoadedRef = useRef(false);
 
   // Metadata Transaksi Kasir & Pelanggan
   const [customerName, setCustomerName] = useState("Umum");
@@ -76,9 +79,61 @@ export default function PosPage() {
     toastTimer.current = setTimeout(() => setToast(null), 4200);
   }, []);
 
+  const cartStorageKey = `doita_pos_cart_${currentBranch}`;
+
+  // 1. Pulihkan keranjang per-cabang dari localStorage saat branch berubah / mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(cartStorageKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        setLines(Array.isArray(saved.lines) ? saved.lines : []);
+        setCustomerName(saved.customerName || "Umum");
+        setCustomerPhone(saved.customerPhone || "");
+        setOrderType(saved.orderType || "dine-in");
+        setTableNumber(saved.tableNumber || "");
+        setDiscount(saved.discount || null);
+      } else {
+        setLines([]);
+        setCustomerName("Umum");
+        setCustomerPhone("");
+        setOrderType("dine-in");
+        setTableNumber("");
+        setDiscount(null);
+      }
+    } catch (e) {
+      console.error("Gagal memuat keranjang dari localStorage:", e);
+    } finally {
+      isCartLoadedRef.current = true;
+    }
+  }, [cartStorageKey]);
+
+  // 2. Simpan keranjang ke localStorage spesifik per cabang setiap ada perubahan state
+  useEffect(() => {
+    if (!isCartLoadedRef.current || typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        cartStorageKey,
+        JSON.stringify({
+          lines,
+          customerName,
+          customerPhone,
+          orderType,
+          tableNumber,
+          discount,
+        })
+      );
+    } catch (e) {
+      console.error("Gagal menyimpan keranjang ke localStorage:", e);
+    }
+  }, [cartStorageKey, lines, customerName, customerPhone, orderType, tableNumber, discount]);
+
   const refreshToday = useCallback(async () => {
     try {
-      const res = await fetch("/api/orders");
+      const res = await fetch(`/api/orders?branch_id=${currentBranch}`, {
+        headers: { "x-branch-id": currentBranch },
+      });
       if (res.ok) {
         const data = (await res.json()) as { orders: TodayOrderDto[] };
         setTodayOrders(data.orders);
@@ -86,7 +141,21 @@ export default function PosPage() {
     } catch {
       /* abaikan saat offline */
     }
-  }, []);
+  }, [currentBranch]);
+
+  const fetchCatalog = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/catalog?branch_id=${currentBranch}`, {
+        headers: { "x-branch-id": currentBranch },
+      });
+      if (res.ok) {
+        const d = (await res.json()) as CatalogDto;
+        setCatalog(d);
+      }
+    } catch {
+      /* abaikan saat offline */
+    }
+  }, [currentBranch]);
 
   // Tangkap event buka riwayat pesanan dari navbar AppShell
   useEffect(() => {
@@ -110,7 +179,6 @@ export default function PosPage() {
     setOnline(navigator.onLine);
 
     // Proteksi Rute: Halaman /pos HANYA boleh diakses oleh user role 'cashier'
-    // Jika user role 'owner' atau 'manager' mencoba mengakses, redirect paksa langsung ke /analytics
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d: { user: SessionUser | null }) => {
@@ -132,14 +200,14 @@ export default function PosPage() {
         if (d.settings) setSettings(d.settings);
       })
       .catch(() => {});
-    fetch("/api/catalog")
-      .then((r) => r.json())
-      .then((d: CatalogDto) => setCatalog(d))
-      .catch(() => {});
+  }, [router]);
+
+  useEffect(() => {
+    fetchCatalog();
     refreshToday();
     const t = setInterval(refreshToday, 30000);
     return () => clearInterval(t);
-  }, [refreshToday, router]);
+  }, [fetchCatalog, refreshToday]);
 
   /* ------------------------- ONLINE / OFFLINE HANDLING ------------------------ */
   useEffect(() => {
@@ -231,32 +299,6 @@ export default function PosPage() {
     setLines((prev) => prev.filter((l) => l.key !== key));
   };
 
-  // Kosongkan keranjang aktif (murni state lokal, tanpa PIN)
-  const handleClearLines = () => {
-    setLines([]);
-  };
-
-  /* ------------------- VOID AUTHORIZATION (SAVED ORDERS ONLY) ------------------ */
-  // Otorisasi PIN Void HANYA muncul saat membatalkan transaksi yang SUDAH tersimpan di DB
-  const handleVoidSavedOrder = (order: TodayOrderDto) => {
-    setVoidRequest({
-      type: "order",
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      name: `${order.itemCount} item (${order.customerName ?? "Umum"})`,
-      price: order.total,
-    });
-  };
-
-  const handleVoidAuthorized = (supervisor: { id: number; name: string; role: string }) => {
-    showToast(
-      `Transaksi ${voidRequest?.orderNumber ?? ""} berhasil di-void oleh ${supervisor.name} (${supervisor.role}). Stok bahan dikembalikan.`,
-      "ok"
-    );
-    setVoidRequest(null);
-    refreshToday();
-  };
-
   /* ---------------------- CALCULATE TAX & SERVICE CHARGE --------------------- */
   const rawSubtotal = cartTotal(lines);
   const totals = calculateOrderTotals(
@@ -269,6 +311,48 @@ export default function PosPage() {
     discount?.targetProductId,
     lines
   );
+
+  // Kosongkan keranjang aktif: WAJIB Otorisasi PIN Manager (Manager Override)
+  const handleClearLines = () => {
+    if (lines.length === 0) return;
+    setVoidRequest({
+      type: "clear",
+      name: `Hapus Seluruh Pesanan (${lines.length} item)`,
+      price: totals.grandTotal,
+    });
+  };
+
+  /* ------------------- VOID AUTHORIZATION ------------------ */
+  const handleVoidSavedOrder = (order: TodayOrderDto) => {
+    setVoidRequest({
+      type: "order",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      name: `${order.itemCount} item (${order.customerName ?? "Umum"})`,
+      price: order.total,
+    });
+  };
+
+  const handleVoidAuthorized = (supervisor: { id: number | string; name: string; role: string }) => {
+    if (voidRequest?.type === "clear") {
+      setLines([]);
+      setDiscount(null);
+      setTableNumber("");
+      setCustomerName("Umum");
+      setCustomerPhone("");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(cartStorageKey);
+      }
+      showToast(`Keranjang pesanan berhasil dikosongkan (Otorisasi: ${supervisor.name}).`, "ok");
+    } else {
+      showToast(
+        `Transaksi ${voidRequest?.orderNumber ?? ""} berhasil di-void oleh ${supervisor.name} (${supervisor.role}). Stok bahan dikembalikan.`,
+        "ok"
+      );
+      refreshToday();
+    }
+    setVoidRequest(null);
+  };
 
   /* ------------------------------- SUBMIT ORDER ------------------------------ */
   const submitOrder = async (
@@ -298,6 +382,8 @@ export default function PosPage() {
       tax: totals.tax,
       serviceCharge: totals.serviceCharge,
       total: grandTotal,
+      grandTotal: grandTotal,
+      branchId: currentBranch,
       tendered: method === "cash" ? tendered : grandTotal,
       change: method === "cash" ? Math.max(0, tendered - grandTotal) : 0,
       itemCount: lines.reduce((s, l) => s + l.qty, 0),
@@ -320,11 +406,15 @@ export default function PosPage() {
       enqueueOrder({
         offlineId: newOfflineId(),
         queuedAt: Date.now(),
+        branchId: currentBranch,
         lines: payloadLines,
         paymentMethod: method,
         tendered,
         paymentBreakdown,
         estTotal: grandTotal,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        grandTotal: grandTotal,
         cashierName: me?.name ?? "",
       });
       refreshToday();
@@ -336,8 +426,18 @@ export default function PosPage() {
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": currentBranch,
+        },
         body: JSON.stringify({
+          branchId: currentBranch,
+          branch_id: currentBranch,
+          subtotal: totals.subtotal,
+          discountAmount: totals.discountAmount,
+          discount_amount: totals.discountAmount,
+          grandTotal: totals.grandTotal,
+          grand_total: totals.grandTotal,
           paymentMethod: method,
           tendered,
           paymentBreakdown,
@@ -381,6 +481,9 @@ export default function PosPage() {
     setTableNumber("");
     setDiscount(null);
     setScannedMood(null);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(cartStorageKey);
+    }
   };
 
   // Handler proses Split Bill: langsung bayar Nota Baru, amankan sisa Nota Asal

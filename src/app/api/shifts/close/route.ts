@@ -3,6 +3,7 @@ import { orders, cashMovements, shiftReports } from "@/db/schema";
 import { sql, desc, and, eq, gte, lte } from "drizzle-orm";
 import { getSessionUser } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
+import { normalizeBranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +15,14 @@ export async function POST(req: Request) {
       return Response.json({ error: "Sesi telah berakhir. Silakan login kembali." }, { status: 401 });
     }
 
-    const body = (await req.json()) as { actualCash?: number; note?: string };
+    const headerBranch = req.headers.get("x-branch-id");
+    const body = (await req.json()) as { actualCash?: number; note?: string; branchId?: string; branch_id?: string };
     if (body.actualCash === undefined || body.actualCash === null || isNaN(Number(body.actualCash))) {
       return Response.json({ error: "Total uang tunai fisik harus diisi." }, { status: 400 });
     }
 
+    const rawBranch = body.branchId || body.branch_id || headerBranch || (user as any).branchId || "KOPI_ASO";
+    const branchId = normalizeBranchId(rawBranch);
     const actualCash = Math.max(0, Math.round(Number(body.actualCash)));
     const note = (body.note ?? "").trim();
 
@@ -26,6 +30,7 @@ export async function POST(req: Request) {
     const lastReport = await db
       .select({ closedAt: shiftReports.closedAt })
       .from(shiftReports)
+      .where(eq(shiftReports.branchId, branchId))
       .orderBy(desc(shiftReports.closedAt))
       .limit(1);
 
@@ -38,6 +43,7 @@ export async function POST(req: Request) {
         paymentMethod: orders.paymentMethod,
         paymentBreakdown: orders.paymentBreakdown,
         total: orders.total,
+        grandTotal: orders.grandTotal,
         subtotal: orders.subtotal,
         tax: orders.tax,
         serviceCharge: orders.serviceCharge,
@@ -46,6 +52,7 @@ export async function POST(req: Request) {
       .where(
         and(
           eq(orders.status, "paid"),
+          eq(orders.branchId, branchId),
           gte(orders.createdAt, openedAt),
           lte(orders.createdAt, closedAt)
         )
@@ -57,7 +64,7 @@ export async function POST(req: Request) {
     let debitTotal = 0;
 
     for (const ord of paidOrders) {
-      const orderTotal = ord.total || (ord.subtotal + (ord.tax ?? 0) + (ord.serviceCharge ?? 0));
+      const orderTotal = ord.grandTotal || ord.total || (ord.subtotal + (ord.tax ?? 0) + (ord.serviceCharge ?? 0));
       const breakdown = (ord.paymentBreakdown as Array<{ method: string; amount: number }>) || [];
 
       if (ord.paymentMethod === "split" && breakdown.length > 0) {
@@ -92,7 +99,7 @@ export async function POST(req: Request) {
         COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0)::int AS cash_in,
         COALESCE(SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END), 0)::int AS cash_out
       FROM cash_movements
-      WHERE created_at >= ${openedAt} AND created_at <= ${closedAt}
+      WHERE created_at >= ${openedAt} AND created_at <= ${closedAt} AND branch_id = ${branchId}
     `);
 
     interface CashStatsRow {
@@ -113,6 +120,7 @@ export async function POST(req: Request) {
     const [savedReport] = await db
       .insert(shiftReports)
       .values({
+        branchId,
         cashierId: user.id,
         cashierName: user.name,
         openedAt,

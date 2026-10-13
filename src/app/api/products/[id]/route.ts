@@ -12,6 +12,7 @@ import { eq, inArray } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { invalidateRecipeCache } from "@/lib/recipes";
+import { normalizeBranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,7 @@ export async function GET(
         isActive: p.isActive,
         isBundle: p.isBundle ?? false,
         outletId: p.outletId ?? null,
+        branchId: (p.branchId as any) ?? "KOPI_ASO",
         bundleItems: allBundleItems.map((b) => ({
           productId: b.subProductId,
           productName: prodMap.get(b.subProductId)?.name ?? "Produk",
@@ -132,6 +134,8 @@ export async function PUT(
       isBundle?: boolean;
       outletId?: number | null;
       outlet_id?: number | null;
+      branchId?: string;
+      branch_id?: string;
       bundleItems?: { productId: number; qty: number }[];
       variants?: { id?: number; name: string; priceDelta: number }[];
       recipe?: {
@@ -140,6 +144,9 @@ export async function PUT(
         variantName?: string | null;
       }[];
     };
+
+    const headerBranch = req.headers.get("x-branch-id");
+    const rawBranch = body.branchId || body.branch_id || headerBranch;
 
     const name = (body.name ?? "").trim();
     if (!name) {
@@ -252,6 +259,9 @@ export async function PUT(
       isActive,
       isBundle,
     };
+    if (rawBranch) {
+      updateProductData.branchId = normalizeBranchId(rawBranch);
+    }
     if (rawOutletId !== undefined && rawOutletId !== null && !isNaN(Number(rawOutletId))) {
       updateProductData.outletId = Number(rawOutletId);
     }
@@ -309,6 +319,7 @@ export async function PUT(
           }
           return {
             productId: id,
+            branchId: pUpdated.branchId || "KOPI_ASO",
             variantId: targetVariantId,
             ingredientId: r.ingredientId,
             qty: Number(r.qty),

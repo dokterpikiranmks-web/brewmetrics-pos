@@ -2,12 +2,64 @@
 
 export type Role = "cashier" | "manager" | "owner";
 
+export type BranchId = "KOPI_ASO" | "NASI_KEBULI" | "BUCIN_UNCLE";
+
+export const BRANCH_ENTITIES: {
+  id: BranchId;
+  name: string;
+  subtitle: string;
+  code: string;
+  outletId: number;
+  receiptHeader: string;
+  receiptFooter: string;
+}[] = [
+  {
+    id: "KOPI_ASO",
+    name: "Kopi Aso",
+    subtitle: "Specialty Coffee & Signature Beverages",
+    code: "KOPI-ASO",
+    outletId: 1,
+    receiptHeader: "Kopi Aso — Specialty Coffee & Kuliner",
+    receiptFooter: "Terima kasih telah ngopi di Kopi Aso!\nIG: @kopiaso.id",
+  },
+  {
+    id: "NASI_KEBULI",
+    name: "Nasi Kebuli",
+    subtitle: "Khas Rempah Arab & Timur Tengah Asli",
+    code: "KBL-01",
+    outletId: 3,
+    receiptHeader: "Nasi Kebuli Mandhi — Khas Rempah Timur Tengah",
+    receiptFooter: "Terima kasih atas kunjungan Anda!\nIG: @nasikebuli.mandhi",
+  },
+  {
+    id: "BUCIN_UNCLE",
+    name: "BUCIN UNCLE AI GONG",
+    subtitle: "Asian Comfort Food, Rice Bowl & Dimsum",
+    code: "BUC-01",
+    outletId: 4,
+    receiptHeader: "BUCIN UNCLE AI GONG — Authentic Asian Kitchen",
+    receiptFooter: "Xie Xie! Terima kasih telah bersantap di Bucin Uncle AI Gong!",
+  },
+];
+
+export function normalizeBranchId(val?: string | null): BranchId {
+  const upper = (val ?? "").trim().toUpperCase();
+  if (upper === "NASI_KEBULI" || upper === "KBL-01" || upper === "3" || upper.includes("KEBULI")) {
+    return "NASI_KEBULI";
+  }
+  if (upper === "BUCIN_UNCLE" || upper === "BUC-01" || upper === "4" || upper.includes("BUCIN") || upper.includes("UNCLE")) {
+    return "BUCIN_UNCLE";
+  }
+  return "KOPI_ASO";
+}
+
 export interface SessionUser {
   id: number;
   name: string;
   role: Role;
   outletId?: number | null;
   outletName?: string | null;
+  branchId?: BranchId | null;
 }
 
 export interface StaffUserDto {
@@ -17,11 +69,12 @@ export interface StaffUserDto {
   active: boolean;
   outletId?: number | null;
   outletName?: string | null;
+  branchId?: BranchId | null;
   createdAt: string;
 }
 
 export interface CatalogDto {
-  categories: { id: number; name: string; icon: string; outletId?: number | null }[];
+  categories: { id: number; name: string; icon: string; outletId?: number | null; branchId?: BranchId | null }[];
   products: {
     id: number;
     categoryId: number;
@@ -34,6 +87,7 @@ export interface CatalogDto {
     isBundle?: boolean;
     bundleItems?: { productId: number; productName?: string; qty: number }[];
     outletId?: number | null;
+    branchId?: BranchId | null;
     aiMood?: string | null;
     isActive?: boolean;
   }[];
@@ -76,6 +130,13 @@ export interface CreateOrderPayload {
   targetProductId?: number | null;
   paymentReference?: string;
   outletId?: number | null;
+  branchId?: BranchId | null;
+  branch_id?: BranchId | null;
+  subtotal?: number;
+  discountAmount?: number;
+  discount_amount?: number;
+  grandTotal?: number;
+  grand_total?: number;
   lines: CartLinePayload[];
 }
 
@@ -119,9 +180,12 @@ export interface OrderReceipt {
   discountType?: DiscountType | null;
   discountValue?: number;
   discountAmount?: number;
+  discount_amount?: number;
   discountName?: string | null;
   paymentReference?: string | null;
   outletId?: number | null;
+  branchId?: BranchId | null;
+  branch_id?: BranchId | null;
   outletName?: string | null;
   outletBrandName?: string | null;
   outletReceiptHeader?: string | null;
@@ -130,6 +194,8 @@ export interface OrderReceipt {
   tax?: number;
   serviceCharge?: number;
   total?: number;
+  grandTotal?: number;
+  grand_total?: number;
   tendered: number | null;
   change: number | null;
   itemCount: number;
@@ -152,11 +218,17 @@ export interface TodayOrderDto {
   customerPhone?: string | null;
   orderType?: OrderType;
   tableNumber?: string | null;
+  subtotal?: number;
   discountAmount?: number;
+  discount_amount?: number;
   discountName?: string | null;
   outletId?: number | null;
+  branchId?: BranchId | null;
+  branch_id?: BranchId | null;
   outletName?: string | null;
   total: number;
+  grandTotal?: number;
+  grand_total?: number;
   itemCount: number;
   status?: "paid" | "void";
   createdAt: string;
@@ -182,6 +254,7 @@ export interface IngredientDto {
   stockQty: number;
   lowThreshold: number;
   costPerUnit: number;
+  branchId?: BranchId | null;
   status: StockStatus;
   dailyUsage: number; // avg usage / day over trailing 14 days
   daysLeft: number | null; // null if no usage
@@ -204,6 +277,7 @@ export interface ShiftReportDto {
   cashierId: number | null;
   cashierName: string;
   outletId?: number | null;
+  branchId?: BranchId | null;
   outletName?: string | null;
   openedAt: string;
   closedAt: string;
@@ -288,6 +362,11 @@ export interface DiscountDto {
   targetProductName?: string | null;
   outletId?: number | null;
   outletName?: string | null;
+  branchId?: BranchId | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -302,6 +381,11 @@ export interface AppliedPromo {
   scope: DiscountScope;
   targetProductId?: number | null;
   outletId?: number | null;
+  branchId?: BranchId | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 /* -------------------------- SALES SUMMARY & METRICS ------------------------- */
@@ -358,6 +442,7 @@ export interface OutletDto {
   address: string;
   phone: string;
   brandName?: string;
+  branchId?: BranchId | null;
   receiptHeader?: string;
   receiptFooter?: string;
   isActive: boolean;
@@ -371,6 +456,7 @@ export interface CreateOutletPayload {
   address?: string;
   phone?: string;
   brandName?: string;
+  branchId?: BranchId | null;
   receiptHeader?: string;
   receiptFooter?: string;
   isActive?: boolean;
@@ -383,6 +469,7 @@ export interface UpdateOutletPayload {
   address?: string;
   phone?: string;
   brandName?: string;
+  branchId?: BranchId | null;
   receiptHeader?: string;
   receiptFooter?: string;
   isActive?: boolean;
@@ -397,6 +484,7 @@ export interface AttendanceDto {
   userRole: Role;
   outletId: number | null;
   outletName: string | null;
+  branchId?: BranchId | null;
   type: "in" | "out" | "clock_in" | "clock_out" | string;
   status: string;
   clockInAt?: string | null;
@@ -414,6 +502,8 @@ export interface CreateAttendancePayload {
   user_id?: number;
   outletId?: number | null;
   outlet_id?: number | null;
+  branchId?: BranchId | null;
+  branch_id?: BranchId | null;
   type: "in" | "out" | "clock_in" | "clock_out" | string;
   status?: string;
   photoUrl?: string;

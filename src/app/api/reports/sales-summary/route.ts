@@ -3,6 +3,7 @@ import { orders } from "@/db/schema";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
+import { normalizeBranchId } from "@/lib/types";
 import type { PaymentChannelMetric, ProductSalesMetric, SalesSummaryPeriodDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,9 @@ export async function GET(req: Request) {
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
+    const headerBranch = req.headers.get("x-branch-id");
+    const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
+
     // 1. Ambil seluruh pesanan lunas untuk agregasi kanal pembayaran (termasuk pecahan split)
     const whereConditions = [
       eq(orders.status, "paid"),
@@ -87,6 +91,9 @@ export async function GET(req: Request) {
     ];
     if (outletId) {
       whereConditions.push(eq(orders.outletId, outletId));
+    }
+    if (branchParam && branchParam !== "all") {
+      whereConditions.push(eq(orders.branchId, normalizeBranchId(branchParam)));
     }
 
     const paidOrders = await db
@@ -98,6 +105,7 @@ export async function GET(req: Request) {
         tax: orders.tax,
         serviceCharge: orders.serviceCharge,
         total: orders.total,
+        grandTotal: orders.grandTotal,
       })
       .from(orders)
       .where(and(...whereConditions));
@@ -121,7 +129,7 @@ export async function GET(req: Request) {
     let totalGrossSales = 0;
 
     for (const ord of paidOrders) {
-      const orderTotal = ord.total || (ord.subtotal + (ord.tax ?? 0) + (ord.serviceCharge ?? 0));
+      const orderTotal = ord.grandTotal || ord.total || (ord.subtotal + (ord.tax ?? 0) + (ord.serviceCharge ?? 0));
       totalGrossSales += orderTotal;
 
       const breakdown = (ord.paymentBreakdown as Array<{ method: string; amount: number }>) || [];
@@ -195,6 +203,7 @@ export async function GET(req: Request) {
 
     // 2. Agregasi Penjualan Produk (Menu Performance)
     const outletFilterSql = outletId ? sql`AND o.outlet_id = ${outletId}` : sql``;
+    const branchFilterSql = branchParam && branchParam !== "all" ? sql`AND o.branch_id = ${normalizeBranchId(branchParam)}` : sql``;
 
     const productRows = await db.execute(sql`
       SELECT
@@ -211,6 +220,7 @@ export async function GET(req: Request) {
         AND o.created_at >= ${startDate}
         AND o.created_at <= ${endDate}
         ${outletFilterSql}
+        ${branchFilterSql}
       GROUP BY p.id, oi.product_name, c.name
       ORDER BY revenue DESC, qty DESC
     `);

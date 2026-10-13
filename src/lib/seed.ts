@@ -90,6 +90,9 @@ export async function ensureOrdersSchema() {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_value integer NOT NULL DEFAULT 0;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount integer NOT NULL DEFAULT 0;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference text DEFAULT '';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS grand_total integer NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
+      UPDATE orders SET grand_total = COALESCE(NULLIF(total, 0), GREATEST(0, subtotal - COALESCE(discount_amount, 0)) + COALESCE(service_charge, 0) + COALESCE(tax, 0)) WHERE grand_total = 0;
     `);
   } catch (err) {
     console.error("ensureOrdersSchema error:", err);
@@ -140,6 +143,11 @@ export async function ensureDiscountsTable() {
         scope text NOT NULL DEFAULT 'cart',
         target_product_id integer REFERENCES products(id),
         outlet_id integer REFERENCES outlets(id),
+        branch_id text NOT NULL DEFAULT 'KOPI_ASO',
+        valid_from timestamp with time zone,
+        valid_until timestamp with time zone,
+        start_date timestamp with time zone,
+        end_date timestamp with time zone,
         is_active boolean NOT NULL DEFAULT true,
         created_at timestamp with time zone NOT NULL DEFAULT now(),
         updated_at timestamp with time zone NOT NULL DEFAULT now()
@@ -148,19 +156,32 @@ export async function ensureDiscountsTable() {
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'cart';
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS target_product_id integer REFERENCES products(id);
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS valid_from timestamp with time zone;
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS valid_until timestamp with time zone;
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS start_date timestamp with time zone;
+      ALTER TABLE discounts ADD COLUMN IF NOT EXISTS end_date timestamp with time zone;
       CREATE INDEX IF NOT EXISTS discounts_target_prod_idx ON discounts(target_product_id);
       CREATE INDEX IF NOT EXISTS discounts_outlet_idx ON discounts(outlet_id);
+      CREATE INDEX IF NOT EXISTS discounts_branch_idx ON discounts(branch_id);
+
+      UPDATE discounts SET
+        valid_from = COALESCE(valid_from, start_date, now() - interval '7 days'),
+        valid_until = COALESCE(valid_until, end_date, now() + interval '365 days'),
+        start_date = COALESCE(start_date, valid_from, now() - interval '7 days'),
+        end_date = COALESCE(end_date, valid_until, now() + interval '365 days')
+      WHERE valid_from IS NULL OR valid_until IS NULL OR start_date IS NULL OR end_date IS NULL;
     `);
 
     const existing = await db.execute(sql`SELECT count(*)::int AS cnt FROM discounts`);
     const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
     if (count === 0) {
       await db.execute(sql`
-        INSERT INTO discounts (name, type, value, min_order, scope, is_active) VALUES
-        ('Diskon Member 10%', 'percentage', 10, 30000, 'cart', true),
-        ('Jumat Berkah Rp 5.000', 'fixed', 5000, 25000, 'cart', true),
-        ('Promo Ngopi Hemat 15%', 'percentage', 15, 60000, 'cart', true),
-        ('Voucher Karyawan Rp 10.000', 'fixed', 10000, 50000, 'cart', true);
+        INSERT INTO discounts (name, type, value, min_order, scope, branch_id, valid_from, valid_until, start_date, end_date, is_active) VALUES
+        ('Diskon Member 10%', 'percentage', 10, 30000, 'cart', 'KOPI_ASO', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true),
+        ('Jumat Berkah Rp 5.000', 'fixed', 5000, 25000, 'cart', 'KOPI_ASO', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true),
+        ('Promo Ngopi Hemat 15%', 'percentage', 15, 60000, 'cart', 'KOPI_ASO', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true),
+        ('Voucher Karyawan Rp 10.000', 'fixed', 10000, 50000, 'cart', 'KOPI_ASO', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true);
       `);
     }
   } catch (err) {
@@ -175,6 +196,7 @@ export async function ensureOutletsAndMultiBranchSchema() {
         id serial PRIMARY KEY,
         name text NOT NULL,
         code text NOT NULL UNIQUE,
+        branch_id text NOT NULL DEFAULT 'KOPI_ASO',
         address text NOT NULL DEFAULT '',
         phone text NOT NULL DEFAULT '',
         brand_name text NOT NULL DEFAULT '',
@@ -185,28 +207,45 @@ export async function ensureOutletsAndMultiBranchSchema() {
         updated_at timestamp with time zone NOT NULL DEFAULT now()
       );
 
+      ALTER TABLE outlets ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
       ALTER TABLE outlets ADD COLUMN IF NOT EXISTS brand_name text NOT NULL DEFAULT '';
       ALTER TABLE outlets ADD COLUMN IF NOT EXISTS receipt_header text NOT NULL DEFAULT '';
       ALTER TABLE outlets ADD COLUMN IF NOT EXISTS receipt_footer text NOT NULL DEFAULT '';
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id text DEFAULT 'KOPI_ASO';
+
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
 
       ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS branch_id text DEFAULT 'KOPI_ASO';
       ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS branch_id text DEFAULT 'KOPI_ASO';
 
       ALTER TABLE categories ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id) DEFAULT 1;
+      ALTER TABLE categories ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id) DEFAULT 1;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
 
+      ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
+      ALTER TABLE recipe_items ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
+
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS brand_name text DEFAULT '';
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_header text DEFAULT '';
       ALTER TABLE discounts ADD COLUMN IF NOT EXISTS receipt_footer text DEFAULT '';
+
+      CREATE INDEX IF NOT EXISTS categories_branch_idx ON categories(branch_id);
+      CREATE INDEX IF NOT EXISTS products_branch_idx ON products(branch_id);
+      CREATE INDEX IF NOT EXISTS ingredients_branch_idx ON ingredients(branch_id);
+      CREATE INDEX IF NOT EXISTS recipe_branch_idx ON recipe_items(branch_id);
+      CREATE INDEX IF NOT EXISTS orders_branch_idx ON orders(branch_id);
     `);
 
     // Seed default outlets if none exist
@@ -214,9 +253,10 @@ export async function ensureOutletsAndMultiBranchSchema() {
     const count = (existing as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
     if (count === 0) {
       await db.execute(sql`
-        INSERT INTO outlets (name, code, address, phone, brand_name, receipt_header, receipt_footer, is_active) VALUES
-        ('Cabang Pusat (HQ)', 'HQ', 'Jl. Metro Tanjung Bunga No. 8, Makassar', '0812-4455-6677', 'DOI TA', 'Pusat Kopi & Kuliner Nusantara', 'Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos', true),
-        ('Cabang Pettarani', 'CBG-PTR', 'Jl. A.P. Pettarani No. 24, Makassar', '0812-9988-7766', 'DOI TA Pettarani', '', 'Terima kasih atas kunjungan Anda!\nFollow IG: @doita.pos', true);
+        INSERT INTO outlets (name, code, branch_id, address, phone, brand_name, receipt_header, receipt_footer, is_active) VALUES
+        ('Kopi Aso (HQ)', 'HQ', 'KOPI_ASO', 'Jl. Metro Tanjung Bunga No. 8, Makassar', '0812-4455-6677', 'Kopi Aso', 'Kopi Aso — Specialty Coffee & Kuliner', 'Terima kasih atas kunjungan Anda!\nFollow IG: @kopiaso.id', true),
+        ('Nasi Kebuli Mandhi', 'KBL-01', 'NASI_KEBULI', 'Jl. Sunu No. 15, Makassar', '0813-8899-0011', 'Nasi Kebuli', 'Khas Rempah Arab & Timur Tengah Asli', 'Terima kasih atas kunjungan Anda!\nFollow IG: @nasikebuli.mandhi', true),
+        ('BUCIN UNCLE AI GONG', 'BUC-01', 'BUCIN_UNCLE', 'Jl. Boulevard No. 88, Makassar', '0811-4455-8899', 'BUCIN UNCLE AI GONG', 'Authentic Asian Comfort Food & Dimsum', 'Xie Xie! Terima kasih telah bersantap di Bucin Uncle AI Gong!', true);
       `);
     }
 
@@ -225,10 +265,11 @@ export async function ensureOutletsAndMultiBranchSchema() {
     const kebuliCount = (kebuliCheck as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
     if (kebuliCount === 0) {
       await db.execute(sql`
-        INSERT INTO outlets (name, code, address, phone, brand_name, receipt_header, receipt_footer, is_active)
+        INSERT INTO outlets (name, code, branch_id, address, phone, brand_name, receipt_header, receipt_footer, is_active)
         VALUES (
           'Nasi Kebuli Mandhi',
           'KBL-01',
+          'NASI_KEBULI',
           'Jl. Sunu No. 15, Makassar',
           '0813-8899-0011',
           'Nasi Kebuli Mandhi',
@@ -238,19 +279,46 @@ export async function ensureOutletsAndMultiBranchSchema() {
         );
       `);
     } else {
-      // Perbarui brand_name & receipt_header jika masih kosong
       await db.execute(sql`
         UPDATE outlets
-        SET brand_name = 'Nasi Kebuli Mandhi',
+        SET branch_id = 'NASI_KEBULI',
+            brand_name = 'Nasi Kebuli Mandhi',
             receipt_header = 'Khas Rempah Arab & Timur Tengah Asli',
             receipt_footer = 'Terima kasih atas kunjungan Anda!\nFollow IG: @nasikebuli.mandhi'
-        WHERE code = 'KBL-01' AND (brand_name = '' OR receipt_header = '');
+        WHERE code = 'KBL-01';
       `);
     }
 
-    // Set fallback branding untuk cabang HQ jika masih kosong
+    // Pastikan cabang BUCIN UNCLE AI GONG (BUC-01) terdaftar
+    const bucinCheck = await db.execute(sql`SELECT count(*)::int AS cnt FROM outlets WHERE code = 'BUC-01'`);
+    const bucinCount = (bucinCheck as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+    if (bucinCount === 0) {
+      await db.execute(sql`
+        INSERT INTO outlets (name, code, branch_id, address, phone, brand_name, receipt_header, receipt_footer, is_active)
+        VALUES (
+          'BUCIN UNCLE AI GONG',
+          'BUC-01',
+          'BUCIN_UNCLE',
+          'Jl. Boulevard No. 88, Makassar',
+          '0811-4455-8899',
+          'BUCIN UNCLE AI GONG',
+          'Authentic Asian Comfort Food & Dimsum',
+          'Xie Xie! Terima kasih telah bersantap di Bucin Uncle AI Gong!',
+          true
+        );
+      `);
+    } else {
+      await db.execute(sql`
+        UPDATE outlets
+        SET branch_id = 'BUCIN_UNCLE',
+            brand_name = 'BUCIN UNCLE AI GONG'
+        WHERE code = 'BUC-01';
+      `);
+    }
+
+    // Set fallback branding untuk cabang HQ / Kopi Aso
     await db.execute(sql`
-      UPDATE outlets SET brand_name = 'DOI TA' WHERE code = 'HQ' AND (brand_name IS NULL OR brand_name = '');
+      UPDATE outlets SET branch_id = 'KOPI_ASO', brand_name = 'Kopi Aso' WHERE code IN ('HQ', 'KOPAS001');
     `);
 
     // Assign default outlet_id = 1 to existing users, orders, shifts, categories, products that have null outlet_id
@@ -274,6 +342,7 @@ export async function ensureAttendancesTable() {
         id serial PRIMARY KEY,
         user_id integer NOT NULL REFERENCES users(id),
         outlet_id integer REFERENCES outlets(id),
+        branch_id text NOT NULL DEFAULT 'KOPI_ASO',
         type text NOT NULL,
         status text DEFAULT 'present',
         clock_in_at timestamp with time zone,
@@ -289,6 +358,7 @@ export async function ensureAttendancesTable() {
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS note text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS outlet_id integer REFERENCES outlets(id);
+      ALTER TABLE attendances ADD COLUMN IF NOT EXISTS branch_id text NOT NULL DEFAULT 'KOPI_ASO';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT now();
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS mood text DEFAULT '';
       ALTER TABLE attendances ADD COLUMN IF NOT EXISTS mood_diagnosis text DEFAULT '';
@@ -297,11 +367,9 @@ export async function ensureAttendancesTable() {
         CHECK (type = ANY (ARRAY['in'::text, 'out'::text, 'clock_in'::text, 'clock_out'::text]));
       CREATE INDEX IF NOT EXISTS attendances_user_idx ON attendances(user_id);
       CREATE INDEX IF NOT EXISTS attendances_outlet_idx ON attendances(outlet_id);
+      CREATE INDEX IF NOT EXISTS attendances_branch_idx ON attendances(branch_id);
       CREATE INDEX IF NOT EXISTS attendances_created_idx ON attendances(created_at);
       CREATE INDEX IF NOT EXISTS attendances_type_idx ON attendances(type);
-
-      -- Buat view attendance_logs sebagai alias kompatibilitas untuk attendances
-      CREATE OR REPLACE VIEW attendance_logs AS SELECT * FROM attendances;
 
       -- Backfill sentimen mood holistik untuk log absensi yang belum memiliki tag mood
       UPDATE attendances
@@ -324,9 +392,245 @@ export async function ensureAttendancesTable() {
   }
 }
 
+export async function ensureMultiTenantViewsAndData() {
+  try {
+    // Buat / perbarui views kompatibilitas nama tabel standar multi-tenant
+    await db.execute(sql`
+      DROP VIEW IF EXISTS attendance_logs CASCADE;
+      DROP VIEW IF EXISTS transactions CASCADE;
+      DROP VIEW IF EXISTS raw_materials CASCADE;
+      DROP VIEW IF EXISTS recipes CASCADE;
+      DROP VIEW IF EXISTS promos CASCADE;
+
+      CREATE OR REPLACE VIEW attendance_logs AS SELECT * FROM attendances;
+      CREATE OR REPLACE VIEW transactions AS SELECT * FROM orders;
+      CREATE OR REPLACE VIEW raw_materials AS SELECT * FROM ingredients;
+      CREATE OR REPLACE VIEW recipes AS SELECT * FROM recipe_items;
+      CREATE OR REPLACE VIEW promos AS SELECT * FROM discounts;
+    `);
+
+    // Pastikan entitas NASI_KEBULI memiliki katalog produk, bahan baku, resep (BOM), dan promo terisolasi
+    const kebuliProdCheck = await db.execute(sql`SELECT count(*)::int AS cnt FROM products WHERE branch_id = 'NASI_KEBULI'`);
+    const kebuliProdCount = (kebuliProdCheck as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+
+    if (kebuliProdCount === 0) {
+      // Ambil outlet_id KBL-01
+      const kblOutletRes = await db.execute(sql`SELECT id FROM outlets WHERE code = 'KBL-01' LIMIT 1`);
+      const kblOutletId = (kblOutletRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 3;
+
+      // Kategori Nasi Kebuli
+      const catMainRes = await db.execute(sql`
+        INSERT INTO categories (name, icon, sort_order, outlet_id, branch_id)
+        VALUES ('NASI KEBULI & MANDHI', 'Flame', 1, ${kblOutletId}, 'NASI_KEBULI')
+        RETURNING id;
+      `);
+      const catDrinkRes = await db.execute(sql`
+        INSERT INTO categories (name, icon, sort_order, outlet_id, branch_id)
+        VALUES ('MINUMAN TIMUR TENGAH', 'CupSoda', 2, ${kblOutletId}, 'NASI_KEBULI')
+        RETURNING id;
+      `);
+      const kblCatMain = (catMainRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 1;
+      const kblCatDrink = (catDrinkRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 1;
+
+      // Bahan Baku Nasi Kebuli
+      const ingBerasRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('BERAS BASMATI PREMIUM', 'g', 15000, 2000, 45, 'NASI_KEBULI') RETURNING id;
+      `);
+      const ingKambingRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('DAGING KAMBING MUDA', 'g', 8000, 1500, 140, 'NASI_KEBULI') RETURNING id;
+      `);
+      const ingAyamRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('AYAM REMPAH MANDHI', 'g', 10000, 2000, 55, 'NASI_KEBULI') RETURNING id;
+      `);
+      const ingRempahRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('BUMBU KEBULI & MINYAK SAMIN', 'g', 5000, 500, 80, 'NASI_KEBULI') RETURNING id;
+      `);
+      const ingTehArabRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('TEH ADENI & KAPULAGA', 'g', 3000, 400, 70, 'NASI_KEBULI') RETURNING id;
+      `);
+
+      const idBeras = (ingBerasRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idKambing = (ingKambingRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idAyam = (ingAyamRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idRempah = (ingRempahRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idTehArab = (ingTehArabRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+
+      // Produk Nasi Kebuli
+      // 1. Nasi Kebuli Kambing Spesial: 150g Beras (6750) + 120g Kambing (16800) + 25g Rempah (2000) = HPP 25.550, Harga 48.000
+      const p1Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${kblCatMain}, 'NASI KEBULI KAMBING SPESIAL', 'Beras Basmati dengan kambing muda empuk & minyak samin', 48000, 25550, '#D97706', 'Flame', true, ${kblOutletId}, 'NASI_KEBULI', 'lelah')
+        RETURNING id;
+      `);
+      // 2. Nasi Mandhi Ayam Bakar: 150g Beras (6750) + 130g Ayam (7150) + 20g Rempah (1600) = HPP 15.500, Harga 35.000
+      const p2Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${kblCatMain}, 'NASI MANDHI AYAM REMPAH', 'Nasi Mandhi asap arang dengan ayam panggang rempah Arab', 35000, 15500, '#EA580C', 'Flame', true, ${kblOutletId}, 'NASI_KEBULI', 'optimal')
+        RETURNING id;
+      `);
+      // 3. Nasi Kebuli Talam Sultan (Sharing): 450g Beras (20250) + 250g Kambing (35000) + 60g Rempah (4800) = HPP 60.050, Harga 125.000
+      const p3Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${kblCatMain}, 'TALAM SULTAN KEBULI (3 PORSI)', 'Nampan talam sharing beras basmati & kambing bakar', 125000, 60050, '#B45309', 'Sparkles', true, ${kblOutletId}, 'NASI_KEBULI', 'optimal')
+        RETURNING id;
+      `);
+      // 4. Syahi Adeni (Teh Susu Rempah Arab): 30g Teh Arab (2100) = HPP 2.100, Harga 15.000
+      const p4Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${kblCatDrink}, 'SYAHI ADENI REMPAH', 'Teh susu rempah kapulaga & cengkeh khas Yaman', 15000, 2100, '#10B981', 'CupSoda', true, ${kblOutletId}, 'NASI_KEBULI', 'tegang')
+        RETURNING id;
+      `);
+
+      const p1Id = (p1Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const p2Id = (p2Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const p3Id = (p3Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const p4Id = (p4Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+
+      if (p1Id && idBeras && idKambing && idRempah) {
+        await db.execute(sql`
+          INSERT INTO recipe_items (product_id, ingredient_id, qty, branch_id) VALUES
+          (${p1Id}, ${idBeras}, 150, 'NASI_KEBULI'),
+          (${p1Id}, ${idKambing}, 120, 'NASI_KEBULI'),
+          (${p1Id}, ${idRempah}, 25, 'NASI_KEBULI'),
+          (${p2Id}, ${idBeras}, 150, 'NASI_KEBULI'),
+          (${p2Id}, ${idAyam}, 130, 'NASI_KEBULI'),
+          (${p2Id}, ${idRempah}, 20, 'NASI_KEBULI'),
+          (${p3Id}, ${idBeras}, 450, 'NASI_KEBULI'),
+          (${p3Id}, ${idKambing}, 250, 'NASI_KEBULI'),
+          (${p3Id}, ${idRempah}, 60, 'NASI_KEBULI'),
+          (${p4Id}, ${idTehArab}, 30, 'NASI_KEBULI');
+        `);
+      }
+
+      // Promo Khusus Nasi Kebuli
+      await db.execute(sql`
+        INSERT INTO discounts (name, type, value, min_order, scope, outlet_id, branch_id, valid_from, valid_until, start_date, end_date, is_active) VALUES
+        ('Jumat Berkah Kebuli Rp 10.000', 'fixed', 10000, 45000, 'cart', ${kblOutletId}, 'NASI_KEBULI', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true),
+        ('Diskon Talam Keluarga 15%', 'percentage', 15, 100000, 'cart', ${kblOutletId}, 'NASI_KEBULI', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true);
+      `);
+    }
+
+    // Pastikan entitas BUCIN_UNCLE memiliki katalog produk, bahan baku, resep (BOM), dan promo terisolasi
+    const bucinProdCheck = await db.execute(sql`SELECT count(*)::int AS cnt FROM products WHERE branch_id = 'BUCIN_UNCLE'`);
+    const bucinProdCount = (bucinProdCheck as unknown as { rows: { cnt: number }[] }).rows[0]?.cnt ?? 0;
+
+    if (bucinProdCount === 0) {
+      const bucOutletRes = await db.execute(sql`SELECT id FROM outlets WHERE code = 'BUC-01' LIMIT 1`);
+      const bucOutletId = (bucOutletRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 4;
+
+      // Kategori BUCIN UNCLE AI GONG
+      const catBowlRes = await db.execute(sql`
+        INSERT INTO categories (name, icon, sort_order, outlet_id, branch_id)
+        VALUES ('UNCLE RICE BOWL & MIE', 'Flame', 1, ${bucOutletId}, 'BUCIN_UNCLE')
+        RETURNING id;
+      `);
+      const catDimsumRes = await db.execute(sql`
+        INSERT INTO categories (name, icon, sort_order, outlet_id, branch_id)
+        VALUES ('ARTISAN DIMSUM & BAO', 'Croissant', 2, ${bucOutletId}, 'BUCIN_UNCLE')
+        RETURNING id;
+      `);
+      const catTeaRes = await db.execute(sql`
+        INSERT INTO categories (name, icon, sort_order, outlet_id, branch_id)
+        VALUES ('ORIENTAL TEA & SILKY DRINK', 'CupSoda', 3, ${bucOutletId}, 'BUCIN_UNCLE')
+        RETURNING id;
+      `);
+
+      const bucCatBowl = (catBowlRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 1;
+      const bucCatDimsum = (catDimsumRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 1;
+      const bucCatTea = (catTeaRes as unknown as { rows: { id: number }[] }).rows[0]?.id ?? 1;
+
+      // Bahan Baku BUCIN UNCLE AI GONG
+      const ingBeefSliceRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('US BEEF SHORTPLATE SLICE', 'g', 9000, 1500, 130, 'BUCIN_UNCLE') RETURNING id;
+      `);
+      const ingRiceBowlRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('BERAS JEPANG JAPONICA', 'g', 12000, 2000, 35, 'BUCIN_UNCLE') RETURNING id;
+      `);
+      const ingDimsumRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('ADONAN UDANG & AYAM DIMSUM', 'g', 7500, 1000, 95, 'BUCIN_UNCLE') RETURNING id;
+      `);
+      const ingChiliOilRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('UNCLE SIGNATURE CHILI OIL', 'ml', 4000, 500, 65, 'BUCIN_UNCLE') RETURNING id;
+      `);
+      const ingLiangTehRes = await db.execute(sql`
+        INSERT INTO ingredients (name, unit, stock_qty, low_threshold, cost_per_unit, branch_id)
+        VALUES ('HERBAL LIANG TEH & CHRYSANTHEMUM', 'ml', 10000, 1500, 18, 'BUCIN_UNCLE') RETURNING id;
+      `);
+
+      const idBeefSlice = (ingBeefSliceRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idJaponica = (ingRiceBowlRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idDimsumMix = (ingDimsumRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idChiliOil = (ingChiliOilRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const idLiangTeh = (ingLiangTehRes as unknown as { rows: { id: number }[] }).rows[0]?.id;
+
+      // Produk BUCIN UNCLE AI GONG
+      // 1. Bucin Beef Gyudon Chili Oil: 140g Japonica (4900) + 100g Beef (13000) + 20ml Chili Oil (1300) = HPP 19.200, Harga 38.000
+      const bp1Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${bucCatBowl}, 'BUCIN BEEF GYUDON CHILI OIL', 'US Beef Slice glazed dengan chili oil rahasia Uncle AI Gong', 38000, 19200, '#EF4444', 'Flame', true, ${bucOutletId}, 'BUCIN_UNCLE', 'lelah')
+        RETURNING id;
+      `);
+      // 2. Shumai Udang Mentai AI Gong (4 pcs): 120g Dimsum (11400) + 15ml Chili Oil (975) = HPP 12.375, Harga 26.000
+      const bp2Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${bucCatDimsum}, 'SHUMAI UDANG MENTAI (4 PCS)', 'Dimsum udang ayam padat dengan saus mentai torch', 26000, 12375, '#F59E0B', 'Croissant', true, ${bucOutletId}, 'BUCIN_UNCLE', 'cemas')
+        RETURNING id;
+      `);
+      // 3. Wonton Chili Oil Szechuan: 110g Dimsum (10450) + 30ml Chili Oil (1950) = HPP 12.400, Harga 25.000
+      const bp3Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${bucCatDimsum}, 'WONTON CHILI OIL SZECHUAN', 'Pangsit lembut siram minyak cabai Szechuan gurih pedas', 25000, 12400, '#DC2626', 'Sparkles', true, ${bucOutletId}, 'BUCIN_UNCLE', 'optimal')
+        RETURNING id;
+      `);
+      // 4. Es Liang Teh Bunga Krisan: 250ml Liang Teh (4500) = HPP 4.500, Harga 14.000
+      const bp4Res = await db.execute(sql`
+        INSERT INTO products (category_id, name, tagline, price, hpp, color, icon, is_active, outlet_id, branch_id, ai_mood)
+        VALUES (${bucCatTea}, 'ES LIANG TEH KRISAN AI GONG', 'Seduhan herbal bunga krisan penyegar tenggorokan', 14000, 4500, '#10B981', 'Leaf', true, ${bucOutletId}, 'BUCIN_UNCLE', 'tegang')
+        RETURNING id;
+      `);
+
+      const bp1Id = (bp1Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const bp2Id = (bp2Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const bp3Id = (bp3Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+      const bp4Id = (bp4Res as unknown as { rows: { id: number }[] }).rows[0]?.id;
+
+      if (bp1Id && idBeefSlice && idJaponica && idDimsumMix && idChiliOil && idLiangTeh) {
+        await db.execute(sql`
+          INSERT INTO recipe_items (product_id, ingredient_id, qty, branch_id) VALUES
+          (${bp1Id}, ${idJaponica}, 140, 'BUCIN_UNCLE'),
+          (${bp1Id}, ${idBeefSlice}, 100, 'BUCIN_UNCLE'),
+          (${bp1Id}, ${idChiliOil}, 20, 'BUCIN_UNCLE'),
+          (${bp2Id}, ${idDimsumMix}, 120, 'BUCIN_UNCLE'),
+          (${bp2Id}, ${idChiliOil}, 15, 'BUCIN_UNCLE'),
+          (${bp3Id}, ${idDimsumMix}, 110, 'BUCIN_UNCLE'),
+          (${bp3Id}, ${idChiliOil}, 30, 'BUCIN_UNCLE'),
+          (${bp4Id}, ${idLiangTeh}, 250, 'BUCIN_UNCLE');
+        `);
+      }
+
+      // Promo Khusus BUCIN UNCLE AI GONG
+      await db.execute(sql`
+        INSERT INTO discounts (name, type, value, min_order, scope, outlet_id, branch_id, valid_from, valid_until, start_date, end_date, is_active) VALUES
+        ('Promo Paket Bucin Berdua 12%', 'percentage', 12, 50000, 'cart', ${bucOutletId}, 'BUCIN_UNCLE', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true),
+        ('Potongan Uncle Rp 8.000', 'fixed', 8000, 40000, 'cart', ${bucOutletId}, 'BUCIN_UNCLE', now() - interval '7 days', now() + interval '365 days', now() - interval '7 days', now() + interval '365 days', true);
+      `);
+    }
+  } catch (err) {
+    console.error("ensureMultiTenantViewsAndData error:", err);
+  }
+}
+
 /**
- * Idempotent schema verifier — hanya memastikan tabel & kolom yang dibutuhkan aplikasi sudah ada di Supabase.
- * Tidak memasukkan data tiruan / auto-seed sama sekali.
+ * Idempotent schema verifier — memastikan tabel, kolom, views, dan entitas multi-cabang siap di Supabase.
  */
 export async function ensureAiMoodSchema() {
   try {
@@ -372,6 +676,7 @@ export async function ensureSchema(): Promise<void> {
       await ensureOutletsAndMultiBranchSchema();
       await ensureAttendancesTable();
       await ensureAiMoodSchema();
+      await ensureMultiTenantViewsAndData();
     })().catch((e) => {
       schemaPromise = null;
       throw e;
@@ -382,7 +687,6 @@ export async function ensureSchema(): Promise<void> {
 
 /**
  * Alias untuk kompatibilitas mundur dengan rute API yang memanggil ensureSeeded.
- * Dipastikan tidak menyisipkan data tiruan apapun.
  */
 export async function ensureSeeded(_force = false): Promise<void> {
   return ensureSchema();

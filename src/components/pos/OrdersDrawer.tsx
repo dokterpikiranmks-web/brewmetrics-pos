@@ -42,7 +42,7 @@ export default function OrdersDrawer({
   onVoidOrder?: (order: TodayOrderDto) => void;
 }) {
   const activeOrders = orders.filter((o) => o.status !== "void");
-  const todayTotal = activeOrders.reduce((s, o) => s + o.total, 0);
+  const todayTotal = activeOrders.reduce((s, o) => s + (o.grandTotal ?? o.grand_total ?? o.total), 0);
 
   return (
     <AnimatePresence>
@@ -148,7 +148,7 @@ export default function OrdersDrawer({
                             isVoided ? "line-through text-faint" : "text-cream"
                           }`}
                         >
-                          {formatIDR(o.total)}
+                          {formatIDR(o.grandTotal ?? o.grand_total ?? o.total)}
                         </p>
                         <p className="text-[10px] text-faint mt-0.5 uppercase">
                           {PAY_LABEL[o.paymentMethod] ?? o.paymentMethod}

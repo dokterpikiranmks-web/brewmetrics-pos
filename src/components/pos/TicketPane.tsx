@@ -25,6 +25,7 @@ import {
   Building2,
 } from "lucide-react";
 import { SelfieAttendanceModal } from "@/components/attendance/SelfieAttendanceModal";
+import { useBranch } from "@/context/BranchContext";
 import { cartTotal, calculateOrderTotals, type CartLine, type OrderTotals } from "@/lib/cart";
 import { formatIDR } from "@/lib/format";
 import type { StoreSettingDto, OrderType, DiscountType, DiscountDto, DiscountScope, SessionUser } from "@/lib/types";
@@ -98,6 +99,7 @@ export default function TicketPane({
   cashierName = "Kasir",
   currentUser,
 }: TicketPaneProps) {
+  const { currentBranch } = useBranch();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
@@ -310,6 +312,7 @@ export default function TicketPane({
         lines={lines}
         subtotal={rawSubtotal}
         outletId={currentUser?.outletId}
+        branchId={currentBranch}
         currentDiscount={discount}
         onClose={() => setDiscountModalOpen(false)}
         onApply={(d) => {
@@ -883,6 +886,7 @@ interface PromoSelectModalProps {
   lines: CartLine[];
   subtotal: number;
   outletId?: number | null;
+  branchId?: string | null;
   currentDiscount: {
     id?: number;
     name?: string;
@@ -909,6 +913,7 @@ function PromoSelectModal({
   lines,
   subtotal,
   outletId,
+  branchId,
   currentDiscount,
   onClose,
   onApply,
@@ -923,12 +928,25 @@ function PromoSelectModal({
       setLoading(true);
       setError(null);
       try {
-        const endpoint = `/api/discounts?activeOnly=true${outletId ? `&outletId=${outletId}` : ""}`;
-        const res = await fetch(endpoint);
+        const endpoint = `/api/discounts?activeOnly=true${outletId ? `&outletId=${outletId}` : ""}${branchId ? `&branch_id=${branchId}` : ""}`;
+        const res = await fetch(endpoint, {
+          headers: branchId ? { "x-branch-id": branchId } : {},
+        });
         if (!res.ok) throw new Error("Gagal mengambil data promo");
         const json = await res.json();
-        const list = json.discounts || json.data || [];
-        setPromos(list);
+        const list: DiscountDto[] = json.discounts || json.data || [];
+
+        // TIME-BOUND PROMO FILTERING (currentDate >= start_date && currentDate <= end_date)
+        const now = new Date();
+        const activePromos = list.filter((p) => {
+          const fromStr = p.validFrom || p.startDate;
+          const untilStr = p.validUntil || p.endDate;
+          if (fromStr && now < new Date(fromStr)) return false;
+          if (untilStr && now > new Date(untilStr)) return false;
+          return true;
+        });
+
+        setPromos(activePromos);
       } catch (err: any) {
         setError(err.message || "Gagal memuat daftar promo");
       } finally {
@@ -936,10 +954,16 @@ function PromoSelectModal({
       }
     }
     fetchPromos();
-  }, [open, outletId]);
+  }, [open, outletId, branchId]);
 
   const handleApply = (promo: DiscountDto, eligible: boolean) => {
     if (!eligible) return;
+    const now = new Date();
+    const fromStr = promo.validFrom || promo.startDate;
+    const untilStr = promo.validUntil || promo.endDate;
+    if (fromStr && now < new Date(fromStr)) return;
+    if (untilStr && now > new Date(untilStr)) return;
+
     onApply({
       id: promo.id,
       name: promo.name,
@@ -1119,6 +1143,11 @@ function PromoSelectModal({
                               ? `Min. belanja ${formatIDR(promo.minOrder)}`
                               : "Tanpa minimum belanja"}
                           </p>
+                          {(promo.validUntil || promo.endDate) && (
+                            <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">
+                              Berlaku s/d {new Date(promo.validUntil || promo.endDate!).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          )}
                         </div>
 
                         {isSelected ? (

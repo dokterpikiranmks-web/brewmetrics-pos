@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { TodayOrderDto, OrderReceipt, StoreSettingDto } from "@/lib/types";
 import { formatIDR, formatTime, formatDateID } from "@/lib/format";
+import { useBranch } from "@/context/BranchContext";
 import ReceiptPrint from "./ReceiptPrint";
 import {
   printOrderReceipt,
@@ -50,6 +51,7 @@ export default function OrderHistoryModal({
   onClose,
   storeSettings,
 }: OrderHistoryModalProps) {
+  const { currentBranch } = useBranch();
   const [orders, setOrders] = useState<TodayOrderDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,9 @@ export default function OrderHistoryModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/orders");
+      const res = await fetch(`/api/orders?branch_id=${currentBranch}`, {
+        headers: { "x-branch-id": currentBranch },
+      });
       if (!res.ok) throw new Error("Gagal mengambil riwayat transaksi.");
       const data = await res.json();
       setOrders(data.orders || []);
@@ -123,11 +127,12 @@ export default function OrderHistoryModal({
           else if (m === "transfer") transfer += amt;
         }
       } else {
+        const orderFinal = o.grandTotal ?? o.grand_total ?? o.total;
         const m = String(o.paymentMethod).toLowerCase();
-        if (m === "cash") cash += o.total;
-        else if (m === "qris") qris += o.total;
-        else if (m === "debit") debit += o.total;
-        else if (m === "transfer") transfer += o.total;
+        if (m === "cash") cash += orderFinal;
+        else if (m === "qris") qris += orderFinal;
+        else if (m === "debit") debit += orderFinal;
+        else if (m === "transfer") transfer += orderFinal;
       }
     }
 
@@ -483,8 +488,13 @@ export default function OrderHistoryModal({
                             Total Tagihan
                           </p>
                           <p className="font-display text-base font-bold tabular text-brand">
-                            {formatIDR(order.total)}
+                            {formatIDR(order.grandTotal ?? order.grand_total ?? order.total)}
                           </p>
+                          {(order.discountAmount ?? 0) > 0 && (
+                            <p className="text-[10px] text-amber-300 font-medium tabular">
+                              Diskon: -{formatIDR(order.discountAmount ?? 0)}
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -762,9 +772,9 @@ export default function OrderHistoryModal({
                             )}
 
                             <div className="flex justify-between pt-2 border-t border-line font-bold text-cream text-sm">
-                              <span>Total Bayar</span>
+                              <span>Total Bayar (Grand Total)</span>
                               <span className="font-display text-base tabular text-brand">
-                                {formatIDR(selectedReceipt.total || selectedReceipt.subtotal)}
+                                {formatIDR(selectedReceipt.grandTotal || selectedReceipt.grand_total || selectedReceipt.total || selectedReceipt.subtotal)}
                               </span>
                             </div>
 

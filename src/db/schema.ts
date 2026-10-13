@@ -14,10 +14,13 @@ import { relations } from "drizzle-orm";
 
 /* --------------------------------- OUTLETS --------------------------------- */
 
+export const BRANCH_ENUM = ["KOPI_ASO", "NASI_KEBULI", "BUCIN_UNCLE"] as const;
+
 export const outlets = pgTable("outlets", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   code: text("code").notNull().unique(),
+  branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
   address: text("address").notNull().default(""),
   phone: text("phone").notNull().default(""),
   brandName: text("brand_name").notNull().default(""),
@@ -36,6 +39,7 @@ export const users = pgTable("users", {
   pin: text("pin").notNull(),
   role: text("role", { enum: ["cashier", "manager", "owner"] }).notNull(),
   outletId: integer("outlet_id").references(() => outlets.id),
+  branchId: text("branch_id", { enum: BRANCH_ENUM }).default("KOPI_ASO"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -52,8 +56,12 @@ export const categories = pgTable(
     outletId: integer("outlet_id")
       .references(() => outlets.id)
       .default(1),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
   },
-  (t) => [index("categories_outlet_idx").on(t.outletId)]
+  (t) => [
+    index("categories_outlet_idx").on(t.outletId),
+    index("categories_branch_idx").on(t.branchId),
+  ]
 );
 
 export const products = pgTable(
@@ -75,6 +83,7 @@ export const products = pgTable(
     outletId: integer("outlet_id")
       .references(() => outlets.id)
       .default(1),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
     brandName: text("brand_name").default(""),
     receiptHeader: text("receipt_header").default(""),
     receiptFooter: text("receipt_footer").default(""),
@@ -83,6 +92,7 @@ export const products = pgTable(
   (t) => [
     index("products_category_idx").on(t.categoryId),
     index("products_outlet_idx").on(t.outletId),
+    index("products_branch_idx").on(t.branchId),
   ]
 );
 
@@ -108,15 +118,20 @@ export const modifiers = pgTable("modifiers", {
 
 /* -------------------------------- INVENTORY -------------------------------- */
 
-export const ingredients = pgTable("ingredients", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  unit: text("unit", { enum: ["g", "ml", "pcs"] }).notNull(),
-  stockQty: doublePrecision("stock_qty").notNull().default(0),
-  lowThreshold: doublePrecision("low_threshold").notNull().default(0),
-  costPerUnit: doublePrecision("cost_per_unit").notNull().default(0), // IDR per g/ml/pcs
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const ingredients = pgTable(
+  "ingredients",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    unit: text("unit", { enum: ["g", "ml", "pcs"] }).notNull(),
+    stockQty: doublePrecision("stock_qty").notNull().default(0),
+    lowThreshold: doublePrecision("low_threshold").notNull().default(0),
+    costPerUnit: doublePrecision("cost_per_unit").notNull().default(0), // IDR per g/ml/pcs
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("ingredients_branch_idx").on(t.branchId)]
+);
 
 export const recipeItems = pgTable(
   "recipe_items",
@@ -130,8 +145,12 @@ export const recipeItems = pgTable(
       .notNull()
       .references(() => ingredients.id),
     qty: doublePrecision("qty").notNull(),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
   },
-  (t) => [index("recipe_product_idx").on(t.productId)]
+  (t) => [
+    index("recipe_product_idx").on(t.productId),
+    index("recipe_branch_idx").on(t.branchId),
+  ]
 );
 
 export const bundleItems = pgTable(
@@ -214,6 +233,7 @@ export const orders = pgTable(
     tax: integer("tax").notNull().default(0),
     serviceCharge: integer("service_charge").notNull().default(0),
     total: integer("total").notNull().default(0),
+    grandTotal: integer("grand_total").notNull().default(0),
     hpp: integer("hpp").notNull().default(0),
     profit: integer("profit").notNull().default(0),
     tendered: integer("tendered"),
@@ -222,6 +242,7 @@ export const orders = pgTable(
     outletId: integer("outlet_id")
       .references(() => outlets.id)
       .default(1),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
     brandName: text("brand_name").default(""),
     receiptHeader: text("receipt_header").default(""),
     receiptFooter: text("receipt_footer").default(""),
@@ -232,6 +253,7 @@ export const orders = pgTable(
     uniqueIndex("orders_number_idx").on(t.orderNumber),
     uniqueIndex("orders_offline_idx").on(t.offlineId),
     index("orders_outlet_idx").on(t.outletId),
+    index("orders_branch_idx").on(t.branchId),
     index("orders_created_idx").on(t.createdAt),
   ]
 );
@@ -266,9 +288,14 @@ export const cashMovements = pgTable(
     note: text("note").notNull().default(""),
     userName: text("user_name").notNull().default(""),
     outletId: integer("outlet_id").references(() => outlets.id),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).default("KOPI_ASO"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("cash_created_idx").on(t.createdAt), index("cash_outlet_idx").on(t.outletId)]
+  (t) => [
+    index("cash_created_idx").on(t.createdAt),
+    index("cash_outlet_idx").on(t.outletId),
+    index("cash_branch_idx").on(t.branchId),
+  ]
 );
 
 /* ------------------------------ SHIFT REPORTS ------------------------------ */
@@ -280,6 +307,7 @@ export const shiftReports = pgTable(
     cashierId: integer("cashier_id").references(() => users.id),
     cashierName: text("cashier_name").notNull().default(""),
     outletId: integer("outlet_id").references(() => outlets.id),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).default("KOPI_ASO"),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
     expectedCash: integer("expected_cash").notNull(),
@@ -296,6 +324,7 @@ export const shiftReports = pgTable(
     index("shift_reports_created_idx").on(t.createdAt),
     index("shift_reports_cashier_idx").on(t.cashierId),
     index("shift_reports_outlet_idx").on(t.outletId),
+    index("shift_reports_branch_idx").on(t.branchId),
   ]
 );
 
@@ -312,9 +341,14 @@ export const discounts = pgTable(
     scope: text("scope", { enum: ["cart", "product"] }).notNull().default("cart"),
     targetProductId: integer("target_product_id").references(() => products.id),
     outletId: integer("outlet_id").references(() => outlets.id),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
     brandName: text("brand_name").default(""),
     receiptHeader: text("receipt_header").default(""),
     receiptFooter: text("receipt_footer").default(""),
+    validFrom: timestamp("valid_from", { withTimezone: true }),
+    validUntil: timestamp("valid_until", { withTimezone: true }),
+    startDate: timestamp("start_date", { withTimezone: true }),
+    endDate: timestamp("end_date", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -322,6 +356,7 @@ export const discounts = pgTable(
   (t) => [
     index("discounts_target_prod_idx").on(t.targetProductId),
     index("discounts_outlet_idx").on(t.outletId),
+    index("discounts_branch_idx").on(t.branchId),
   ]
 );
 
@@ -355,6 +390,7 @@ export const attendances = pgTable(
       .notNull()
       .references(() => users.id),
     outletId: integer("outlet_id").references(() => outlets.id),
+    branchId: text("branch_id", { enum: BRANCH_ENUM }).notNull().default("KOPI_ASO"),
     type: text("type").notNull(),
     status: text("status").notNull().default("present"),
     clockInAt: timestamp("clock_in_at", { withTimezone: true }),
@@ -370,6 +406,7 @@ export const attendances = pgTable(
   (t) => [
     index("attendances_user_idx").on(t.userId),
     index("attendances_outlet_idx").on(t.outletId),
+    index("attendances_branch_idx").on(t.branchId),
     index("attendances_created_idx").on(t.createdAt),
     index("attendances_type_idx").on(t.type),
   ]

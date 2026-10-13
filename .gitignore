@@ -24,11 +24,9 @@ gradle.properties
 settings.gradle
 manifest-checksum.txt
 /app/
-build/
 local.properties
 store_icon.png
 twa-manifest.json
 sign-apk.ps1
-
-
+*.tsbuildinfo
 

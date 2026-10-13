@@ -1,9 +1,10 @@
 import { db } from "@/db";
 import { categories, modifiers, products, variants } from "@/db/schema";
-import { and, asc, eq, or, isNull } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import type { CatalogDto } from "@/lib/types";
+import { normalizeBranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,44 +14,31 @@ export async function GET(req: Request) {
   await ensureSeeded();
 
   const url = new URL(req.url);
-  const headerOutlet = req.headers.get("x-outlet-id");
-  const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
-  const role = user?.role ?? (req.headers.get("x-user-role") as any);
+  const headerBranch = req.headers.get("x-branch-id");
+  const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
+  const targetBranch = normalizeBranchId(branchParam);
 
-  const userOutletId = user?.outletId ?? 1;
-
-  let targetOutletId: number | null = null;
-  if (role === "cashier") {
-    // STRICT OUTLET ISOLATION: Kasir tidak boleh bypass
-    targetOutletId = userOutletId;
-  } else if (outletParam && outletParam !== "all") {
-    const parsed = Number(outletParam);
-    if (!isNaN(parsed)) {
-      targetOutletId = parsed;
-    }
-  }
-
-  const catWhere = targetOutletId !== null
-    ? or(eq(categories.outletId, targetOutletId), eq(categories.outletId, 1), isNull(categories.outletId))
-    : undefined;
-  const prodWhere = targetOutletId !== null
-    ? and(
-        eq(products.isActive, true),
-        or(eq(products.outletId, targetOutletId), eq(products.outletId, 1), isNull(products.outletId))
-      )
-    : eq(products.isActive, true);
+  const catWhere = eq(categories.branchId, targetBranch);
+  const prodWhere = and(
+    eq(products.isActive, true),
+    eq(products.branchId, targetBranch)
+  );
 
   const [cats, prods, vars, mods] = await Promise.all([
-    catWhere
-      ? db.select().from(categories).where(catWhere).orderBy(asc(categories.sortOrder))
-      : db.select().from(categories).orderBy(asc(categories.sortOrder)),
+    db.select().from(categories).where(catWhere).orderBy(asc(categories.sortOrder)),
     db.select().from(products).where(prodWhere).orderBy(asc(products.id)),
     db.select().from(variants),
     db.select().from(modifiers).where(eq(modifiers.isActive, true)),
   ]);
 
   const dto: CatalogDto = {
-    categories: cats.map((c) => ({ id: c.id, name: c.name, icon: c.icon, outletId: c.outletId })),
+    categories: cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      outletId: c.outletId,
+      branchId: c.branchId as any,
+    })),
     products: prods.map((p) => ({
       id: p.id,
       categoryId: p.categoryId,
@@ -62,7 +50,9 @@ export async function GET(req: Request) {
       imageUrl: p.imageUrl ?? "",
       isBundle: p.isBundle ?? false,
       outletId: p.outletId,
+      branchId: p.branchId as any,
       aiMood: p.aiMood ?? "",
+      isActive: p.isActive,
     })),
     variants: vars.map((v) => ({ id: v.id, productId: v.productId, name: v.name, priceDelta: v.priceDelta })),
     modifiers: mods.map((m) => ({ id: m.id, name: m.name, price: m.price })),

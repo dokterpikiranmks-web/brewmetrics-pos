@@ -70,9 +70,21 @@ function statusFor(stock: number, threshold: number): StockStatus {
 }
 
 /** Daftar bahan baku dengan status warna + prediksi AI sederhana (velocity-based). */
-export async function buildIngredientDtos(ingredients?: (Ingredient & Record<string, never>)[]): Promise<IngredientDto[]> {
+export async function buildIngredientDtos(
+  ingredients?: (Ingredient & Record<string, never>)[],
+  branchId?: string | null
+): Promise<IngredientDto[]> {
   const { usage, daysWithData } = await computeUsage();
-  const list = ingredients ?? (await db.query.ingredients.findMany());
+  let list: Ingredient[] = ingredients ?? [];
+  if (!ingredients) {
+    if (branchId && branchId !== "all") {
+      list = await db.query.ingredients.findMany({
+        where: (ing, { eq }) => eq(ing.branchId, branchId as any),
+      });
+    } else {
+      list = await db.query.ingredients.findMany();
+    }
+  }
   return list
     .map((ing) => {
       const total = usage.get(ing.id) ?? 0;
@@ -85,6 +97,7 @@ export async function buildIngredientDtos(ingredients?: (Ingredient & Record<str
         stockQty: ing.stockQty,
         lowThreshold: ing.lowThreshold,
         costPerUnit: ing.costPerUnit,
+        branchId: ing.branchId as any,
         status: statusFor(ing.stockQty, ing.lowThreshold),
         dailyUsage: Math.round(dailyUsage * 10) / 10,
         daysLeft: daysLeft === null ? null : Math.round(daysLeft * 10) / 10,

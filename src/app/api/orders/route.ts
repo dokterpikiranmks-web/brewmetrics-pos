@@ -3,7 +3,7 @@ import { orders } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { createOrder, OrderError } from "@/lib/orders";
-import type { CreateOrderPayload, TodayOrderDto } from "@/lib/types";
+import { normalizeBranchId, type BranchId, type CreateOrderPayload, type TodayOrderDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const headerOutlet = req.headers.get("x-outlet-id");
   const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
+  const headerBranch = req.headers.get("x-branch-id");
+  const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
 
   let targetOutletId: number | null = null;
   if (user.role === "cashier") {
@@ -38,6 +40,9 @@ export async function GET(req: Request) {
   if (targetOutletId !== null) {
     whereConditions.push(eq(orders.outletId, targetOutletId));
   }
+  if (branchParam && branchParam !== "all") {
+    whereConditions.push(eq(orders.branchId, normalizeBranchId(branchParam)));
+  }
 
   let rows = await db
     .select()
@@ -53,6 +58,9 @@ export async function GET(req: Request) {
     if (targetOutletId !== null) {
       fallbackConditions.push(eq(orders.outletId, targetOutletId));
     }
+    if (branchParam && branchParam !== "all") {
+      fallbackConditions.push(eq(orders.branchId, normalizeBranchId(branchParam)));
+    }
     rows = await db
       .select()
       .from(orders)
@@ -61,7 +69,7 @@ export async function GET(req: Request) {
       .limit(30);
   }
 
-  const dto: (TodayOrderDto & { outletId?: number | null })[] = rows.map((o) => ({
+  const dto: (TodayOrderDto & { outletId?: number | null; branchId?: BranchId | null; grandTotal?: number; grand_total?: number; subtotal?: number })[] = rows.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
     cashierName: o.cashierName,
@@ -70,14 +78,20 @@ export async function GET(req: Request) {
     customerName: o.customerName ?? "Umum",
     orderType: (o.orderType as any) ?? "dine-in",
     tableNumber: o.tableNumber ?? "",
+    subtotal: o.subtotal,
     discountAmount: o.discountAmount ?? 0,
+    discount_amount: o.discountAmount ?? 0,
     discountName: o.discountName ?? "",
-    total: o.total || (o.subtotal + (o.tax ?? 0) + (o.serviceCharge ?? 0)),
+    total: o.grandTotal || o.total || Math.max(0, o.subtotal - (o.discountAmount ?? 0)),
+    grandTotal: o.grandTotal || o.total || Math.max(0, o.subtotal - (o.discountAmount ?? 0)),
+    grand_total: o.grandTotal || o.total || Math.max(0, o.subtotal - (o.discountAmount ?? 0)),
     itemCount: o.itemCount,
     status: o.status as "paid" | "void",
     createdAt: o.createdAt.toISOString(),
     isOfflineSync: o.isOfflineSync,
     outletId: o.outletId ?? null,
+    branchId: (o.branchId as any) ?? "KOPI_ASO",
+    branch_id: (o.branchId as any) ?? "KOPI_ASO",
   }));
   return Response.json({ orders: dto });
 }
@@ -106,6 +120,15 @@ export async function POST(req: Request) {
           );
         }
       }
+    }
+
+    // MULTI-BRANCH ISOLATION:
+    const headerBranch = req.headers.get("x-branch-id");
+    const branchCandidate = payload.branchId || payload.branch_id || headerBranch || (user as any).branchId;
+    if (branchCandidate) {
+      payload.branchId = normalizeBranchId(branchCandidate);
+    } else {
+      payload.branchId = "KOPI_ASO";
     }
 
     // STRICT OUTLET ISOLATION:

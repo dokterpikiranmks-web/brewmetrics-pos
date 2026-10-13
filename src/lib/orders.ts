@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { ingredients, orderItems, orders, products, variants, modifiers, storeSettings, customers, outlets } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { buildRecipeIndex, hppPerUnit, mergeUsage, usageForLine } from "./recipes";
-import type { CreateOrderPayload, OrderReceipt, SessionUser } from "./types";
+import { normalizeBranchId, type CreateOrderPayload, type OrderReceipt, type SessionUser } from "./types";
 
 export class OrderError extends Error {
   status: number;
@@ -61,9 +61,14 @@ export async function getOrderReceiptById(orderId: number): Promise<OrderReceipt
     outletReceiptHeader: outletRow?.receiptHeader ?? null,
     outletReceiptFooter: outletRow?.receiptFooter ?? null,
     subtotal: found.subtotal,
+    discount_amount: found.discountAmount ?? 0,
     tax: found.tax ?? 0,
     serviceCharge: found.serviceCharge ?? 0,
-    total: found.total || (found.subtotal + (found.tax ?? 0) + (found.serviceCharge ?? 0)),
+    total: found.grandTotal || found.total || (found.subtotal + (found.tax ?? 0) + (found.serviceCharge ?? 0)),
+    grandTotal: found.grandTotal || found.total || (found.subtotal + (found.tax ?? 0) + (found.serviceCharge ?? 0)),
+    grand_total: found.grandTotal || found.total || (found.subtotal + (found.tax ?? 0) + (found.serviceCharge ?? 0)),
+    branchId: (found.branchId as any) ?? "KOPI_ASO",
+    branch_id: (found.branchId as any) ?? "KOPI_ASO",
     tendered: found.tendered,
     change: found.change,
     itemCount: found.itemCount,
@@ -117,12 +122,14 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     throw new OrderError("Keranjang kosong.", 400, "EMPTY_CART");
   }
 
+  const rawBranchId = payload.branchId || payload.branch_id || (user as any).branchId || "KOPI_ASO";
+  const branchId = normalizeBranchId(rawBranchId);
   const targetOutletId: number =
     user.role === "cashier"
       ? ((user as any).outletId ?? 1)
       : (payload.outletId ?? (user as any).outletId ?? 1);
   const [index, settingsRow, outletRow] = await Promise.all([
-    buildRecipeIndex(),
+    buildRecipeIndex(branchId),
     db.query.storeSettings.findFirst({ where: eq(storeSettings.id, 1) }),
     targetOutletId ? db.query.outlets.findFirst({ where: eq(outlets.id, targetOutletId) }) : Promise.resolve(null),
   ]);
@@ -131,8 +138,8 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
   const serviceChargePercentage = settingsRow?.serviceChargePercentage ?? 0;
 
   const productIds = [...new Set(payload.lines.map((l) => l.productId))];
-  const variantIds = [...new Set(payload.lines.map((l) => l.variantId).filter((v): v is number => v !== null))];
-  const modifierIds = [...new Set(payload.lines.flatMap((l) => l.modifierIds))];
+  const variantIds = [...new Set(payload.lines.map((l) => l.variantId).filter((v): v is number => v !== null && v !== undefined))];
+  const modifierIds = [...new Set(payload.lines.flatMap((l) => l.modifierIds ?? []))];
 
   const [prods, vars, mods] = await Promise.all([
     db.select().from(products).where(and(inArray(products.id, productIds), eq(products.isActive, true))),
@@ -154,7 +161,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
       throw new OrderError(`Varian tidak cocok untuk ${product.name}.`, 400, "BAD_VARIANT");
     }
     const qty = Math.max(1, Math.min(20, Math.floor(line.qty || 1)));
-    const pickedMods = line.modifierIds.map((id) => {
+    const pickedMods = (line.modifierIds ?? []).map((id) => {
       const m = modById.get(id);
       if (!m) throw new OrderError(`Modifier #${id} tidak tersedia.`, 400, "BAD_MODIFIER");
       return m;
@@ -283,6 +290,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     const [inserted] = await tx
       .insert(orders)
       .values({
+        branchId,
         orderNumber,
         outletId: targetOutletId,
         brandName: outletRow?.brandName || (settingsRow as any)?.cafeName || "DOI TA",
@@ -308,6 +316,7 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
         tax,
         serviceCharge,
         total: grandTotal,
+        grandTotal,
         hpp: totalHpp,
         profit: subtotalAfterDiscount - totalHpp,
         tendered,
@@ -348,9 +357,12 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     discountType: (receipt.discountType as any) ?? null,
     discountValue: receipt.discountValue ?? 0,
     discountAmount: receipt.discountAmount ?? 0,
+    discount_amount: receipt.discountAmount ?? 0,
     discountName: receipt.discountName ?? "",
     paymentReference: receipt.paymentReference ?? "",
     outletId: receipt.outletId ?? null,
+    branchId: (receipt.branchId as any) ?? branchId,
+    branch_id: (receipt.branchId as any) ?? branchId,
     outletName: outletRow?.name ?? null,
     outletBrandName: outletRow?.brandName ?? null,
     outletReceiptHeader: outletRow?.receiptHeader ?? null,
@@ -358,7 +370,9 @@ export async function createOrder(payload: CreateOrderPayload, user: SessionUser
     subtotal: receipt.subtotal,
     tax: receipt.tax,
     serviceCharge: receipt.serviceCharge,
-    total: receipt.total,
+    total: receipt.grandTotal || receipt.total,
+    grandTotal: receipt.grandTotal || receipt.total,
+    grand_total: receipt.grandTotal || receipt.total,
     tendered: receipt.tendered,
     change: receipt.change,
     itemCount: receipt.itemCount,
@@ -411,7 +425,7 @@ export async function voidOrder(
   }
 
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, target.id));
-  const index = await buildRecipeIndex();
+  const index = await buildRecipeIndex(target.branchId ?? undefined);
 
   // Hitung balik total bahan baku yang digunakan untuk direfund
   const totalRefund = new Map<number, number>();

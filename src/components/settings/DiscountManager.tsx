@@ -50,6 +50,9 @@ export default function DiscountManager({
   const [formScope, setFormScope] = useState<DiscountScope>("cart");
   const [formTargetProductId, setFormTargetProductId] = useState<number | null>(null);
   const [formOutletId, setFormOutletId] = useState<number | null>(null);
+  const [formValidFrom, setFormValidFrom] = useState<string>("");
+  const [formValidUntil, setFormValidUntil] = useState<string>("");
+  const [formBranchId, setFormBranchId] = useState<string>("KOPI_ASO");
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -134,6 +137,9 @@ export default function DiscountManager({
     setFormScope("cart");
     setFormTargetProductId(null);
     setFormOutletId(null);
+    setFormValidFrom("");
+    setFormValidUntil("");
+    setFormBranchId("KOPI_ASO");
     setFormIsActive(true);
     setFormError(null);
     setModalOpen(true);
@@ -148,6 +154,9 @@ export default function DiscountManager({
     setFormScope(d.scope || "cart");
     setFormTargetProductId(d.targetProductId ?? null);
     setFormOutletId(d.outletId ?? null);
+    setFormValidFrom(d.validFrom ? d.validFrom.slice(0, 10) : (d.startDate ? d.startDate.slice(0, 10) : ""));
+    setFormValidUntil(d.validUntil ? d.validUntil.slice(0, 10) : (d.endDate ? d.endDate.slice(0, 10) : ""));
+    setFormBranchId((d.branchId as string) || "KOPI_ASO");
     setFormIsActive(d.isActive);
     setFormError(null);
     setModalOpen(true);
@@ -228,6 +237,11 @@ export default function DiscountManager({
           scope: formScope,
           targetProductId: formScope === "product" ? formTargetProductId : null,
           outletId: formOutletId || null,
+          branchId: formBranchId,
+          validFrom: formValidFrom ? new Date(formValidFrom).toISOString() : null,
+          validUntil: formValidUntil ? new Date(formValidUntil + "T23:59:59.999Z").toISOString() : null,
+          startDate: formValidFrom ? new Date(formValidFrom).toISOString() : null,
+          endDate: formValidUntil ? new Date(formValidUntil + "T23:59:59.999Z").toISOString() : null,
           isActive: formIsActive,
         }),
       });
@@ -726,6 +740,51 @@ export default function DiscountManager({
                     </p>
                   </div>
                 )}
+
+                {/* Entitas Bisnis / Multi-Branch */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-brand block mb-1.5">
+                    Entitas Bisnis (Multi-Branch)
+                  </label>
+                  <select
+                    value={formBranchId}
+                    onChange={(e) => setFormBranchId(e.target.value)}
+                    className="w-full rounded-xl border border-line bg-coal px-3.5 py-2.5 text-xs sm:text-sm text-cream outline-none focus:border-brand/50 transition font-medium"
+                  >
+                    <option value="KOPI_ASO">☕ Kopi Aso</option>
+                    <option value="NASI_KEBULI">🍛 Nasi Kebuli</option>
+                    <option value="BUCIN_UNCLE">🍗 BUCIN UNCLE AI GONG</option>
+                  </select>
+                </div>
+
+                {/* Periode Promo (Date Picker) */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
+                      Mulai Berlaku (Start Date)
+                    </label>
+                    <input
+                      type="date"
+                      value={formValidFrom}
+                      onChange={(e) => setFormValidFrom(e.target.value)}
+                      className="w-full rounded-xl border border-line bg-coal px-3 py-2 text-xs text-cream outline-none focus:border-brand/50 transition font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
+                      Berakhir Pada (End Date)
+                    </label>
+                    <input
+                      type="date"
+                      value={formValidUntil}
+                      onChange={(e) => setFormValidUntil(e.target.value)}
+                      className="w-full rounded-xl border border-line bg-coal px-3 py-2 text-xs text-cream outline-none focus:border-brand/50 transition font-medium"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-faint -mt-2">
+                  Atur rentang tanggal promo aktif. Kasir hanya dapat menerapkan promo jika tanggal saat ini berada dalam rentang ini.
+                </p>
 
                 {/* Target Cabang / Outlet */}
                 <div>

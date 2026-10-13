@@ -7,10 +7,11 @@ import {
   categories,
   bundleItems,
 } from "@/db/schema";
-import { asc, eq, inArray, or, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, or, isNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { invalidateRecipeCache } from "@/lib/recipes";
+import { normalizeBranchId, type BranchId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const headerOutlet = req.headers.get("x-outlet-id");
     const outletParam = url.searchParams.get("outlet_id") ?? url.searchParams.get("outletId") ?? headerOutlet;
+    const headerBranch = req.headers.get("x-branch-id");
+    const branchParam = url.searchParams.get("branch_id") ?? url.searchParams.get("branchId") ?? headerBranch;
     const role = user?.role ?? (req.headers.get("x-user-role") as any);
 
     // Tangkap userOutletId dari token sesi user atau default 1
@@ -32,30 +35,29 @@ export async function GET(req: Request) {
     let targetOutletId: number | null = null;
 
     if (role === "cashier") {
-      // STRICT OUTLET ISOLATION:
-      // Kueri products harus di-filter dengan .where(eq(products.outletId, userOutletId)) jika yang login adalah kasir.
-      // Kasir DILARANG melakukan bypass (parameter query atau header outlet diabaikan total).
       targetOutletId = userOutletId;
     } else {
-      // Role 'owner', 'manager', atau 'admin'
       if (outletParam && outletParam !== "all") {
         const parsed = Number(outletParam);
         if (!isNaN(parsed)) {
           targetOutletId = parsed;
         }
       } else if (outletParam === "all") {
-        // Tampilkan semua produk jika role === 'owner' atau 'admin', dan outlet_id === 'all'
         targetOutletId = null;
       } else {
-        // Default untuk owner/manager jika tidak ada parameter spesifik: tampilkan semua
         targetOutletId = null;
       }
     }
 
-    // Filter produk: tampilkan produk khusus cabang target, ATAU katalog master pusat (outletId = 1 / NULL)
-    const productWhere = targetOutletId !== null
-      ? or(eq(products.outletId, targetOutletId), eq(products.outletId, 1), isNull(products.outletId))
-      : undefined;
+    const whereConditions: any[] = [];
+    if (branchParam && branchParam !== "all") {
+      whereConditions.push(eq(products.branchId, normalizeBranchId(branchParam)));
+    }
+    if (targetOutletId !== null) {
+      whereConditions.push(or(eq(products.outletId, targetOutletId), eq(products.outletId, 1), isNull(products.outletId)));
+    }
+
+    const productWhere = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
     const [allProducts, allVariants, allRecipes, allIngredients, allCategories, allBundleItems] =
       await Promise.all([
@@ -135,6 +137,7 @@ export async function GET(req: Request) {
         isActive: p.isActive,
         isBundle: p.isBundle ?? false,
         outletId: p.outletId ?? null,
+        branchId: (p.branchId as any) ?? "KOPI_ASO",
         bundleItems: (bundlesByProd.get(p.id) ?? []).map((b) => ({
           productId: b.subProductId,
           productName: prodMap.get(b.subProductId)?.name ?? "Produk",
@@ -175,6 +178,8 @@ export async function POST(req: Request) {
       isBundle?: boolean;
       outletId?: number | null;
       outlet_id?: number | null;
+      branchId?: string;
+      branch_id?: string;
       bundleItems?: { productId: number; qty: number }[];
       variants?: { name: string; priceDelta: number }[];
       recipe?: {
@@ -183,6 +188,10 @@ export async function POST(req: Request) {
         variantName?: string | null;
       }[];
     };
+
+    const headerBranch = req.headers.get("x-branch-id");
+    const rawBranch = body.branchId || body.branch_id || headerBranch;
+    const branchId = rawBranch ? normalizeBranchId(rawBranch) : "KOPI_ASO";
 
     const name = (body.name ?? "").trim();
     if (!name) {
@@ -285,6 +294,7 @@ export async function POST(req: Request) {
         .insert(products)
         .values({
           categoryId,
+          branchId,
           name,
           tagline,
           price,
@@ -336,6 +346,7 @@ export async function POST(req: Request) {
           }
           return {
             productId: newProduct.id,
+            branchId,
             variantId: targetVariantId,
             ingredientId: r.ingredientId,
             qty: Number(r.qty),

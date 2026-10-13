@@ -15,13 +15,25 @@ export interface RecipeIndex {
   bundleRows: Map<number, { subProductId: number; qty: number }[]>; // bundleProductId -> subProducts
 }
 
-let cached: { at: number; index: RecipeIndex } | null = null;
+import { eq, or } from "drizzle-orm";
+import { normalizeBranchId, type BranchId } from "@/lib/types";
 
-export async function buildRecipeIndex(force = false): Promise<RecipeIndex> {
+let branchCache = new Map<string, { at: number; index: RecipeIndex }>();
+
+export async function buildRecipeIndex(branchId?: string, force = false): Promise<RecipeIndex> {
+  const normBranch = branchId ? normalizeBranchId(branchId) : undefined;
+  const cacheKey = normBranch || "ALL";
+  const cached = branchCache.get(cacheKey);
+
   if (!force && cached && Date.now() - cached.at < 10_000) return cached.index;
+
   const [ings, rItems, mItems, bItems] = await Promise.all([
-    db.select().from(ingredients),
-    db.select().from(recipeItems),
+    normBranch 
+      ? db.select().from(ingredients).where(or(eq(ingredients.branchId, normBranch), eq(ingredients.branchId, "KOPI_ASO")))
+      : db.select().from(ingredients),
+    normBranch
+      ? db.select().from(recipeItems).where(or(eq(recipeItems.branchId, normBranch), eq(recipeItems.branchId, "KOPI_ASO")))
+      : db.select().from(recipeItems),
     db.select().from(modifierIngredients),
     db.select().from(bundleItems),
   ]);
@@ -53,12 +65,12 @@ export async function buildRecipeIndex(force = false): Promise<RecipeIndex> {
     arr.push(m);
     index.modifierRows.set(m.modifierId, arr);
   }
-  cached = { at: Date.now(), index };
+  branchCache.set(cacheKey, { at: Date.now(), index });
   return index;
 }
 
 export function invalidateRecipeCache() {
-  cached = null;
+  branchCache.clear();
 }
 
 export interface LineInput {
