@@ -57,15 +57,33 @@ function LiveClock({ mobile = false }: { mobile?: boolean }) {
 export default function AppShell({
   children,
   allowedRoles,
+  initialUser,
 }: {
   children: ReactNode;
   allowedRoles: SessionUser["role"][];
+  initialUser?: SessionUser | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState<SessionUser | null>(() => {
+    if (initialUser) return initialUser;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("session_user");
+        if (raw) return JSON.parse(raw);
+      } catch {}
+    }
+    return null;
+  });
+  const [checking, setChecking] = useState(() => !user && !initialUser);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (initialUser) {
+      setUser(initialUser);
+      setChecking(false);
+    }
+  }, [initialUser]);
 
   useEffect(() => {
     let alive = true;
@@ -74,7 +92,8 @@ export default function AppShell({
       .then((d: { user: SessionUser | null }) => {
         if (!alive) return;
         if (!d.user) {
-          router.replace("/");
+          if (typeof window !== "undefined") localStorage.removeItem("session_user");
+          window.location.href = "/";
           return;
         }
 
@@ -87,7 +106,7 @@ export default function AppShell({
             pathname.startsWith("/settings") ||
             pathname.startsWith("/products"))
         ) {
-          router.replace("/pos");
+          window.location.href = "/pos";
           return;
         }
 
@@ -96,22 +115,32 @@ export default function AppShell({
           (d.user.role === "owner" || d.user.role === "manager") &&
           pathname.startsWith("/pos")
         ) {
-          router.replace("/analytics");
+          window.location.href = "/analytics";
           return;
         }
 
         if (!allowedRoles.includes(d.user.role)) {
           if (d.user.role === "cashier") {
-            router.replace("/pos");
+            window.location.href = "/pos";
             return;
           }
-          router.replace("/analytics");
+          window.location.href = "/analytics";
           return;
+        }
+        if (typeof window !== "undefined") {
+          localStorage.setItem("session_user", JSON.stringify(d.user));
         }
         setUser(d.user);
         setChecking(false);
       })
-      .catch(() => router.replace("/"));
+      .catch(() => {
+        if (!alive) return;
+        if (user) {
+          setChecking(false);
+        } else {
+          window.location.href = "/";
+        }
+      });
     return () => {
       alive = false;
     };
@@ -137,8 +166,11 @@ export default function AppShell({
   };
 
   const logout = async () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("session_user");
+    }
     await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/");
+    window.location.href = "/";
   };
 
   if (checking || !user) {

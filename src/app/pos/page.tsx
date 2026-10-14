@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { CloudOff, CloudUpload, RefreshCcw } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import LoginScreen from "@/components/LoginScreen";
 import CatalogPane from "@/components/pos/CatalogPane";
 import VariantSheet, { type VariantSelection } from "@/components/pos/VariantSheet";
 import TicketPane from "@/components/pos/TicketPane";
@@ -26,36 +27,49 @@ import type {
   DiscountType,
   DiscountScope,
   PaymentBreakdownItem,
+  BranchId,
 } from "@/lib/types";
 import { cartLineKey, cartTotal, calculateOrderTotals, toPayloadLines, type CartLine } from "@/lib/cart";
 import { enqueueOrder, flushQueue, newOfflineId, queueCount } from "@/lib/offline";
 import { useBranch } from "@/context/BranchContext";
 
-export default function PosPage() {
-  const router = useRouter();
-  const { currentBranch } = useBranch();
-  const [catalog, setCatalog] = useState<CatalogDto | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const savedBranch = localStorage.getItem("current_branch") || "KOPI_ASO";
-        const cached = localStorage.getItem(`doita_catalog_${savedBranch}`);
-        if (cached) return JSON.parse(cached);
-      } catch {}
-    }
-    return null;
-  });
-  const [me, setMe] = useState<SessionUser | null>(null);
-  const [settings, setSettings] = useState<StoreSettingDto | null>(null);
-  const [lines, setLines] = useState<CartLine[]>([]);
-  const [sheet, setSheet] = useState<CatalogDto["products"][number] | null>(null);
-  const isCartLoadedRef = useRef(false);
+/* -----------------------------------------------------------------------------
+ * SYNCHRONOUS STORAGE LOADERS (RENDER PASS 0 - ZERO WATERFALL)
+ * -------------------------------------------------------------------------- */
+function getInitialUserFromStorage(): SessionUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("session_user");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
 
-  // Metadata Transaksi Kasir & Pelanggan
-  const [customerName, setCustomerName] = useState("Umum");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [orderType, setOrderType] = useState<OrderType>("dine-in");
-  const [tableNumber, setTableNumber] = useState("");
-  const [discount, setDiscount] = useState<{
+function getInitialBranchFromStorage(): BranchId {
+  if (typeof window === "undefined") return "KOPI_ASO";
+  try {
+    return (localStorage.getItem("current_branch") as BranchId) || "KOPI_ASO";
+  } catch {
+    return "KOPI_ASO";
+  }
+}
+
+function getInitialCatalogFromStorage(branchId: string): CatalogDto | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`doita_catalog_${branchId}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+interface InitialCartState {
+  lines: CartLine[];
+  customerName: string;
+  customerPhone: string;
+  orderType: OrderType;
+  tableNumber: string;
+  discount: {
     type: DiscountType;
     value: number;
     name?: string;
@@ -63,8 +77,75 @@ export default function PosPage() {
     minOrder?: number;
     scope?: DiscountScope;
     targetProductId?: number | null;
-  } | null>(null);
+  } | null;
+}
 
+function getInitialCartFromStorage(branchId: string): InitialCartState {
+  const fallback: InitialCartState = {
+    lines: [],
+    customerName: "Umum",
+    customerPhone: "",
+    orderType: "dine-in",
+    tableNumber: "",
+    discount: null,
+  };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(`doita_pos_cart_${branchId}`);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      return {
+        lines: Array.isArray(saved.lines) ? saved.lines : [],
+        customerName: saved.customerName || "Umum",
+        customerPhone: saved.customerPhone || "",
+        orderType: saved.orderType || "dine-in",
+        tableNumber: saved.tableNumber || "",
+        discount: saved.discount || null,
+      };
+    }
+  } catch {}
+  return fallback;
+}
+
+function getInitialSettingsFromStorage(): StoreSettingDto | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("doita_store_settings");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function getInitialOrdersFromStorage(branchId: string): TodayOrderDto[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`doita_today_orders_${branchId}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+export default function PosPage() {
+  const router = useRouter();
+  const { currentBranch: contextBranch } = useBranch();
+  const currentBranch = contextBranch || getInitialBranchFromStorage();
+
+  // 1. Reactive State Switch: Pure lifted authentication state
+  const [activeUser, setActiveUser] = useState<SessionUser | null>(getInitialUserFromStorage);
+  const me = activeUser;
+
+  // 2. Consolidated Synchronous State Initialization (0ms initial render)
+  const [initialCart] = useState(() => getInitialCartFromStorage(currentBranch));
+  const [catalog, setCatalog] = useState<CatalogDto | null>(() => getInitialCatalogFromStorage(currentBranch));
+  const [settings, setSettings] = useState<StoreSettingDto | null>(getInitialSettingsFromStorage);
+  const [lines, setLines] = useState<CartLine[]>(initialCart.lines);
+  const [customerName, setCustomerName] = useState(initialCart.customerName);
+  const [customerPhone, setCustomerPhone] = useState(initialCart.customerPhone);
+  const [orderType, setOrderType] = useState<OrderType>(initialCart.orderType);
+  const [tableNumber, setTableNumber] = useState(initialCart.tableNumber);
+  const [discount, setDiscount] = useState(initialCart.discount);
+
+  const [sheet, setSheet] = useState<CatalogDto["products"][number] | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [splitBillOpen, setSplitBillOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -73,7 +154,7 @@ export default function PosPage() {
   const [scannedMood, setScannedMood] = useState<MoodTag | null>(null);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [cashMovementOpen, setCashMovementOpen] = useState(false);
-  const [todayOrders, setTodayOrders] = useState<TodayOrderDto[]>([]);
+  const [todayOrders, setTodayOrders] = useState<TodayOrderDto[]>(() => getInitialOrdersFromStorage(currentBranch));
   const [online, setOnline] = useState(true);
   const [queue, setQueue] = useState(0);
   const [toast, setToast] = useState<{ msg: string; kind: "err" | "ok" | "warn" } | null>(null);
@@ -90,37 +171,9 @@ export default function PosPage() {
 
   const cartStorageKey = `doita_pos_cart_${currentBranch}`;
 
-  // 1. Pulihkan keranjang per-cabang dari localStorage saat branch berubah / mount
+  // Simpan keranjang ke localStorage spesifik per cabang (side effect tanpa re-render)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(cartStorageKey);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        setLines(Array.isArray(saved.lines) ? saved.lines : []);
-        setCustomerName(saved.customerName || "Umum");
-        setCustomerPhone(saved.customerPhone || "");
-        setOrderType(saved.orderType || "dine-in");
-        setTableNumber(saved.tableNumber || "");
-        setDiscount(saved.discount || null);
-      } else {
-        setLines([]);
-        setCustomerName("Umum");
-        setCustomerPhone("");
-        setOrderType("dine-in");
-        setTableNumber("");
-        setDiscount(null);
-      }
-    } catch (e) {
-      console.error("Gagal memuat keranjang dari localStorage:", e);
-    } finally {
-      isCartLoadedRef.current = true;
-    }
-  }, [cartStorageKey]);
-
-  // 2. Simpan keranjang ke localStorage spesifik per cabang setiap ada perubahan state
-  useEffect(() => {
-    if (!isCartLoadedRef.current || typeof window === "undefined") return;
     try {
       localStorage.setItem(
         cartStorageKey,
@@ -146,33 +199,8 @@ export default function PosPage() {
       if (res.ok) {
         const data = (await res.json()) as { orders: TodayOrderDto[] };
         setTodayOrders(data.orders);
-      }
-    } catch {
-      /* abaikan saat offline */
-    }
-  }, [currentBranch]);
-
-  const fetchCatalog = useCallback(async () => {
-    // 1. Coba pulihkan dari cache lokal (0ms instant render)
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem(`doita_catalog_${currentBranch}`);
-        if (cached) {
-          setCatalog(JSON.parse(cached));
-        }
-      } catch {}
-    }
-
-    // 2. Sinkronkan dari API secara senyap di background (Stale-While-Revalidate)
-    try {
-      const res = await fetch(`/api/catalog?branch_id=${currentBranch}`, {
-        headers: { "x-branch-id": currentBranch },
-      });
-      if (res.ok) {
-        const d = (await res.json()) as CatalogDto;
-        setCatalog(d);
         if (typeof window !== "undefined") {
-          localStorage.setItem(`doita_catalog_${currentBranch}`, JSON.stringify(d));
+          localStorage.setItem(`doita_today_orders_${currentBranch}`, JSON.stringify(data.orders));
         }
       }
     } catch {
@@ -197,40 +225,71 @@ export default function PosPage() {
     };
   }, []);
 
+  // 3. Consolidated SWR Background Sync (Non-blocking & Silent)
   useEffect(() => {
+    let isMounted = true;
     setQueue(queueCount());
     setOnline(navigator.onLine);
 
-    // Proteksi Rute: Halaman /pos HANYA boleh diakses oleh user role 'cashier'
+    // a. Silent Auth check & sync
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d: { user: SessionUser | null }) => {
+        if (!isMounted) return;
         if (!d.user) {
-          router.replace("/");
-          return;
+          if (typeof window !== "undefined") localStorage.removeItem("session_user");
+          setActiveUser(null);
+        } else {
+          if (d.user.role !== "cashier") {
+            window.location.href = "/analytics";
+            return;
+          }
+          if (typeof window !== "undefined") {
+            localStorage.setItem("session_user", JSON.stringify(d.user));
+          }
+          setActiveUser((prev) => (prev?.id === d.user?.id && prev?.name === d.user?.name ? prev : d.user));
         }
-        if (d.user.role !== "cashier") {
-          router.replace("/analytics");
-          return;
-        }
-        setMe(d.user);
       })
-      .catch(() => router.replace("/"));
+      .catch(() => {});
 
+    // b. Silent Settings sync
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d: { settings?: StoreSettingDto }) => {
-        if (d.settings) setSettings(d.settings);
+        if (!isMounted || !d.settings) return;
+        setSettings((prev) => (JSON.stringify(prev) === JSON.stringify(d.settings) ? prev : d.settings));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("doita_store_settings", JSON.stringify(d.settings));
+        }
       })
       .catch(() => {});
-  }, [router]);
 
-  useEffect(() => {
-    fetchCatalog();
+    // c. Silent Catalog sync
+    fetch(`/api/catalog?branch_id=${currentBranch}`, {
+      headers: { "x-branch-id": currentBranch },
+    })
+      .then((r) => {
+        if (r.ok) return r.json();
+        throw new Error();
+      })
+      .then((d: CatalogDto) => {
+        if (!isMounted) return;
+        setCatalog(d);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`doita_catalog_${currentBranch}`, JSON.stringify(d));
+        }
+      })
+      .catch(() => {});
+
+    // d. Silent Orders sync & polling
     refreshToday();
-    const t = setInterval(refreshToday, 30000);
-    return () => clearInterval(t);
-  }, [fetchCatalog, refreshToday]);
+    const interval = setInterval(refreshToday, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentBranch, refreshToday]);
 
   /* ------------------------- ONLINE / OFFLINE HANDLING ------------------------ */
   useEffect(() => {
@@ -572,8 +631,25 @@ export default function PosPage() {
     }
   };
 
+  if (!activeUser) {
+    return (
+      <LoginScreen
+        onSuccess={(user) => {
+          if (user.role !== "cashier") {
+            window.location.href = "/analytics";
+            return;
+          }
+          if (typeof window !== "undefined") {
+            localStorage.setItem("session_user", JSON.stringify(user));
+          }
+          setActiveUser(user);
+        }}
+      />
+    );
+  }
+
   return (
-    <AppShell allowedRoles={["cashier"]}>
+    <AppShell allowedRoles={["cashier"]} initialUser={activeUser}>
       {/* offline / sync strip */}
       <AnimatePresence>
         {(!online || queue > 0) && (

@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Coffee, Delete, Zap, Boxes, BrainCircuit, Fingerprint, Loader2,
@@ -17,8 +16,19 @@ import { BRANCH_ENTITIES, type BranchId } from "@/lib/types";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
-export default function LoginScreen() {
-  const router = useRouter();
+interface LoginScreenProps {
+  onSuccess?: (user: SessionUser) => void;
+}
+
+export default function LoginScreen({ onSuccess }: LoginScreenProps = {}) {
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const [pin, setPin] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -27,12 +37,6 @@ export default function LoginScreen() {
   const [loggedInUser, setLoggedInUser] = useState<SessionUser | null>(null);
   const [branchModalOpen, setBranchModalOpen] = useState(false);
 
-  // Pre-load main destination routes in router cache to eliminate transition latency
-  useEffect(() => {
-    router.prefetch("/pos");
-    router.prefetch("/analytics");
-  }, [router]);
-
   const handleSelectBranch = useCallback((branchId: BranchId) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("current_branch", branchId);
@@ -40,11 +44,15 @@ export default function LoginScreen() {
     }
     setBranchModalOpen(false);
     if (loggedInUser) {
-      router.push(HOME_BY_ROLE[loggedInUser.role]);
+      if (onSuccess && loggedInUser.role === "cashier") {
+        onSuccess(loggedInUser);
+      } else {
+        window.location.href = HOME_BY_ROLE[loggedInUser.role] || "/pos";
+      }
     } else {
-      router.push("/pos");
+      window.location.href = "/pos";
     }
-  }, [loggedInUser, router]);
+  }, [loggedInUser, onSuccess]);
 
   const submit = useCallback(
     async (value: string) => {
@@ -72,15 +80,28 @@ export default function LoginScreen() {
         const targetRole = data.user.role;
         const authBranch = data.user.authorizedBranch;
         const isOwner = targetRole === "owner" || authBranch === "ALL" || !authBranch;
+        const branchToUse = (authBranch && authBranch !== "ALL" ? authBranch : "KOPI_ASO") as BranchId;
 
-        // Optimistic Instant Login Navigation (0ms) ke /pos tanpa await data catalog
+        if (typeof window !== "undefined") {
+          localStorage.setItem("session_user", JSON.stringify(data.user));
+          localStorage.setItem("current_branch", branchToUse);
+          window.dispatchEvent(new CustomEvent("bm-branch-change", { detail: { branch: branchToUse } }));
+        }
+
+        // Direct state-lifted transition ke /pos (0ms)
         if (targetRole === "cashier" || (!isOwner && authBranch && authBranch !== "ALL")) {
-          const branchToUse = (authBranch && authBranch !== "ALL" ? authBranch : "KOPI_ASO") as BranchId;
-          if (typeof window !== "undefined") {
-            localStorage.setItem("current_branch", branchToUse);
-            window.dispatchEvent(new CustomEvent("bm-branch-change", { detail: { branch: branchToUse } }));
+          if (onSuccess) {
+            onSuccess(data.user);
+          } else {
+            window.location.href = HOME_BY_ROLE[targetRole] || "/pos";
           }
-          router.push(HOME_BY_ROLE[targetRole] || "/pos");
+
+          // Safety fallback: Jika state parent tidak me-mount dashboard dalam 150ms, reload programmatically
+          setTimeout(() => {
+            if (isMountedRef.current && typeof window !== "undefined") {
+              window.location.reload();
+            }
+          }, 150);
         } else {
           // Buka modal pilih cabang untuk owner secara instan
           setBranchModalOpen(true);
@@ -94,7 +115,7 @@ export default function LoginScreen() {
         }, 650);
       }
     },
-    [router]
+    [onSuccess]
   );
 
   const pushDigit = useCallback(
@@ -115,11 +136,18 @@ export default function LoginScreen() {
       .then((r) => r.json())
       .then((d: { user: SessionUser | null }) => {
         if (d.user) {
-          router.replace(HOME_BY_ROLE[d.user.role]);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("session_user", JSON.stringify(d.user));
+          }
+          if (onSuccess && d.user.role === "cashier") {
+            onSuccess(d.user);
+          } else {
+            window.location.href = HOME_BY_ROLE[d.user.role] || "/pos";
+          }
         }
       })
       .catch(() => {});
-  }, [router]);
+  }, [onSuccess]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

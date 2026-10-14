@@ -187,9 +187,9 @@ const CatalogPane = memo(function CatalogPane({
     }
   }, [catalog, branchId]);
 
-  // Sinkronisasi data API di background secara mandiri jika catalog belum di-pass atau cabang berubah
+  // Sinkronisasi data API di background secara mandiri hanya jika catalog belum di-pass
   useEffect(() => {
-    if (!branchId) return;
+    if (!branchId || catalog) return;
 
     if (typeof window !== "undefined") {
       try {
