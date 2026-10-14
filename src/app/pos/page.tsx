@@ -244,10 +244,11 @@ export default function PosPage() {
             window.location.href = "/analytics";
             return;
           }
+          const validUser = d.user;
           if (typeof window !== "undefined") {
-            localStorage.setItem("session_user", JSON.stringify(d.user));
+            localStorage.setItem("session_user", JSON.stringify(validUser));
           }
-          setActiveUser((prev) => (prev?.id === d.user?.id && prev?.name === d.user?.name ? prev : d.user));
+          setActiveUser((prev) => (prev?.id === validUser.id && prev?.name === validUser.name ? prev : validUser));
         }
       })
       .catch(() => {});
@@ -257,9 +258,10 @@ export default function PosPage() {
       .then((r) => r.json())
       .then((d: { settings?: StoreSettingDto }) => {
         if (!isMounted || !d.settings) return;
-        setSettings((prev) => (JSON.stringify(prev) === JSON.stringify(d.settings) ? prev : d.settings));
+        const newSettings = d.settings;
+        setSettings((prev) => (JSON.stringify(prev) === JSON.stringify(newSettings) ? prev : newSettings));
         if (typeof window !== "undefined") {
-          localStorage.setItem("doita_store_settings", JSON.stringify(d.settings));
+          localStorage.setItem("doita_store_settings", JSON.stringify(newSettings));
         }
       })
       .catch(() => {});
