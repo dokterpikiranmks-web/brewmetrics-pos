@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useTransition, memo } from "react";
+import { useMemo, useState, useCallback, useEffect, useTransition, memo } from "react";
 import { Search, LayoutGrid, History, Sparkles } from "lucide-react";
 import type { CatalogDto } from "@/lib/types";
 import { formatIDR } from "@/lib/format";
@@ -140,22 +140,92 @@ const RailButton = memo(function RailButton({
 });
 
 /* -----------------------------------------------------------------------------
- * MAIN CATALOG PANE (MEMOIZED WITH GPU ACCELERATION)
+ * MAIN CATALOG PANE (MEMOIZED WITH GPU ACCELERATION & LOCAL CACHE SWR)
  * -------------------------------------------------------------------------- */
-const CatalogPane = memo(function CatalogPane({
-  catalog,
-  onPick,
-  onOpenHistory,
-  onOpenMoodScanner,
-}: {
-  catalog: CatalogDto;
+interface CatalogPaneProps {
+  catalog?: CatalogDto | null;
+  branchId?: string;
   onPick: (product: Product) => void;
   onOpenHistory?: () => void;
   onOpenMoodScanner?: () => void;
-}) {
+  onCatalogUpdate?: (catalog: CatalogDto) => void;
+}
+
+const CatalogPane = memo(function CatalogPane({
+  catalog,
+  branchId,
+  onPick,
+  onOpenHistory,
+  onOpenMoodScanner,
+  onCatalogUpdate,
+}: CatalogPaneProps) {
+  // Stale-While-Revalidate: render langsung dari cache lokal (0ms) jika props catalog belum siap
+  const [activeCatalog, setActiveCatalog] = useState<CatalogDto | null>(() => {
+    if (catalog) return catalog;
+    if (typeof window !== "undefined" && branchId) {
+      try {
+        const cached = localStorage.getItem(`doita_catalog_${branchId}`);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+
   const [activeCat, setActiveCat] = useState<number | "all">("all");
   const [query, setQuery] = useState("");
   const [, startTransition] = useTransition();
+
+  // Sinkronisasi prop catalog ke activeCatalog & simpan ke localStorage
+  useEffect(() => {
+    if (catalog) {
+      setActiveCatalog(catalog);
+      if (typeof window !== "undefined" && branchId) {
+        try {
+          localStorage.setItem(`doita_catalog_${branchId}`, JSON.stringify(catalog));
+        } catch {}
+      }
+    }
+  }, [catalog, branchId]);
+
+  // Sinkronisasi data API di background secara mandiri jika catalog belum di-pass atau cabang berubah
+  useEffect(() => {
+    if (!branchId) return;
+
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(`doita_catalog_${branchId}`);
+        if (cached && !activeCatalog) {
+          setActiveCatalog(JSON.parse(cached));
+        }
+      } catch {}
+    }
+
+    let isMounted = true;
+    fetch(`/api/catalog?branch_id=${branchId}`, {
+      headers: { "x-branch-id": branchId },
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error("Gagal mengambil katalog");
+      })
+      .then((d: CatalogDto) => {
+        if (!isMounted) return;
+        setActiveCatalog(d);
+        onCatalogUpdate?.(d);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem(`doita_catalog_${branchId}`, JSON.stringify(d));
+          } catch {}
+        }
+      })
+      .catch(() => {
+        /* Abaikan saat offline */
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [branchId, onCatalogUpdate]);
 
   const handleSelectCat = useCallback((catId: number | "all") => {
     startTransition(() => {
@@ -171,14 +241,33 @@ const CatalogPane = memo(function CatalogPane({
   }, []);
 
   const filtered = useMemo(() => {
-    let list = catalog.products;
+    if (!activeCatalog) return [];
+    let list = activeCatalog.products;
     if (activeCat !== "all") list = list.filter((p) => p.categoryId === activeCat);
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.tagline.toLowerCase().includes(q));
     }
     return list;
-  }, [catalog.products, activeCat, query]);
+  }, [activeCatalog, activeCat, query]);
+
+  // Skeleton UI instan jika belum ada data sama sekali (baik di memori maupun cache lokal)
+  if (!activeCatalog) {
+    return (
+      <div className="flex flex-col md:flex-row min-h-0 min-w-0 flex-1 h-full overflow-hidden">
+        <aside className="w-full shrink-0 border-b border-line bg-coal-2/60 flex flex-row items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar md:w-[76px] lg:w-[92px] md:border-b-0 md:border-r md:flex-col md:px-0 md:py-3 md:overflow-y-auto md:h-full">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="size-12 rounded-2xl bg-panel animate-pulse-soft" />
+          ))}
+        </aside>
+        <div className="flex-1 min-h-0 p-3 sm:p-5 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 content-start overflow-y-auto pos-catalog-scroll">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-[148px] rounded-2xl border border-line bg-panel animate-pulse-soft" style={{ animationDelay: `${i * 90}ms` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col md:flex-row min-h-0 min-w-0 flex-1 h-full overflow-hidden">
@@ -189,6 +278,8 @@ const CatalogPane = memo(function CatalogPane({
           transform: "translate3d(0, 0, 0)",
           willChange: "transform, scroll-position",
           WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          contain: "content",
         }}
       >
         <RailButton
@@ -197,7 +288,7 @@ const CatalogPane = memo(function CatalogPane({
           icon={<LayoutGrid className="size-4 md:size-5" strokeWidth={2.1} />}
           onClick={() => handleSelectCat("all")}
         />
-        {catalog.categories.map((c) => {
+        {activeCatalog.categories.map((c) => {
           const Icon = categoryIcon(c.icon);
           return (
             <RailButton
@@ -256,13 +347,16 @@ const CatalogPane = memo(function CatalogPane({
           </div>
         </div>
 
-        {/* pb-48 / pos-catalog-scroll pada layar HP/Tablet dengan akselerasi GPU */}
+        {/* Hardware-Accelerated Native Scroll pada kontainer menu produk */}
         <div
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 lg:px-5 pb-48 md:pb-8 pos-catalog-scroll gpu-scroll"
+          className="flex-1 min-h-0 px-3 sm:px-4 lg:px-5 pb-48 md:pb-8 pos-catalog-scroll gpu-scroll"
           style={{
+            overflowY: "scroll",
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
+            contain: "content",
             transform: "translate3d(0, 0, 0)",
             willChange: "transform, scroll-position",
-            WebkitOverflowScrolling: "touch",
           }}
         >
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
@@ -279,7 +373,7 @@ const CatalogPane = memo(function CatalogPane({
             <div className="py-16 text-center text-faint text-xs sm:text-sm px-4">
               {query.trim()
                 ? `Menu tidak ditemukan untuk “${query}”.`
-                : catalog.products.length === 0
+                : activeCatalog.products.length === 0
                   ? "Belum ada produk aktif di katalog database. Tambahkan menu baru di halaman Master Produk."
                   : "Belum ada produk yang terdaftar untuk kategori ini."}
             </div>

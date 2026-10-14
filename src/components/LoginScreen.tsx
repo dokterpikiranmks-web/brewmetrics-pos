@@ -69,19 +69,21 @@ export default function LoginScreen() {
         setUserName(data.user.name);
         setLoggedInUser(data.user);
 
-        // RBAC: JIKA staf hanya berhak mengakses 1 cabang, skip modal "Pilih Cabang" dan langsung arahkan.
-        // JIKA staf adalah Owner / akses semua ("ALL"), barulah modal "Pilih Cabang" dimunculkan.
+        const targetRole = data.user.role;
         const authBranch = data.user.authorizedBranch;
-        const isOwner = data.user.role === "owner" || authBranch === "ALL" || !authBranch;
+        const isOwner = targetRole === "owner" || authBranch === "ALL" || !authBranch;
 
-        if (!isOwner && authBranch && authBranch !== "ALL") {
-          setTimeout(() => {
-            handleSelectBranch(authBranch as BranchId);
-          }, 400);
+        // Optimistic Instant Login Navigation (0ms) ke /pos tanpa await data catalog
+        if (targetRole === "cashier" || (!isOwner && authBranch && authBranch !== "ALL")) {
+          const branchToUse = (authBranch && authBranch !== "ALL" ? authBranch : "KOPI_ASO") as BranchId;
+          if (typeof window !== "undefined") {
+            localStorage.setItem("current_branch", branchToUse);
+            window.dispatchEvent(new CustomEvent("bm-branch-change", { detail: { branch: branchToUse } }));
+          }
+          router.push(HOME_BY_ROLE[targetRole] || "/pos");
         } else {
-          setTimeout(() => {
-            setBranchModalOpen(true);
-          }, 500);
+          // Buka modal pilih cabang untuk owner secara instan
+          setBranchModalOpen(true);
         }
       } catch {
         setStatus("error");
@@ -92,7 +94,7 @@ export default function LoginScreen() {
         }, 650);
       }
     },
-    [handleSelectBranch]
+    [router]
   );
 
   const pushDigit = useCallback(
@@ -101,7 +103,7 @@ export default function LoginScreen() {
       setPin((prev) => {
         if (prev.length >= 4) return prev;
         const next = prev + d;
-        if (next.length === 4) setTimeout(() => submit(next), 120);
+        if (next.length === 4) submit(next);
         return next;
       });
     },

@@ -1211,11 +1211,14 @@ function PromoSelectModal({
 
             {/* Promo List with GPU Hardware Acceleration */}
             <div
-              className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[220px] gpu-scroll overscroll-contain"
+              className="flex-1 space-y-2.5 pr-1 min-h-[220px] gpu-scroll pos-native-scroll"
               style={{
+                overflowY: "scroll",
+                WebkitOverflowScrolling: "touch",
+                overscrollBehavior: "contain",
+                contain: "content",
                 transform: "translate3d(0, 0, 0)",
                 willChange: "transform, scroll-position",
-                WebkitOverflowScrolling: "touch",
               }}
             >
               {loading ? (

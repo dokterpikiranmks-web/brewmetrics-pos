@@ -34,7 +34,16 @@ import { useBranch } from "@/context/BranchContext";
 export default function PosPage() {
   const router = useRouter();
   const { currentBranch } = useBranch();
-  const [catalog, setCatalog] = useState<CatalogDto | null>(null);
+  const [catalog, setCatalog] = useState<CatalogDto | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedBranch = localStorage.getItem("current_branch") || "KOPI_ASO";
+        const cached = localStorage.getItem(`doita_catalog_${savedBranch}`);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
   const [me, setMe] = useState<SessionUser | null>(null);
   const [settings, setSettings] = useState<StoreSettingDto | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -144,6 +153,17 @@ export default function PosPage() {
   }, [currentBranch]);
 
   const fetchCatalog = useCallback(async () => {
+    // 1. Coba pulihkan dari cache lokal (0ms instant render)
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(`doita_catalog_${currentBranch}`);
+        if (cached) {
+          setCatalog(JSON.parse(cached));
+        }
+      } catch {}
+    }
+
+    // 2. Sinkronkan dari API secara senyap di background (Stale-While-Revalidate)
     try {
       const res = await fetch(`/api/catalog?branch_id=${currentBranch}`, {
         headers: { "x-branch-id": currentBranch },
@@ -151,6 +171,9 @@ export default function PosPage() {
       if (res.ok) {
         const d = (await res.json()) as CatalogDto;
         setCatalog(d);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`doita_catalog_${currentBranch}`, JSON.stringify(d));
+        }
       }
     } catch {
       /* abaikan saat offline */
@@ -574,20 +597,14 @@ export default function PosPage() {
       </AnimatePresence>
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row pos-container-height overflow-hidden">
-        {!catalog ? (
-          <div className="flex-1 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-5 content-start overflow-y-auto pb-48 md:pb-8 pos-catalog-scroll ml-0 md:ml-[76px] lg:ml-[92px]">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="h-[148px] rounded-2xl border border-line bg-panel animate-pulse-soft" style={{ animationDelay: `${i * 90}ms` }} />
-            ))}
-          </div>
-        ) : (
-          <CatalogPane
-            catalog={catalog}
-            onPick={pickProduct}
-            onOpenHistory={handleOpenHistory}
-            onOpenMoodScanner={handleOpenMoodScanner}
-          />
-        )}
+        <CatalogPane
+          catalog={catalog}
+          branchId={currentBranch}
+          onCatalogUpdate={setCatalog}
+          onPick={pickProduct}
+          onOpenHistory={handleOpenHistory}
+          onOpenMoodScanner={handleOpenMoodScanner}
+        />
 
         <TicketPane
           lines={lines}

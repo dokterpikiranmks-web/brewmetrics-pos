@@ -186,11 +186,16 @@ body {
   }
 }
 
-/* Fallback-first height container for POS terminal: supports older WebViews */
+.pos-viewport-lock {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Container height for POS terminal */
 .pos-container-height {
   height: calc(100vh - 58px);
   height: calc(100dvh - 58px);
-  height: calc(var(--vh, 1vh) * 100 - var(--pos-header-h, 58px));
   min-height: 0;
 }
 
@@ -198,15 +203,16 @@ body {
   .pos-container-height {
     height: calc(100vh - 68px);
     height: calc(100dvh - 68px);
-    height: calc(var(--vh, 1vh) * 100 - var(--pos-header-h, 68px));
   }
 }
 
 /* Touch-optimized, aggressive padding bottom for POS product catalog */
 .pos-catalog-scroll {
   padding-bottom: calc(160px + env(safe-area-inset-bottom, 24px));
+  overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
+  contain: content;
   touch-action: pan-y;
   transform: translate3d(0, 0, 0);
   -webkit-transform: translate3d(0, 0, 0);
@@ -220,14 +226,17 @@ body {
 }
 
 /* ==========================================================================
-   GPU HARDWARE ACCELERATION & ZERO-LATENCY SMOOTH SCROLLING (TWA/TABLET)
+   HARDWARE-ACCELERATED NATIVE SCROLL & ZERO-LATENCY SMOOTH SCROLLING (TWA/TABLET)
    ========================================================================== */
-.gpu-scroll {
+.gpu-scroll,
+.pos-native-scroll {
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  contain: content;
   transform: translate3d(0, 0, 0);
   -webkit-transform: translate3d(0, 0, 0);
   will-change: transform, scroll-position;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 
 /* Performance optimization for touchscreen & TWA: strip costly multi-layer shadows & backdrop blurs */

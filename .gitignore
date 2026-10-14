@@ -23,7 +23,6 @@ build.gradle
 gradle.properties
 settings.gradle
 manifest-checksum.txt
-/app/
 local.properties
 store_icon.png
 twa-manifest.json
