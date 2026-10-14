@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState, useCallback, useTransition, memo } from "react";
 import { Search, LayoutGrid, History, Sparkles } from "lucide-react";
 import type { CatalogDto } from "@/lib/types";
 import { formatIDR } from "@/lib/format";
@@ -9,7 +8,141 @@ import { productIcon, categoryIcon } from "./icons";
 
 type Product = CatalogDto["products"][number];
 
-export default function CatalogPane({
+/* -----------------------------------------------------------------------------
+ * MEMOIZED PRODUCT CARD
+ * - onPointerDown eliminates 100-300ms mobile touch delay
+ * - React.memo avoids CPU re-rendering when cart lines change
+ * - GPU-friendly styling (no costly blur-2xl or heavy multi-layered shadows)
+ * -------------------------------------------------------------------------- */
+interface ProductCardProps {
+  product: Product;
+  onPick: (product: Product) => void;
+}
+
+export const ProductCard = memo(function ProductCard({
+  product,
+  onPick,
+}: ProductCardProps) {
+  const Icon = productIcon(product.icon);
+
+  // Hyper-Fast Touch Response via onPointerDown (0ms browser gesture delay)
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button === 0) {
+        onPick(product);
+      }
+    },
+    [onPick, product]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onPick(product);
+      }
+    },
+    [onPick, product]
+  );
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onPointerDown={handlePointerDown}
+      onKeyDown={handleKeyDown}
+      className="product-card btn-press group relative overflow-hidden rounded-2xl border border-line bg-panel p-2.5 sm:p-3 text-left hover:border-brand/45 hover:bg-panel-2 cursor-pointer touch-manipulation select-none"
+    >
+      {/* Lightweight accent tint without expensive blur-2xl filter */}
+      <div
+        className="absolute -right-6 -top-8 size-28 rounded-full opacity-[0.08] transition-opacity group-hover:opacity-20 pointer-events-none"
+        style={{ backgroundColor: product.color }}
+      />
+
+      {product.isBundle && (
+        <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.5 text-[8.5px] font-extrabold text-brand uppercase tracking-wider pointer-events-none">
+          <Sparkles className="size-2.5 pointer-events-none" />
+          <span>Paket</span>
+        </span>
+      )}
+
+      {product.imageUrl ? (
+        <div className="mb-2 sm:mb-3 size-10 sm:size-12 rounded-xl overflow-hidden border border-line-2/60 relative shrink-0 bg-coal pointer-events-none">
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="size-full object-cover pointer-events-none"
+            loading="lazy"
+          />
+          <span
+            className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
+            style={{ backgroundColor: product.color }}
+          />
+        </div>
+      ) : (
+        <div className="mb-2 sm:mb-3 grid size-10 sm:size-12 place-items-center rounded-xl border border-line-2/50 bg-coal relative pointer-events-none">
+          <Icon className="size-5 sm:size-6 pointer-events-none" strokeWidth={1.9} style={{ color: product.color }} />
+          <span
+            className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
+            style={{ backgroundColor: product.color }}
+          />
+        </div>
+      )}
+
+      <p className="text-xs sm:text-[13px] font-bold leading-tight text-cream line-clamp-2 min-h-[2.2em] pointer-events-none">
+        {product.name}
+      </p>
+      <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[10.5px] text-faint line-clamp-1 pointer-events-none">
+        {product.tagline}
+      </p>
+      <p className="mt-2 sm:mt-2.5 font-display text-sm sm:text-[15px] font-bold tabular text-brand pointer-events-none">
+        {formatIDR(product.price)}
+      </p>
+    </div>
+  );
+});
+
+/* -----------------------------------------------------------------------------
+ * MEMOIZED RAIL CATEGORY BUTTON
+ * -------------------------------------------------------------------------- */
+interface RailButtonProps {
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}
+
+const RailButton = memo(function RailButton({
+  active,
+  label,
+  icon,
+  onClick,
+}: RailButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`btn-press relative shrink-0 flex flex-row md:flex-col items-center gap-1.5 rounded-xl md:rounded-2xl px-3 py-1.5 md:py-3 md:px-1 md:w-[62px] lg:md:w-[74px] transition-colors ${
+        active ? "text-coal font-bold" : "text-faint hover:text-sand hover:bg-panel-2"
+      }`}
+    >
+      {active && (
+        <span
+          className="absolute inset-0 rounded-xl md:rounded-2xl bg-brand shadow-[0_10px_26px_-10px] shadow-brand/60"
+        />
+      )}
+      <span className="relative z-10">{icon}</span>
+      <span className="relative z-10 text-xs md:text-[9.5px] font-bold whitespace-nowrap md:whitespace-normal md:leading-tight text-center md:px-1 md:line-clamp-2">
+        {label}
+      </span>
+    </button>
+  );
+});
+
+/* -----------------------------------------------------------------------------
+ * MAIN CATALOG PANE (MEMOIZED WITH GPU ACCELERATION)
+ * -------------------------------------------------------------------------- */
+const CatalogPane = memo(function CatalogPane({
   catalog,
   onPick,
   onOpenHistory,
@@ -22,6 +155,20 @@ export default function CatalogPane({
 }) {
   const [activeCat, setActiveCat] = useState<number | "all">("all");
   const [query, setQuery] = useState("");
+  const [, startTransition] = useTransition();
+
+  const handleSelectCat = useCallback((catId: number | "all") => {
+    startTransition(() => {
+      setActiveCat(catId);
+    });
+  }, []);
+
+  const handleQueryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    startTransition(() => {
+      setQuery(val);
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     let list = catalog.products;
@@ -36,13 +183,19 @@ export default function CatalogPane({
   return (
     <div className="flex flex-col md:flex-row min-h-0 min-w-0 flex-1 h-full overflow-hidden">
       {/* --------------------------- CATEGORY RAIL --------------------------- */}
-      {/* Mobile-first: flex-row horizontal scroll pada layar HP, md:flex-col di layar tablet/desktop */}
-      <aside className="w-full shrink-0 border-b border-line bg-coal-2/60 flex flex-row items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar md:w-[76px] lg:w-[92px] md:border-b-0 md:border-r md:flex-col md:px-0 md:py-3 md:overflow-y-auto md:h-full">
+      <aside
+        className="w-full shrink-0 border-b border-line bg-coal-2/60 flex flex-row items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar md:w-[76px] lg:w-[92px] md:border-b-0 md:border-r md:flex-col md:px-0 md:py-3 md:overflow-y-auto md:h-full gpu-scroll"
+        style={{
+          transform: "translate3d(0, 0, 0)",
+          willChange: "transform, scroll-position",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         <RailButton
           active={activeCat === "all"}
           label="Semua"
           icon={<LayoutGrid className="size-4 md:size-5" strokeWidth={2.1} />}
-          onClick={() => setActiveCat("all")}
+          onClick={() => handleSelectCat("all")}
         />
         {catalog.categories.map((c) => {
           const Icon = categoryIcon(c.icon);
@@ -52,7 +205,7 @@ export default function CatalogPane({
               active={activeCat === c.id}
               label={c.name}
               icon={<Icon className="size-4 md:size-5" strokeWidth={2.1} />}
-              onClick={() => setActiveCat(c.id)}
+              onClick={() => handleSelectCat(c.id)}
             />
           );
         })}
@@ -65,7 +218,7 @@ export default function CatalogPane({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-faint pointer-events-none" />
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={handleQueryChange}
               placeholder="Cari menu…"
               className="w-full rounded-xl border border-line bg-panel py-2 pl-9 pr-3.5 text-xs sm:text-sm text-cream placeholder:text-faint outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/15 transition"
             />
@@ -103,66 +256,23 @@ export default function CatalogPane({
           </div>
         </div>
 
-        {/* pb-48 / pos-catalog-scroll pada layar HP/Tablet agar produk paling bawah bisa ditarik dan ditekan di atas cart drawer */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 lg:px-5 pb-48 md:pb-8 pos-catalog-scroll">
+        {/* pb-48 / pos-catalog-scroll pada layar HP/Tablet dengan akselerasi GPU */}
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 lg:px-5 pb-48 md:pb-8 pos-catalog-scroll gpu-scroll"
+          style={{
+            transform: "translate3d(0, 0, 0)",
+            willChange: "transform, scroll-position",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
-            {filtered.map((p, i) => {
-              const Icon = productIcon(p.icon);
-              return (
-                <motion.button
-                  layout
-                  key={p.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.22 }}
-                  onClick={() => onPick(p)}
-                  className="btn-press group relative overflow-hidden rounded-2xl border border-line bg-panel p-2.5 sm:p-3 text-left hover:border-brand/45 hover:bg-panel-2 cursor-pointer touch-manipulation select-none"
-                >
-                  <div
-                    className="absolute -right-6 -top-8 size-28 rounded-full blur-2xl opacity-[0.13] transition-opacity group-hover:opacity-30 pointer-events-none"
-                    style={{ backgroundColor: p.color }}
-                  />
-
-                  {p.isBundle && (
-                    <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.5 text-[8.5px] font-extrabold text-brand uppercase tracking-wider pointer-events-none">
-                      <Sparkles className="size-2.5 pointer-events-none" />
-                      <span>Paket</span>
-                    </span>
-                  )}
-                  {p.imageUrl ? (
-                    <div className="mb-2 sm:mb-3 size-10 sm:size-12 rounded-xl overflow-hidden border border-line-2/60 relative shrink-0 bg-coal pointer-events-none">
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="size-full object-cover pointer-events-none"
-                      />
-                      <span
-                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
-                        style={{ backgroundColor: p.color }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className="mb-2 sm:mb-3 grid size-10 sm:size-12 place-items-center rounded-xl border border-line-2/50 bg-coal relative pointer-events-none"
-                      style={{ boxShadow: `inset 0 0 24px -12px ${p.color}` }}
-                    >
-                      <Icon className="size-5 sm:size-6 pointer-events-none" strokeWidth={1.9} style={{ color: p.color }} />
-                      <span
-                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
-                        style={{ backgroundColor: p.color }}
-                      />
-                    </div>
-                  )}
-                  <p className="text-xs sm:text-[13px] font-bold leading-tight text-cream line-clamp-2 min-h-[2.2em] pointer-events-none">
-                    {p.name}
-                  </p>
-                  <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[10.5px] text-faint line-clamp-1 pointer-events-none">{p.tagline}</p>
-                  <p className="mt-2 sm:mt-2.5 font-display text-sm sm:text-[15px] font-bold tabular text-brand pointer-events-none">
-                    {formatIDR(p.price)}
-                  </p>
-                </motion.button>
-              );
-            })}
+            {filtered.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                onPick={onPick}
+              />
+            ))}
           </div>
 
           {filtered.length === 0 && (
@@ -178,37 +288,6 @@ export default function CatalogPane({
       </section>
     </div>
   );
-}
+});
 
-function RailButton({
-  active,
-  label,
-  icon,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`btn-press relative shrink-0 flex flex-row md:flex-col items-center gap-1.5 rounded-xl md:rounded-2xl px-3 py-1.5 md:py-3 md:px-1 md:w-[62px] lg:md:w-[74px] transition-colors ${
-        active ? "text-coal font-bold" : "text-faint hover:text-sand hover:bg-panel-2"
-      }`}
-    >
-      {active && (
-        <motion.span
-          layoutId="cat-pill"
-          className="absolute inset-0 rounded-xl md:rounded-2xl bg-brand shadow-[0_10px_26px_-10px] shadow-brand/60"
-          transition={{ type: "spring", stiffness: 420, damping: 34 }}
-        />
-      )}
-      <span className="relative z-10">{icon}</span>
-      <span className="relative z-10 text-xs md:text-[9.5px] font-bold whitespace-nowrap md:whitespace-normal md:leading-tight text-center md:px-1 md:line-clamp-2">
-        {label}
-      </span>
-    </button>
-  );
-}
+export default CatalogPane;

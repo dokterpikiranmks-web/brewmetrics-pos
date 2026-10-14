@@ -276,14 +276,20 @@ export default function PosPage() {
     [catalog]
   );
 
-  const pickProduct = (product: CatalogDto["products"][number]) => {
-    const vs = catalog?.variants.filter((v) => v.productId === product.id) ?? [];
-    if (vs.length === 0) {
-      addLine(product, { variantId: null, variantName: null, modifierIds: [], qty: 1 });
-    } else {
-      setSheet(product);
-    }
-  };
+  const pickProduct = useCallback(
+    (product: CatalogDto["products"][number]) => {
+      const vs = catalog?.variants.filter((v) => v.productId === product.id) ?? [];
+      if (vs.length === 0) {
+        addLine(product, { variantId: null, variantName: null, modifierIds: [], qty: 1 });
+      } else {
+        setSheet(product);
+      }
+    },
+    [catalog, addLine]
+  );
+
+  const handleOpenHistory = useCallback(() => setOrderHistoryOpen(true), []);
+  const handleOpenMoodScanner = useCallback(() => setMoodScannerOpen(true), []);
 
   // Pengurangan kuantitas di keranjang aktif (murni state lokal, tanpa PIN)
   const handleQty = (key: string, delta: number) => {
@@ -578,8 +584,8 @@ export default function PosPage() {
           <CatalogPane
             catalog={catalog}
             onPick={pickProduct}
-            onOpenHistory={() => setOrderHistoryOpen(true)}
-            onOpenMoodScanner={() => setMoodScannerOpen(true)}
+            onOpenHistory={handleOpenHistory}
+            onOpenMoodScanner={handleOpenMoodScanner}
           />
         )}
 

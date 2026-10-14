@@ -50,6 +50,7 @@ export default function GlobalError({
 
           <Link
             href="/"
+            prefetch={true}
             className="btn-press w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-line bg-coal px-4 py-2.5 text-xs sm:text-sm font-semibold text-sand hover:text-cream"
           >
             <Home className="size-4" />

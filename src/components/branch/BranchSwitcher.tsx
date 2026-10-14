@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useTransition } from "react";
 import { useBranch } from "@/context/BranchContext";
 import { Building2, ChevronDown, Check, Store, Coffee, UtensilsCrossed, Sparkles, Lock } from "lucide-react";
 import type { SessionUser, BranchId } from "@/lib/types";
@@ -15,6 +15,7 @@ const BRANCH_ICONS: Record<BranchId, typeof Coffee> = {
 export function BranchSwitcher({ user }: { user: SessionUser }) {
   const { currentBranch, currentBranchEntity, setCurrentBranch, setActiveOutletId } = useBranch();
   const [open, setOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Staf non-owner dengan otorisasi cabang tunggal tidak dapat beralih cabang
@@ -100,9 +101,11 @@ export function BranchSwitcher({ user }: { user: SessionUser }) {
                   key={ent.id}
                   type="button"
                   onClick={() => {
-                    setCurrentBranch(ent.id);
-                    setActiveOutletId(ent.outletId);
-                    setOpen(false);
+                    startTransition(() => {
+                      setCurrentBranch(ent.id);
+                      setActiveOutletId(ent.outletId);
+                      setOpen(false);
+                    });
                   }}
                   className={`w-full flex items-center justify-between gap-2.5 p-2.5 rounded-xl text-xs font-medium transition-colors text-left ${
                     isSelected

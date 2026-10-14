@@ -189,7 +189,7 @@ export default function AppShell({
       <header className="sticky top-0 z-40 border-b border-line bg-coal-2/90 backdrop-blur-xl shrink-0">
         <div className="flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 h-[58px] sm:h-[68px]">
           {/* Sisi Kiri: Logo Ringkas DOI TA */}
-          <Link href="/" className="flex items-center shrink-0 hover:opacity-95 transition-opacity">
+          <Link href="/" prefetch={true} className="flex items-center shrink-0 hover:opacity-95 transition-opacity">
             <Logo size="sm" showText subtitle="Smart POS" />
           </Link>
 
@@ -202,6 +202,7 @@ export default function AppShell({
                 <Link
                   key={tab.href}
                   href={tab.href}
+                  prefetch={true}
                   onClick={(e) => handleTabClick(tab, e)}
                   className={`relative flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold transition-colors ${
                     active ? "text-coal" : "text-sand hover:text-cream hover:bg-panel-2"
@@ -331,6 +332,7 @@ export default function AppShell({
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        prefetch={true}
                         onClick={(e) => handleTabClick(tab, e)}
                         className={`flex items-center gap-3 rounded-xl px-3.5 py-3 text-xs font-bold transition-colors ${
                           active

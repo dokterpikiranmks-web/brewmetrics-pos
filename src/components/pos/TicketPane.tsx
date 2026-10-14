@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Minus,
@@ -672,7 +672,14 @@ function TicketItemList({
   onRemove: (key: string) => void;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 space-y-2.5 min-h-[140px]">
+    <div
+      className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 space-y-2.5 min-h-[140px] gpu-scroll overscroll-contain"
+      style={{
+        transform: "translate3d(0, 0, 0)",
+        willChange: "transform, scroll-position",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
       {lines.length === 0 && (
         <div className="flex h-full min-h-[160px] flex-col items-center justify-center text-center text-faint">
           <ReceiptText className="size-8 opacity-30 mb-2 text-sand" />
@@ -685,7 +692,6 @@ function TicketItemList({
         {lines.map((l) => (
           <motion.div
             key={l.key}
-            layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -919,6 +925,152 @@ function TicketSummary({
  * MODAL PILIH PROMO & DISKON (MASTER PROMO)
  * -------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------------
+ * MEMOIZED PROMO CARD COMPONENT
+ * - React.memo avoids CPU re-renders
+ * - onPointerDown eliminates mobile touch delay
+ * - GPU-friendly styling (no costly backdrop blur or multi-layer box shadows)
+ * -------------------------------------------------------------------------- */
+interface PromoCardProps {
+  promo: DiscountDto;
+  eligible: boolean;
+  isSelected: boolean;
+  estimatedDiscount: number;
+  subtotal: number;
+  targetInCart: boolean;
+  onApply: (promo: DiscountDto) => void;
+}
+
+const PromoCard = memo(function PromoCard({
+  promo,
+  eligible,
+  isSelected,
+  estimatedDiscount,
+  subtotal,
+  targetInCart,
+  onApply,
+}: PromoCardProps) {
+  const isProductScope = promo.scope === "product";
+  const meetsMinOrder = subtotal >= promo.minOrder;
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button === 0 && eligible) {
+        onApply(promo);
+      }
+    },
+    [eligible, onApply, promo]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.key === "Enter" || e.key === " ") && eligible) {
+        e.preventDefault();
+        onApply(promo);
+      }
+    },
+    [eligible, onApply, promo]
+  );
+
+  return (
+    <div
+      role="button"
+      tabIndex={eligible ? 0 : -1}
+      onPointerDown={handlePointerDown}
+      onKeyDown={handleKeyDown}
+      className={`promo-card relative rounded-2xl border p-3.5 transition-colors text-left flex flex-col justify-between gap-2.5 select-none touch-manipulation ${
+        isSelected
+          ? "border-brand bg-brand/10 border-2"
+          : eligible
+          ? "border-line bg-panel hover:border-brand/40 hover:bg-panel/90 cursor-pointer"
+          : "border-line/40 bg-panel/30 opacity-60 cursor-not-allowed"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h4 className="font-display text-sm font-bold text-cream truncate">
+              {promo.name}
+            </h4>
+            <span
+              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold ${
+                promo.type === "percentage"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+              }`}
+            >
+              {promo.type === "percentage" ? (
+                <>
+                  <Percent className="size-2.5" />
+                  <span>{promo.value}%</span>
+                </>
+              ) : (
+                <span>Potongan {formatIDR(promo.value)}</span>
+              )}
+            </span>
+          </div>
+
+          {/* Scope & Branch Tags */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            {isProductScope ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                <UtensilsCrossed className="size-2.5" />
+                <span>Menu: {promo.targetProductName || `Item #${promo.targetProductId}`}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                <Tag className="size-2.5" />
+                <span>Total Belanja</span>
+              </span>
+            )}
+
+            {promo.outletId && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                <Building2 className="size-2.5" />
+                <span>Cabang: {promo.outletName || `#${promo.outletId}`}</span>
+              </span>
+            )}
+          </div>
+
+          <p className="text-[11px] text-faint mt-1">
+            {promo.minOrder > 0
+              ? `Min. belanja ${formatIDR(promo.minOrder)}`
+              : "Tanpa minimum belanja"}
+          </p>
+          {(promo.validUntil || promo.endDate) && (
+            <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">
+              Berlaku s/d {new Date(promo.validUntil || promo.endDate!).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+          )}
+        </div>
+
+        {isSelected ? (
+          <div className="flex items-center gap-1 rounded-full bg-brand px-2 py-1 text-[10px] font-bold text-coal shrink-0">
+            <CircleCheck className="size-3" />
+            <span>Terpasang</span>
+          </div>
+        ) : eligible ? (
+          <span className="text-xs font-bold text-amber-400 tabular shrink-0">
+            Hemat {formatIDR(estimatedDiscount)}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Warnings if not eligible */}
+      {!meetsMinOrder && (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 text-[10px] text-amber-300 font-medium">
+          Belanja kurang {formatIDR(promo.minOrder - subtotal)} untuk promo ini
+        </div>
+      )}
+      {meetsMinOrder && !targetInCart && (
+        <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 text-[10px] text-purple-300 font-medium">
+          Menu {promo.targetProductName || "khusus"} belum ada di keranjang kasir
+        </div>
+      )}
+    </div>
+  );
+});
+
 interface PromoSelectModalProps {
   open: boolean;
   lines: CartLine[];
@@ -1005,30 +1157,20 @@ function PromoSelectModal({
     fetchPromos();
   }, [open, outletId, branchId]);
 
-  const handleApply = (promo: DiscountDto, eligible: boolean) => {
-    if (!eligible) return;
-    const now = new Date();
-    const fromStr = promo.validFrom || promo.startDate;
-    const untilStr = promo.validUntil || promo.endDate;
-    if (fromStr && now < new Date(fromStr)) return;
-    if (untilStr && now > new Date(untilStr)) return;
-
-    // Pastikan hari hari ini sesuai dengan active_days promo
-    const days = promo.activeDays ?? (promo as any).active_days;
-    if (Array.isArray(days) && days.length > 0 && !days.map(Number).includes(now.getDay())) {
-      return;
-    }
-
-    onApply({
-      id: promo.id,
-      name: promo.name,
-      type: promo.type,
-      value: promo.value,
-      minOrder: promo.minOrder,
-      scope: promo.scope || "cart",
-      targetProductId: promo.targetProductId ?? null,
-    });
-  };
+  const handleApplyPromo = useCallback(
+    (promo: DiscountDto) => {
+      onApply({
+        id: promo.id,
+        name: promo.name,
+        type: promo.type,
+        value: promo.value,
+        minOrder: promo.minOrder,
+        scope: promo.scope || "cart",
+        targetProductId: promo.targetProductId ?? null,
+      });
+    },
+    [onApply]
+  );
 
   const handleClear = () => {
     onApply(null);
@@ -1037,7 +1179,7 @@ function PromoSelectModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coal/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coal/80">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -1067,8 +1209,15 @@ function PromoSelectModal({
               </span>
             </div>
 
-            {/* Promo List */}
-            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[220px]">
+            {/* Promo List with GPU Hardware Acceleration */}
+            <div
+              className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[220px] gpu-scroll overscroll-contain"
+              style={{
+                transform: "translate3d(0, 0, 0)",
+                willChange: "transform, scroll-position",
+                WebkitOverflowScrolling: "touch",
+              }}
+            >
               {loading ? (
                 <div className="py-12 text-center text-faint flex flex-col items-center justify-center gap-2">
                   <Loader2 className="size-6 animate-spin text-brand" />
@@ -1132,103 +1281,16 @@ function PromoSelectModal({
                   }
 
                   return (
-                    <div
+                    <PromoCard
                       key={promo.id}
-                      onClick={() => {
-                        if (eligible) {
-                          handleApply(promo, eligible);
-                        }
-                      }}
-                      className={`relative rounded-2xl border p-3.5 transition-all text-left flex flex-col justify-between gap-2.5 ${
-                        isSelected
-                          ? "border-brand bg-brand/10 shadow-[0_0_15px_-3px] shadow-brand/20"
-                          : eligible
-                          ? "border-line bg-panel hover:border-brand/40 hover:bg-panel/90 cursor-pointer"
-                          : "border-line/40 bg-panel/30 opacity-60 cursor-not-allowed"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="font-display text-sm font-bold text-cream truncate">
-                              {promo.name}
-                            </h4>
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold ${
-                                promo.type === "percentage"
-                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              }`}
-                            >
-                              {promo.type === "percentage" ? (
-                                <>
-                                  <Percent className="size-2.5" />
-                                  <span>{promo.value}%</span>
-                                </>
-                              ) : (
-                                <span>Potongan {formatIDR(promo.value)}</span>
-                              )}
-                            </span>
-                          </div>
-
-                          {/* Scope & Branch Tags */}
-                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                            {isProductScope ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                                <UtensilsCrossed className="size-2.5" />
-                                <span>Menu: {promo.targetProductName || `Item #${promo.targetProductId}`}</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                                <Tag className="size-2.5" />
-                                <span>Total Belanja</span>
-                              </span>
-                            )}
-
-                            {promo.outletId && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                <Building2 className="size-2.5" />
-                                <span>Cabang: {promo.outletName || `#${promo.outletId}`}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          <p className="text-[11px] text-faint mt-1">
-                            {promo.minOrder > 0
-                              ? `Min. belanja ${formatIDR(promo.minOrder)}`
-                              : "Tanpa minimum belanja"}
-                          </p>
-                          {(promo.validUntil || promo.endDate) && (
-                            <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">
-                              Berlaku s/d {new Date(promo.validUntil || promo.endDate!).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                            </p>
-                          )}
-                        </div>
-
-                        {isSelected ? (
-                          <div className="flex items-center gap-1 rounded-full bg-brand px-2 py-1 text-[10px] font-bold text-coal shrink-0">
-                            <CircleCheck className="size-3" />
-                            <span>Terpasang</span>
-                          </div>
-                        ) : eligible ? (
-                          <span className="text-xs font-bold text-amber-400 tabular shrink-0">
-                            Hemat {formatIDR(estimatedDiscount)}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Warnings if not eligible */}
-                      {!meetsMinOrder && (
-                        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 text-[10px] text-amber-300 font-medium">
-                          Belanja kurang {formatIDR(promo.minOrder - subtotal)} untuk promo ini
-                        </div>
-                      )}
-                      {meetsMinOrder && !targetInCart && (
-                        <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 text-[10px] text-purple-300 font-medium">
-                          Menu {promo.targetProductName || "khusus"} belum ada di keranjang kasir
-                        </div>
-                      )}
-                    </div>
+                      promo={promo}
+                      eligible={eligible}
+                      isSelected={isSelected}
+                      estimatedDiscount={estimatedDiscount}
+                      subtotal={subtotal}
+                      targetInCart={targetInCart}
+                      onApply={handleApplyPromo}
+                    />
                   );
                 })
               )}

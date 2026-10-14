@@ -27,6 +27,12 @@ export default function LoginScreen() {
   const [loggedInUser, setLoggedInUser] = useState<SessionUser | null>(null);
   const [branchModalOpen, setBranchModalOpen] = useState(false);
 
+  // Pre-load main destination routes in router cache to eliminate transition latency
+  useEffect(() => {
+    router.prefetch("/pos");
+    router.prefetch("/analytics");
+  }, [router]);
+
   const handleSelectBranch = useCallback((branchId: BranchId) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("current_branch", branchId);
