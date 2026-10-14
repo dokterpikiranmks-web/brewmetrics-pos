@@ -127,16 +127,16 @@ export default function VoidAuthModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-coal/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-coal/80 backdrop-blur-md p-3 sm:p-4 overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 20 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
-            className="w-full max-w-sm rounded-3xl border border-red-500/30 bg-panel-2 p-5 sm:p-6 shadow-[0_24px_54px_rgba(0,0,0,0.85)]"
+            className="relative w-full max-w-sm max-h-[90dvh] flex flex-col rounded-3xl border border-red-500/30 bg-panel-2 shadow-[0_24px_54px_rgba(0,0,0,0.85)] overflow-hidden"
           >
             {/* --------------------------- HEADER --------------------------- */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex-shrink-0 flex items-start justify-between p-4 sm:p-5 border-b border-line">
               <div className="flex items-center gap-3">
                 <div className="grid size-11 place-items-center rounded-2xl border border-red-400/40 bg-red-400/15 text-red-400 shadow-[0_0_24px_-4px] shadow-red-500/40">
                   <ShieldAlert className="size-6" />
@@ -157,8 +157,10 @@ export default function VoidAuthModal({
               </button>
             </div>
 
-            {/* ------------------------ DETAIL REQUEST ------------------------ */}
-            <div className="rounded-2xl border border-line bg-coal/70 p-3 mb-4">
+            {/* ------------------------ SCROLLABLE BODY ------------------------ */}
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 touch-auto pb-4">
+              {/* ------------------------ DETAIL REQUEST ------------------------ */}
+              <div className="rounded-2xl border border-line bg-coal/70 p-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-faint">Tindakan:</span>
                 <span className="font-bold text-red-400">
@@ -273,13 +275,15 @@ export default function VoidAuthModal({
               </button>
             </div>
 
-            {/* ------------------------ TOMBOL AKSI ------------------------ */}
-            <div className="space-y-2">
+            </div>
+
+            {/* ------------------------ STICKY FOOTER ------------------------ */}
+            <div className="flex-shrink-0 p-4 border-t border-line bg-panel-2/95 space-y-2 sticky bottom-0 z-10">
               <button
                 type="button"
                 onClick={() => submitAuth()}
                 disabled={loading || pin.length < 4}
-                className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 py-3.5 font-display text-sm font-bold text-white shadow-[0_12px_32px_-8px] shadow-red-500/60 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+                className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 py-3 font-display text-sm font-bold text-white shadow-[0_12px_32px_-8px] shadow-red-500/60 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
               >
                 {loading ? (
                   <>
@@ -298,16 +302,16 @@ export default function VoidAuthModal({
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="btn-press w-full rounded-2xl border border-line py-2.5 text-xs font-semibold text-faint hover:text-cream"
+                className="btn-press w-full rounded-2xl border border-line py-2 text-xs font-semibold text-faint hover:text-cream"
               >
                 Batalkan &amp; Kembali
               </button>
-            </div>
 
-            {/* Catatan Otorisasi Supervisor */}
-            <p className="mt-3 text-center text-[11px] text-faint leading-relaxed">
-              Masukkan PIN Supervisor (Manager atau Owner) yang terdaftar untuk mengotorisasi pembatalan pesanan.
-            </p>
+              {/* Catatan Otorisasi Supervisor */}
+              <p className="text-center text-[10px] text-faint leading-tight">
+                Masukkan PIN Supervisor (Manager / Owner) untuk konfirmasi.
+              </p>
+            </div>
           </motion.div>
         </div>
       )}

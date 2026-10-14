@@ -385,13 +385,13 @@ export default function ProductRecipeModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-coal/85 backdrop-blur-md p-3 sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-coal/85 backdrop-blur-md p-3 sm:p-4 overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
-            className="w-full max-w-4xl rounded-3xl border border-line-2 bg-panel-2 shadow-[0_28px_64px_rgba(0,0,0,0.85)] flex flex-col max-h-[92dvh] overflow-hidden"
+            className="relative w-full max-w-4xl max-h-[90dvh] rounded-3xl border border-line-2 bg-panel-2 shadow-[0_28px_64px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden"
           >
             {/* =================================================================
                 MODAL HEADER
@@ -513,7 +513,7 @@ export default function ProductRecipeModal({
             {/* =================================================================
                 TAB CONTENTS
                ================================================================= */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-6 touch-auto pb-6">
               {/* TAB 1: INFORMASI PRODUK & VARIAN */}
               {activeTab === "info" && (
                 <div className="space-y-5">
@@ -1346,7 +1346,7 @@ export default function ProductRecipeModal({
             {/* =================================================================
                 MODAL FOOTER ACTIONS
                ================================================================= */}
-            <div className="px-5 sm:px-6 py-4 border-t border-line bg-coal/70 flex items-center justify-between gap-3 shrink-0">
+            <div className="px-5 sm:px-6 py-4 border-t border-line bg-coal/95 flex items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
               {initialData?.id && onDelete ? (
                 <button
                   type="button"

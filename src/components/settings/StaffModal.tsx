@@ -216,18 +216,18 @@ export default function StaffModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-coal/85 backdrop-blur-md p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-coal/85 backdrop-blur-md p-3 sm:p-4 overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
-            className="w-full max-w-xl rounded-3xl border border-line-2 bg-panel shadow-[0_28px_64px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden my-auto"
+            className="relative w-full max-w-xl max-h-[90dvh] rounded-3xl border border-line-2 bg-panel shadow-[0_28px_64px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden"
           >
             {/* =================================================================
                 HEADER
                ================================================================= */}
-            <div className="flex items-center justify-between border-b border-line px-5 sm:px-6 py-4">
+            <div className="flex-shrink-0 flex items-center justify-between border-b border-line px-5 sm:px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="grid size-10 place-items-center rounded-2xl bg-brand/15 text-brand border border-brand/30">
                   {isEdit ? <ShieldCheck className="size-5" /> : <UserPlus className="size-5" />}
@@ -256,14 +256,15 @@ export default function StaffModal({
             {/* =================================================================
                 FORM CONTENT
                ================================================================= */}
-            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[80dvh]">
-              {/* Error Alert */}
-              {error && (
-                <div className="flex items-center gap-2.5 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-xs font-semibold text-red-300">
-                  <AlertCircle className="size-4 text-red-400 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5 touch-auto pb-6">
+                {/* Error Alert */}
+                {error && (
+                  <div className="flex items-center gap-2.5 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-xs font-semibold text-red-300">
+                    <AlertCircle className="size-4 text-red-400 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
 
               {/* FIELD 1: NAMA STAF */}
               <div>
@@ -523,10 +524,12 @@ export default function StaffModal({
                 )}
               </div>
 
+              </div>
+
               {/* ===============================================================
                   MODAL FOOTER (SUBMIT / CANCEL)
                  =============================================================== */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-line">
+              <div className="flex-shrink-0 flex items-center justify-end gap-3 p-4 sm:px-6 border-t border-line bg-panel sticky bottom-0 z-10">
                 <button
                   type="button"
                   onClick={onClose}

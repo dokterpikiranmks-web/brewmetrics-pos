@@ -115,7 +115,7 @@ export default function CashMovementModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -132,17 +132,17 @@ export default function CashMovementModal({
           exit={{ scale: 0.94, opacity: 0, y: 16 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-md rounded-3xl border border-line-2 bg-panel-2 p-6 sm:p-7 shadow-ticket overflow-hidden"
+          className="relative w-full max-w-md max-h-[90dvh] flex flex-col rounded-3xl border border-line-2 bg-panel-2 shadow-ticket overflow-hidden"
         >
           {/* Accent Line */}
           <div
-            className={`absolute top-0 left-0 right-0 h-1 transition-colors duration-300 ${
+            className={`absolute top-0 left-0 right-0 h-1 transition-colors duration-300 z-10 ${
               type === "in" ? "bg-emerald-400" : "bg-red-400"
             }`}
           />
 
           {/* Header */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex-shrink-0 flex items-center justify-between p-5 border-b border-line">
             <div className="flex items-center gap-2.5">
               <div
                 className={`grid size-10 place-items-center rounded-2xl border ${
@@ -173,7 +173,8 @@ export default function CashMovementModal({
             </button>
           </div>
 
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSave} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-4 touch-auto pb-6">
             {/* Toggle Tipe Kas (Masuk vs Keluar) */}
             <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl border border-line bg-coal/70">
               <button
@@ -319,8 +320,10 @@ export default function CashMovementModal({
               </p>
             </div>
 
-            {/* Tombol Aksi */}
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            </div>
+
+            {/* Tombol Aksi - Sticky Footer */}
+            <div className="flex-shrink-0 flex items-center justify-end gap-2.5 p-4 sm:p-5 border-t border-line bg-panel-2/95 sticky bottom-0 z-10">
               <button
                 type="button"
                 onClick={onClose}

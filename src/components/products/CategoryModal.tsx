@@ -109,16 +109,16 @@ export default function CategoryModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-coal/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-coal/80 backdrop-blur-md p-3 sm:p-4 overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
-            className="w-full max-w-md rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-6 shadow-[0_24px_54px_rgba(0,0,0,0.85)] max-h-[92dvh] overflow-y-auto"
+            className="relative w-full max-w-md max-h-[90dvh] flex flex-col rounded-3xl border border-line-2 bg-panel-2 shadow-[0_24px_54px_rgba(0,0,0,0.85)] overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-5 border-b border-line">
               <div className="flex items-center gap-3">
                 <div className="grid size-10 place-items-center rounded-xl border border-brand/40 bg-brand/10 text-brand">
                   <FolderPlus className="size-5" />
@@ -139,13 +139,13 @@ export default function CategoryModal({
               </button>
             </div>
 
-            {error && (
-              <div className="mb-4 rounded-xl border border-red-400/40 bg-red-400/15 p-2.5 text-xs text-red-200 font-semibold">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 touch-auto pb-6">
+                {error && (
+                  <div className="rounded-xl border border-red-400/40 bg-red-400/15 p-2.5 text-xs text-red-200 font-semibold">
+                    {error}
+                  </div>
+                )}
               {/* Dropdown Cabang / Brand */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-sand mb-1.5 flex items-center gap-1.5">
@@ -233,8 +233,10 @@ export default function CategoryModal({
                 </div>
               </div>
 
-              {/* Tombol Aksi */}
-              <div className="pt-2 flex items-center justify-between gap-2.5">
+              </div>
+
+              {/* Tombol Aksi - Sticky Footer */}
+              <div className="flex-shrink-0 p-4 border-t border-line bg-panel-2/95 flex items-center justify-between gap-2.5 sticky bottom-0 z-10">
                 {initialData?.id && onDelete ? (
                   <button
                     type="button"

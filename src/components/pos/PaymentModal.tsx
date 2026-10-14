@@ -342,23 +342,23 @@ export default function PaymentModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 grid place-items-center bg-coal/75 backdrop-blur-sm p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-coal/75 backdrop-blur-sm p-3 sm:p-4 overflow-hidden"
         >
           <motion.div
             initial={{ y: 40, scale: 0.96, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.96, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`w-full ${
+            className={`relative w-full ${
               isSuccess ? "max-w-md" : "max-w-xl"
-            } rounded-3xl border border-line-2 bg-panel-2 shadow-ticket overflow-hidden`}
+            } max-h-[90dvh] flex flex-col rounded-3xl border border-line-2 bg-panel-2 shadow-ticket overflow-hidden`}
           >
             {/* ===================================================================
                 1. TAMPILAN PILIH PEMBAYARAN (SEBELUM KONFIRMASI)
                =================================================================== */}
             {!isSuccess ? (
               <>
-                <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
+                <div className="flex-shrink-0 flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
                   <div>
                     <p className="font-display text-lg font-bold">Pilih Pembayaran</p>
                     <p className="text-[11px] text-faint mt-0.5 flex items-center gap-1.5">
@@ -384,7 +384,7 @@ export default function PaymentModal({
                   </div>
                 </div>
 
-                <div className="p-6 space-y-5">
+                <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-5 touch-auto pb-6">
                   {/* TAB SWITCHER: METODE TUNGGAL VS SPLIT PEMBAYARAN */}
                   <div className="grid grid-cols-2 p-1 rounded-2xl bg-coal border border-line">
                     <button
@@ -698,12 +698,15 @@ export default function PaymentModal({
                     </div>
                   )}
 
-                  {/* Tombol Konfirmasi Bayar */}
+                </div>
+
+                {/* Tombol Konfirmasi Bayar - Sticky Footer */}
+                <div className="flex-shrink-0 p-4 sm:p-5 border-t border-line bg-panel-2/95 sticky bottom-0 z-10">
                   <button
                     type="button"
                     onClick={handleConfirm}
                     disabled={isButtonDisabled}
-                    className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 font-display text-[15px] font-bold text-coal shadow-[0_16px_44px_-14px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+                    className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 font-display text-[15px] font-bold text-coal shadow-[0_16px_44px_-14px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
                   >
                     {isLoading ? (
                       <>
@@ -724,7 +727,7 @@ export default function PaymentModal({
               /* ===================================================================
                  2. TAMPILAN MODAL TRANSAKSI BERHASIL (SUCCESS STATE)
                  =================================================================== */
-              <div className="p-6 sm:p-7 text-center">
+              <div className="flex-1 overflow-y-auto overscroll-contain p-6 sm:p-7 text-center touch-auto">
                 {/* Ikon Animasi Sukses */}
                 <motion.div
                   initial={{ scale: 0.4, opacity: 0 }}

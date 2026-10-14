@@ -92,20 +92,20 @@ export default function CloseShiftModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-coal/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-coal/80 backdrop-blur-md p-3 sm:p-4 overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", stiffness: 300, damping: 26 }}
-            className="w-full max-w-xl sm:max-w-2xl rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-7 shadow-[0_24px_54px_rgba(0,0,0,0.85)] max-h-[92dvh] overflow-y-auto"
+            className="relative w-full max-w-xl sm:max-w-2xl max-h-[90dvh] flex flex-col rounded-3xl border border-line-2 bg-panel-2 shadow-[0_24px_54px_rgba(0,0,0,0.85)] overflow-hidden"
           >
             {/* ===================================================================
                 FASE 1: BLIND INPUT KAS FISIK DI LACI
                =================================================================== */}
             {phase !== "result" ? (
-              <div>
-                <div className="flex items-start justify-between mb-5">
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex-shrink-0 flex items-start justify-between p-5 border-b border-line">
                   <div className="flex items-center gap-3">
                     <div className="grid size-12 place-items-center rounded-2xl border border-amber-400/40 bg-amber-400/15 text-brand shadow-[0_0_24px_-4px] shadow-brand/40">
                       <Scale className="size-6" />
@@ -127,7 +127,8 @@ export default function CloseShiftModal({
                   </button>
                 </div>
 
-                {/* Banner Edukasi Blind Count */}
+                <div className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-7 space-y-4 touch-auto pb-6">
+                  {/* Banner Edukasi Blind Count */}
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3.5 mb-5 flex items-start gap-3 text-xs text-amber-200/90 leading-relaxed">
                   <AlertCircle className="size-4 text-brand shrink-0 mt-0.5" />
                   <p>
@@ -212,12 +213,16 @@ export default function CloseShiftModal({
                     />
                   </div>
 
-                  {/* Tombol Submit */}
+                  </div>
+                </div>
+
+                {/* Sticky Footer Phase 1 */}
+                <div className="flex-shrink-0 p-4 sm:px-7 border-t border-line bg-panel-2/95 sticky bottom-0 z-10">
                   <button
                     type="button"
                     onClick={handleSubmit}
                     disabled={phase === "loading" || actualCash === ""}
-                    className="btn-press flex w-full items-center justify-center gap-2.5 rounded-2xl bg-brand py-4 font-display text-sm font-bold text-coal shadow-[0_16px_40px_-12px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none mt-2"
+                    className="btn-press flex w-full items-center justify-center gap-2.5 rounded-2xl bg-brand py-3.5 font-display text-sm font-bold text-coal shadow-[0_16px_40px_-12px] shadow-brand/70 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
                   >
                     {phase === "loading" ? (
                       <>
@@ -239,8 +244,8 @@ export default function CloseShiftModal({
                   FASE 2: HASIL Z-REPORT DENGAN PERHITUNGAN VARIANCE
                  =================================================================== */
               report && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between pb-4 border-b border-line">
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex-shrink-0 flex items-center justify-between p-5 border-b border-line">
                     <div>
                       <span className="inline-block rounded-full border border-brand/40 bg-brand/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand mb-1">
                         Z-Report Resmi #{report.id}
@@ -258,6 +263,8 @@ export default function CloseShiftModal({
                       <X className="size-4" />
                     </button>
                   </div>
+
+                  <div className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-7 space-y-5 touch-auto pb-6">
 
                   {/* KARTU STATUS VARIANCE (SELISIH KAS) */}
                   <div
@@ -367,9 +374,11 @@ export default function CloseShiftModal({
                       <SalesSummarySection compact />
                     </div>
                   </details>
+                </div>
 
-                  {/* TOMBOL AKSI AKHIR */}
-                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {/* TOMBOL AKSI AKHIR - Sticky Footer */}
+                <div className="flex-shrink-0 p-4 sm:px-7 border-t border-line bg-panel-2/95 sticky bottom-0 z-10">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={handlePrintZReport}
@@ -388,6 +397,7 @@ export default function CloseShiftModal({
                       <span>Selesai &amp; Ganti Shift</span>
                     </button>
                   </div>
+                </div>
 
                   {/* ELEMEN THERMAL PRINT KHUSUS Z-REPORT (Hanya muncul saat window.print()) */}
                   <div

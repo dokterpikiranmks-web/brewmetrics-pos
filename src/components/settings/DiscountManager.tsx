@@ -603,14 +603,15 @@ export default function DiscountManager({
          ===================================================================== */}
       <AnimatePresence>
         {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coal/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm overflow-hidden">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-6 shadow-2xl space-y-4"
+              className="relative w-full max-w-xl max-h-[90dvh] flex flex-col rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl overflow-hidden"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-line">
+              {/* Tier 1: Header */}
+              <div className="flex-shrink-0 p-4 border-b border-zinc-800 flex justify-between items-center">
                 <div className="flex items-center gap-2.5">
                   <div className="grid size-9 place-items-center rounded-xl bg-brand/15 text-brand border border-brand/30">
                     <Tag className="size-4.5" />
@@ -633,15 +634,18 @@ export default function DiscountManager({
                 </button>
               </div>
 
-              {formError && (
-                <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/15 text-red-200 text-xs flex items-center gap-2">
-                  <AlertCircle className="size-4 text-red-400 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
+              {/* Form Container */}
+              <form onSubmit={handleSavePromo} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Tier 2: Scrollable Form Body */}
+                <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 touch-auto pb-6">
+                  {formError && (
+                    <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/15 text-red-200 text-xs flex items-center gap-2">
+                      <AlertCircle className="size-4 text-red-400 shrink-0" />
+                      <span>{formError}</span>
+                    </div>
+                  )}
 
-              <form onSubmit={handleSavePromo} className="space-y-4">
-                {/* Nama Promo */}
+                  {/* Nama Promo */}
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wider text-faint block mb-1.5">
                     Nama Promo
@@ -935,26 +939,28 @@ export default function DiscountManager({
                   </label>
                 </div>
 
-                {/* Tombol Aksi Form */}
-                <div className="flex items-center gap-2.5 pt-2">
+                </div>
+
+                {/* Tier 3: Sticky Footer */}
+                <div className="flex-shrink-0 p-4 border-t border-zinc-800 bg-zinc-900/95 flex justify-end gap-3 sticky bottom-0 z-10">
                   <button
                     type="button"
                     onClick={() => setModalOpen(false)}
-                    className="btn-press flex-1 rounded-xl border border-line py-2.5 text-xs font-semibold text-sand hover:text-cream"
+                    className="btn-press px-5 py-2.5 rounded-xl border border-zinc-700 text-xs font-semibold text-sand hover:text-cream"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={formSubmitting}
-                    className="btn-press flex-1 rounded-xl bg-brand py-2.5 text-xs font-bold text-coal hover:brightness-110 shadow-md shadow-brand/20 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    className="btn-press px-6 py-2.5 rounded-xl bg-brand text-xs font-bold text-coal hover:brightness-110 shadow-md shadow-brand/20 flex items-center justify-center gap-1.5 disabled:opacity-50"
                   >
                     {formSubmitting ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
                       <CheckCircle2 className="size-4" />
                     )}
-                    <span>{editingDiscount ? "Simpan Perubahan" : "Buat Promo"}</span>
+                    <span>{editingDiscount ? "Simpan Perubahan" : "Simpan Promo"}</span>
                   </button>
                 </div>
               </form>
@@ -968,12 +974,12 @@ export default function DiscountManager({
          ===================================================================== */}
       <AnimatePresence>
         {deleteTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coal/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm overflow-hidden">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-sm rounded-3xl border border-line-2 bg-panel-2 p-5 sm:p-6 shadow-2xl space-y-4 text-center"
+              className="relative w-full max-w-sm max-h-[90dvh] flex flex-col rounded-2xl bg-zinc-900 border border-zinc-800 p-5 sm:p-6 shadow-2xl space-y-4 text-center overflow-y-auto"
             >
               <div className="grid size-12 place-items-center rounded-2xl bg-red-500/15 text-red-400 border border-red-500/30 mx-auto">
                 <ShieldAlert className="size-6" />
