@@ -32,6 +32,7 @@ export const viewport: Viewport = {
   themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -41,7 +42,22 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="bg-coal text-cream antialiased min-h-dvh">
+      <body className="bg-coal text-cream antialiased min-h-screen min-h-dvh">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                function updateVh() {
+                  var vh = window.innerHeight * 0.01;
+                  document.documentElement.style.setProperty('--vh', vh + 'px');
+                }
+                updateVh();
+                window.addEventListener('resize', updateVh, { passive: true });
+                window.addEventListener('orientationchange', updateVh, { passive: true });
+              })();
+            `,
+          }}
+        />
         <BranchProvider>{children}</BranchProvider>
         <script
           dangerouslySetInnerHTML={{

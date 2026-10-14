@@ -34,10 +34,10 @@ export default function CatalogPane({
   }, [catalog.products, activeCat, query]);
 
   return (
-    <div className="flex flex-col md:flex-row min-h-0 min-w-0 flex-1">
+    <div className="flex flex-col md:flex-row min-h-0 min-w-0 flex-1 h-full overflow-hidden">
       {/* --------------------------- CATEGORY RAIL --------------------------- */}
       {/* Mobile-first: flex-row horizontal scroll pada layar HP, md:flex-col di layar tablet/desktop */}
-      <aside className="w-full shrink-0 border-b border-line bg-coal-2/60 flex flex-row items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar md:w-[76px] lg:w-[92px] md:border-b-0 md:border-r md:flex-col md:px-0 md:py-3 md:overflow-y-auto">
+      <aside className="w-full shrink-0 border-b border-line bg-coal-2/60 flex flex-row items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar md:w-[76px] lg:w-[92px] md:border-b-0 md:border-r md:flex-col md:px-0 md:py-3 md:overflow-y-auto md:h-full">
         <RailButton
           active={activeCat === "all"}
           label="Semua"
@@ -59,10 +59,10 @@ export default function CatalogPane({
       </aside>
 
       {/* ---------------------------- PRODUCT GRID ---------------------------- */}
-      <section className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="px-3 sm:px-4 lg:px-5 pt-3 md:pt-4 pb-2.5 md:pb-3 flex items-center justify-between gap-2 sm:gap-3">
+      <section className="flex-1 min-w-0 flex flex-col min-h-0 h-full overflow-hidden">
+        <div className="shrink-0 px-3 sm:px-4 lg:px-5 pt-3 md:pt-4 pb-2.5 md:pb-3 flex items-center justify-between gap-2 sm:gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-faint" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-faint pointer-events-none" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -83,7 +83,7 @@ export default function CatalogPane({
                 className="btn-press flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-emerald-200 hover:border-emerald-400 hover:bg-emerald-500/20 transition shrink-0 shadow-sm"
                 title="Pindai ekspresi wajah untuk rekomendasi menu AI"
               >
-                <Sparkles className="size-4 text-emerald-400 animate-pulse" />
+                <Sparkles className="size-4 text-emerald-400 animate-pulse pointer-events-none" />
                 <span className="hidden sm:inline">AI Mood Scanner</span>
                 <span className="sm:hidden">AI Scan</span>
               </button>
@@ -96,16 +96,16 @@ export default function CatalogPane({
                 className="btn-press flex items-center gap-1.5 rounded-xl border border-line bg-panel px-3 py-2 text-xs font-bold text-sand hover:text-cream hover:border-brand/40 hover:bg-coal transition shrink-0"
                 title="Lihat riwayat pesanan hari ini"
               >
-                <History className="size-4 text-brand" />
+                <History className="size-4 text-brand pointer-events-none" />
                 <span className="hidden sm:inline">Riwayat Pesanan</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* pb-32 pada layar HP agar produk paling bawah bisa digulir ke atas melampaui area keranjang belanja (cart drawer) */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 pb-32 md:pb-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
+        {/* pb-48 / pos-catalog-scroll pada layar HP/Tablet agar produk paling bawah bisa ditarik dan ditekan di atas cart drawer */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 lg:px-5 pb-48 md:pb-8 pos-catalog-scroll">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
             {filtered.map((p, i) => {
               const Icon = productIcon(p.icon);
               return (
@@ -116,48 +116,48 @@ export default function CatalogPane({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.22 }}
                   onClick={() => onPick(p)}
-                  className="btn-press group relative overflow-hidden rounded-2xl border border-line bg-panel p-2.5 sm:p-3 text-left hover:border-brand/45 hover:bg-panel-2"
+                  className="btn-press group relative overflow-hidden rounded-2xl border border-line bg-panel p-2.5 sm:p-3 text-left hover:border-brand/45 hover:bg-panel-2 cursor-pointer touch-manipulation select-none"
                 >
                   <div
-                    className="absolute -right-6 -top-8 size-28 rounded-full blur-2xl opacity-[0.13] transition-opacity group-hover:opacity-30"
+                    className="absolute -right-6 -top-8 size-28 rounded-full blur-2xl opacity-[0.13] transition-opacity group-hover:opacity-30 pointer-events-none"
                     style={{ backgroundColor: p.color }}
                   />
 
                   {p.isBundle && (
-                    <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.5 text-[8.5px] font-extrabold text-brand uppercase tracking-wider">
-                      <Sparkles className="size-2.5" />
+                    <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-md bg-brand/20 border border-brand/40 px-1.5 py-0.5 text-[8.5px] font-extrabold text-brand uppercase tracking-wider pointer-events-none">
+                      <Sparkles className="size-2.5 pointer-events-none" />
                       <span>Paket</span>
                     </span>
                   )}
                   {p.imageUrl ? (
-                    <div className="mb-2 sm:mb-3 size-10 sm:size-12 rounded-xl overflow-hidden border border-line-2/60 relative shrink-0 bg-coal">
+                    <div className="mb-2 sm:mb-3 size-10 sm:size-12 rounded-xl overflow-hidden border border-line-2/60 relative shrink-0 bg-coal pointer-events-none">
                       <img
                         src={p.imageUrl}
                         alt={p.name}
-                        className="size-full object-cover"
+                        className="size-full object-cover pointer-events-none"
                       />
                       <span
-                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal"
+                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
                         style={{ backgroundColor: p.color }}
                       />
                     </div>
                   ) : (
                     <div
-                      className="mb-2 sm:mb-3 grid size-10 sm:size-12 place-items-center rounded-xl border border-line-2/50 bg-coal relative"
+                      className="mb-2 sm:mb-3 grid size-10 sm:size-12 place-items-center rounded-xl border border-line-2/50 bg-coal relative pointer-events-none"
                       style={{ boxShadow: `inset 0 0 24px -12px ${p.color}` }}
                     >
-                      <Icon className="size-5 sm:size-6" strokeWidth={1.9} style={{ color: p.color }} />
+                      <Icon className="size-5 sm:size-6 pointer-events-none" strokeWidth={1.9} style={{ color: p.color }} />
                       <span
-                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal"
+                        className="absolute -bottom-1 -right-1 size-2 rounded-full border border-coal pointer-events-none"
                         style={{ backgroundColor: p.color }}
                       />
                     </div>
                   )}
-                  <p className="text-xs sm:text-[13px] font-bold leading-tight text-cream line-clamp-2 min-h-[2.2em]">
+                  <p className="text-xs sm:text-[13px] font-bold leading-tight text-cream line-clamp-2 min-h-[2.2em] pointer-events-none">
                     {p.name}
                   </p>
-                  <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[10.5px] text-faint line-clamp-1">{p.tagline}</p>
-                  <p className="mt-2 sm:mt-2.5 font-display text-sm sm:text-[15px] font-bold tabular text-brand">
+                  <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[10.5px] text-faint line-clamp-1 pointer-events-none">{p.tagline}</p>
+                  <p className="mt-2 sm:mt-2.5 font-display text-sm sm:text-[15px] font-bold tabular text-brand pointer-events-none">
                     {formatIDR(p.price)}
                   </p>
                 </motion.button>

@@ -134,7 +134,7 @@ export default function TicketPane({
       {/* =========================================================================
           1. DESKTOP / TABLET (>= md): Sisi kanan tetap sebagai panel berdampingan
          ========================================================================= */}
-      <aside className="hidden md:flex md:w-[370px] xl:w-[410px] shrink-0 border-l border-line bg-coal-2/70 flex-col min-h-0 h-[calc(100dvh-58px)] sm:h-[calc(100dvh-68px)] sticky top-[58px] sm:top-[68px]">
+      <aside className="hidden md:flex md:w-[370px] xl:w-[410px] shrink-0 border-l border-line bg-coal-2/70 flex-col min-h-0 h-full overflow-hidden">
         <TicketHeader
           linesCount={lines.length}
           totalItems={totalItems}
@@ -186,7 +186,10 @@ export default function TicketPane({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", stiffness: 350, damping: 28 }}
-            className="fixed bottom-0 inset-x-0 z-40 bg-zinc-900/95 border-t border-zinc-800 p-3 shadow-2xl backdrop-blur-md md:hidden"
+            className="fixed bottom-0 inset-x-0 z-40 bg-zinc-900/95 border-t border-zinc-800 p-3 shadow-2xl backdrop-blur-md md:hidden pointer-events-auto"
+            style={{
+              paddingBottom: "calc(12px + env(safe-area-inset-bottom, 12px))",
+            }}
           >
             <div className="flex items-center justify-between gap-3 max-w-md mx-auto">
               <button
@@ -250,7 +253,11 @@ export default function TicketPane({
                   setMobileOpen(false);
                 }
               }}
-              className="relative z-10 w-full max-h-[90dvh] flex flex-col rounded-t-[28px] border-t border-zinc-800 bg-zinc-900 shadow-2xl overflow-hidden"
+              className="relative z-10 w-full max-h-[88vh] max-h-[88dvh] flex flex-col rounded-t-[28px] border-t border-zinc-800 bg-zinc-900 shadow-2xl overflow-hidden"
+              style={{
+                maxHeight: "calc(var(--vh, 1vh) * 88)",
+                paddingBottom: "max(12px, env(safe-area-inset-bottom, 12px))",
+              }}
             >
               <div className="flex justify-center pt-2.5 pb-1 shrink-0">
                 <div className="h-1.5 w-12 rounded-full bg-zinc-700" />

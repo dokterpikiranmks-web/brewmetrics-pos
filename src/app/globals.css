@@ -172,3 +172,47 @@ body {
   }
 }
 
+/* ==========================================================================
+   VIEWPORT HEIGHT & SAFE AREA UTILITIES FOR POS TERMINAL (HP/TABLET COMPAT)
+   ========================================================================== */
+:root {
+  --vh: 1vh;
+  --pos-header-h: 58px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --pos-header-h: 68px;
+  }
+}
+
+/* Fallback-first height container for POS terminal: supports older WebViews */
+.pos-container-height {
+  height: calc(100vh - 58px);
+  height: calc(100dvh - 58px);
+  height: calc(var(--vh, 1vh) * 100 - var(--pos-header-h, 58px));
+  min-height: 0;
+}
+
+@media (min-width: 640px) {
+  .pos-container-height {
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    height: calc(var(--vh, 1vh) * 100 - var(--pos-header-h, 68px));
+  }
+}
+
+/* Touch-optimized, aggressive padding bottom for POS product catalog */
+.pos-catalog-scroll {
+  padding-bottom: calc(160px + env(safe-area-inset-bottom, 24px));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+@media (min-width: 768px) {
+  .pos-catalog-scroll {
+    padding-bottom: 2rem;
+  }
+}
+

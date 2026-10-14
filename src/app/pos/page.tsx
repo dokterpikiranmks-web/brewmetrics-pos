@@ -567,9 +567,9 @@ export default function PosPage() {
         )}
       </AnimatePresence>
 
-      <div className="flex flex-1 min-h-0 flex-col md:flex-row md:h-[calc(100dvh-68px)] md:overflow-hidden">
+      <div className="flex flex-1 min-h-0 flex-col md:flex-row pos-container-height overflow-hidden">
         {!catalog ? (
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-5 content-start overflow-y-auto pb-32 md:pb-6 ml-0 md:ml-[76px] lg:ml-[92px]">
+          <div className="flex-1 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-5 content-start overflow-y-auto pb-48 md:pb-8 pos-catalog-scroll ml-0 md:ml-[76px] lg:ml-[92px]">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="h-[148px] rounded-2xl border border-line bg-panel animate-pulse-soft" style={{ animationDelay: `${i * 90}ms` }} />
             ))}

@@ -141,9 +141,35 @@ export default function AppShell({
     router.replace("/");
   };
 
+  // Sinkronisasi dinamis CSS variable --vh untuk WebView lama & mobile browser
+  useEffect(() => {
+    const updateVh = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    };
+
+    updateVh();
+    window.addEventListener("resize", updateVh, { passive: true });
+    window.addEventListener("orientationchange", updateVh, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", updateVh, { passive: true });
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateVh);
+      window.removeEventListener("orientationchange", updateVh);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", updateVh);
+      }
+    };
+  }, []);
+
   if (checking || !user) {
     return (
-      <div className="min-h-dvh grid place-items-center bg-coal">
+      <div
+        className="min-h-screen min-h-dvh grid place-items-center bg-coal"
+        style={{ minHeight: "calc(var(--vh, 1vh) * 100)" }}
+      >
         <div className="flex flex-col items-center gap-4">
           <div className="grid size-14 place-items-center rounded-2xl bg-panel border border-brand/30 shadow-[0_0_32px_-8px] shadow-brand/40 animate-pulse-soft">
             <Logo size="md" iconOnly />
@@ -155,9 +181,12 @@ export default function AppShell({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-coal">
+    <div
+      className="min-h-screen min-h-dvh flex flex-col bg-coal"
+      style={{ minHeight: "calc(var(--vh, 1vh) * 100)" }}
+    >
       {/* ---------------------------- MAIN HEADER ---------------------------- */}
-      <header className="sticky top-0 z-40 border-b border-line bg-coal-2/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-line bg-coal-2/90 backdrop-blur-xl shrink-0">
         <div className="flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 h-[58px] sm:h-[68px]">
           {/* Sisi Kiri: Logo Ringkas DOI TA */}
           <Link href="/" className="flex items-center shrink-0 hover:opacity-95 transition-opacity">
