@@ -4,13 +4,17 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isPos = pathname.startsWith("/pos");
+  // Rute /pos dibiarkan bebas akses di tingkat middleware agar tidak memblokir perutean Vercel
+  if (pathname.startsWith("/pos")) {
+    return NextResponse.next();
+  }
+
   const isAdmin = pathname.startsWith("/admin");
   const isProtectedAdmin = ["/analytics", "/inventory", "/settings", "/products"].some(
     (route) => pathname.startsWith(route)
   );
 
-  if (!isPos && !isProtectedAdmin && !isAdmin) {
+  if (!isProtectedAdmin && !isAdmin) {
     return NextResponse.next();
   }
 
@@ -39,17 +43,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 
-    // 1. Proteksi Rute Kasir (/pos):
-    // Halaman /pos HANYA boleh diakses oleh user dengan role 'cashier'.
-    // Jika user dengan role 'owner' atau 'manager' mencoba mengakses /pos, lakukan redirect paksa langsung ke /analytics.
-    if (isPos) {
-      if (user.role !== "cashier") {
-        return NextResponse.redirect(new URL("/analytics", request.url));
-      }
-      return NextResponse.next();
-    }
-
-    // 2. Proteksi Rute Manajemen Kafe & Admin:
+    // Proteksi Rute Manajemen Kafe & Admin:
     // Jika user dengan role 'cashier' mencoba mengakses /admin, /analytics, /inventory, /settings, atau /products, redirect ke /pos.
     if (user.role === "cashier") {
       return NextResponse.redirect(new URL("/pos", request.url));
@@ -66,7 +60,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/admin/:path*",
-    "/pos/:path*",
     "/analytics/:path*",
     "/inventory/:path*",
     "/settings/:path*",

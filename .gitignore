@@ -30,3 +30,5 @@ twa-manifest.json
 sign-apk.ps1
 *.tsbuildinfo
 
+.vercel
+.env*
